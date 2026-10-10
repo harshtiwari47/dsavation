@@ -1,0 +1,17 @@
+{
+  "name": "technovation-dsa-sheet",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --configLoader native",
+    "build": "vite build --configLoader native",
+    "preview": "node --env-file=.env server.js"
+  },
+  "engines": {
+    "node": ">=20.19.0"
+  },
+  "devDependencies": {
+    "vite": "^8.1.0"
+  }
+}
