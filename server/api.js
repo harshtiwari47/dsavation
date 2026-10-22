@@ -252,14 +252,15 @@ async function login(db, req, res, body) {
   await allowRequest(db, req, 'login', 10, 15 * 60 * 1000);
   const email = String(body.email || '').trim().toLowerCase();
   let user = await db.collection('users').findOne({ email });
-  const valid = user && await bcrypt.compare(String(body.password || ''), user.passwordHash);
-  if (!valid) throw new HttpError(401, 'Email or password is incorrect.');
+  if (!user) throw new HttpError(404, 'No account was found for this email. Check the address or create an account.');
+  const valid = await bcrypt.compare(String(body.password || ''), user.passwordHash);
+  if (!valid) throw new HttpError(401, 'The password is incorrect. Check it and try again.');
   if (adminEmails().has(email) && !user.approvalStatus) {
     const now = new Date();
     user = { ...user, role: 'admin', approvalStatus: 'approved', approvedAt: user.approvedAt || now, approvedBy: user.approvedBy || 'ADMIN_EMAILS' };
     await db.collection('users').updateOne({ _id: user._id }, { $set: { role: 'admin', approvalStatus: 'approved', approvedAt: user.approvedAt, approvedBy: user.approvedBy, updatedAt: now } });
   }
-  if (!isApproved(user)) throw new HttpError(403, 'Your account is waiting for administrator approval.');
+  if (!isApproved(user)) throw new HttpError(403, 'Your account is not currently approved. New accounts need administrator approval; contact a DSAvation administrator if you believe your access was removed by mistake.');
   await newSession(db, user, req, res);
   json(res, 200, { ok: true, user: account(user) });
 }

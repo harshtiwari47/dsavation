@@ -11,6 +11,11 @@ function normalizeQuestions(rows = []) {
 const localDay = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
 const studyYearLabel = (year) => ({ 'first-year': 'First year', 'second-year': 'Second year', 'third-year': 'Third year', 'fourth-year': 'Fourth year', passed: 'Passed out' }[year] || 'Year not provided');
 const initials = (name = '') => name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('') || 'D';
+function initialTheme() {
+  const theme = localStorage.getItem('dsavation-theme') === 'dark' ? 'dark' : 'light';
+  document.documentElement.dataset.theme = theme;
+  return theme;
+}
 
 async function api(path, options = {}) {
   const response = await fetch(`/api${path}`, {
@@ -38,6 +43,9 @@ function Icon({ name, size = 17 }) {
     close: <><path d="m6 6 12 12M18 6 6 18"/></>,
     lock: <><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></>,
     external: <><path d="M14 3h7v7M10 14 21 3"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></>,
+    info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></>,
+    moon: <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z"/>,
+    sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></>,
   };
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
@@ -71,6 +79,7 @@ function QuestionRow({ question, solved, solvedAt, bookmarked, expanded, onSolve
 function App() {
   const [view, setView] = useState(() => window.location.pathname === '/dashboard' ? 'dashboard' : 'general');
   const [account, setAccount] = useState(null);
+  const [theme, setTheme] = useState(initialTheme);
   const [questions, setQuestions] = useState([]);
   const [topics, setTopics] = useState([]);
   const [authReady, setAuthReady] = useState(false);
@@ -91,7 +100,7 @@ function App() {
   const [fontScale, setFontScale] = useState(() => {
     const stored = localStorage.getItem('dsavation-font-scale');
     const saved = Number(stored);
-    if (!stored || !Number.isFinite(saved) || saved < .9 || saved > 1.5 || saved === 1 || saved === 1.1) return 1.3;
+    if (!stored || !Number.isFinite(saved) || saved < .9 || saved > 1.5 || saved === 1 || saved === 1.1 || saved === 1.3) return 1.2;
     return saved;
   });
   const [bookmarks, setBookmarks] = useState(() => JSON.parse(localStorage.getItem('dsavation-bookmarks') || '[]'));
@@ -102,6 +111,7 @@ function App() {
   const [pending, setPending] = useState([]);
   const [members, setMembers] = useState([]);
   const [commitUrl, setCommitUrl] = useState('');
+  const [submissionHelpOpen, setSubmissionHelpOpen] = useState(false);
   const [submissionBusy, setSubmissionBusy] = useState(false);
   const [assignmentDate, setAssignmentDate] = useState(localDay());
   const [assignmentQuestion, setAssignmentQuestion] = useState('');
@@ -217,6 +227,10 @@ function App() {
 
   useEffect(() => { localStorage.setItem('dsavation-bookmarks', JSON.stringify(bookmarks)); }, [bookmarks]);
   useEffect(() => {
+    document.documentElement.dataset.theme = theme;
+    localStorage.setItem('dsavation-theme', theme);
+  }, [theme]);
+  useEffect(() => {
     const shell = document.querySelector('.app-frame');
     if (shell) shell.style.zoom = String(fontScale);
     localStorage.setItem('dsavation-font-scale', String(fontScale));
@@ -271,7 +285,7 @@ function App() {
     event.preventDefault(); setSubmissionBusy(true); setNotice('');
     try {
       await api('/submissions', { method: 'POST', body: { assignmentId: club.assignment?.id, commitUrl } });
-      setCommitUrl(''); setNotice('Commit received. A club lead will review it before it affects the leaderboard.');
+      setCommitUrl(''); setSubmissionHelpOpen(false); setNotice('Commit received. A club lead will review it before it affects the leaderboard.');
       await loadClub(); await loadMemberData();
     } catch (error) { setNotice(error.message); }
     finally { setSubmissionBusy(false); }
@@ -348,6 +362,7 @@ function App() {
         {isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={15}/>Dashboard{pendingMembers.length > 0 && <span className="nav-count">{pendingMembers.length}</span>}</button>}
       </nav>
       <div className="account-actions">
+        <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15}/><span>{theme === 'dark' ? 'Light' : 'Dark'}</span></button>
         <div className="font-controls" aria-label="Text size controls"><span>TEXT</span><button onClick={() => changeFontSize(-.05)} aria-label="Decrease text size" disabled={fontScale <= .9}>A−</button><output aria-live="polite">{Math.round(fontScale * 100)}%</output><button onClick={() => changeFontSize(.05)} aria-label="Increase text size" disabled={fontScale >= 1.5}>A+</button></div>
         {account ? <><span className="account-name"><span className="avatar">{initials(account.name)}</span><span>{account.name.split(' ')[0]}{account.role !== 'member' && <small>{account.role}</small>}</span></span>{!account.githubVerified && <button className="button button-quiet github-link" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/>Link GitHub</button>}<button className="button button-quiet sign-out" onClick={logout}>Sign out</button></> : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
       </div>
@@ -406,7 +421,7 @@ function App() {
         <div className="club-main-column">
           <section className="panel qotd-panel"><div className="panel-header"><div><div className="eyebrow"><span className="eyebrow-line"/>TODAY'S ASSIGNMENT</div><h2>{assignedQuestion ? assignedQuestion.title : 'No assignment today'}</h2></div>{assignedQuestion && <Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill>}</div>
             {assignedQuestion ? <><div className="assignment-meta"><span>{club.assignment.dateKey}</span><span>{assignedQuestion.topic}</span><span>LeetCode #{assignedQuestion.id}</span><span>{assignedQuestion.pattern}</span></div><p className="assignment-prompt">Club credit is for this published assignment only. The API checks the active date, your linked GitHub identity, the configured club repository, and the question path in your commit.</p><div className="assignment-counts"><div><strong>{club.submittedCount}</strong><span>SUBMITTED</span></div><div><strong>{club.acceptedCount}</strong><span>ACCEPTED</span></div><a href={`https://leetcode.com/problems/${assignedQuestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`} target="_blank" rel="noreferrer">Open problem <Icon name="external" size={14}/></a></div>
-              {!account ? <div className="inline-callout"><Icon name="lock" size={16}/><span>Sign in with an approved ABES account to submit a club solution.</span><button onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div> : !account.githubVerified ? <div className="inline-callout"><Icon name="github" size={16}/><span>Link the GitHub username you entered during signup before submitting.</span><button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button></div> : submissions.some((item) => item.assignment?.dateKey === club.assignment.dateKey) ? <div className="inline-callout submitted"><Icon name="check" size={16}/><span>Your submission for today is {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey)?.status}.</span></div> : <form className="submission-form" onSubmit={submitClubSolution}><label htmlFor="commit-url">GITHUB COMMIT URL</label><div className="submission-input-row"><input id="commit-url" type="url" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder="https://github.com/club/repo/commit/…"/><button className="button button-dark" disabled={submissionBusy}>{submissionBusy ? 'Checking…' : 'Submit for review'} <Icon name="arrow" size={14}/></button></div><small>One attempt per member today. Your solution file must be under <code>submissions/{club.assignment.dateKey}/{account.githubUsername.toLowerCase()}/lc-{assignedQuestion.id}/</code>.</small></form>}</> : <div className="no-assignment-note"><p>A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from punctuality calculations.</p></div>}
+              {!account ? <div className="inline-callout"><Icon name="lock" size={16}/><span>Sign in with an approved ABES account to submit a club solution.</span><button onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div> : !account.githubVerified ? <div className="inline-callout"><Icon name="github" size={16}/><span>Link the GitHub username you entered during signup before submitting.</span><button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button></div> : submissions.some((item) => item.assignment?.dateKey === club.assignment.dateKey) ? <div className="inline-callout submitted"><Icon name="check" size={16}/><span>Your submission for today is {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey)?.status}.</span></div> : <form className="submission-form" onSubmit={submitClubSolution}><div className="submission-form-heading"><label htmlFor="commit-url">GITHUB COMMIT URL</label><button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}><Icon name="info" size={15}/></button></div>{submissionHelpOpen && <div className="submission-help" id="submission-help"><strong>Before you submit</strong><ol><li>Commit today’s published question under <code>submissions/{club.assignment.dateKey}/{account.githubUsername.toLowerCase()}/lc-{assignedQuestion.id}/</code>.</li><li>Push to <code>submissions/{account.githubUsername.toLowerCase()}</code>. Your linked GitHub account must author the commit and push the branch.</li><li>Open that commit on GitHub and copy its page URL. It should look like <code>https://github.com/OWNER/REPO/commit/FULL_SHA</code>.</li></ol><p>The commit date must be today in India time. Only one submission is allowed per member today.</p></div>}<div className="submission-input-row"><input id="commit-url" type="url" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder="https://github.com/OWNER/REPO/commit/…"/><button className="button button-dark" disabled={submissionBusy}>{submissionBusy ? 'Checking…' : 'Submit for review'} <Icon name="arrow" size={14}/></button></div><small>One attempt per member today. Your solution file must be under <code>submissions/{club.assignment.dateKey}/{account.githubUsername.toLowerCase()}/lc-{assignedQuestion.id}/</code>.</small></form>}</> : <div className="no-assignment-note"><p>A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from punctuality calculations.</p></div>}
           </section>
 
           {account && <section className="panel profile-panel"><div className="profile-head"><span className="avatar large">{initials(account.name)}</span><div><h3>{account.name}</h3><p>{account.department} <span>·</span> @{account.githubUsername || 'GitHub not linked'}</p></div><Pill tone={account.role === 'member' ? 'neutral' : 'green'}>{account.role}</Pill></div><label className="privacy-toggle"><input type="checkbox" checked={account.showPublic} disabled={publicPreferenceBusy} onChange={(event) => updatePublicPreference(event.target.checked)}/><span>Show my full name and department publicly; otherwise use only my GitHub username.</span></label></section>}
