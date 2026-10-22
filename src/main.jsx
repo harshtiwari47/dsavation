@@ -98,6 +98,7 @@ function App() {
   const [questions, setQuestions] = useState([]);
   const [topics, setTopics] = useState([]);
   const [authReady, setAuthReady] = useState(false);
+  const [appLoading, setAppLoading] = useState(true);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
   const [authError, setAuthError] = useState('');
@@ -234,20 +235,31 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (!authReady) return undefined;
     if (!account) {
       setQuestions([]); setTopics([]); setProgress({}); setSubmissions([]); setPending([]); setMembers([]);
       setHistory([]); setLeaderboard([]);
       setClub({ dateKey: localDay(), assignment: null, submittedCount: 0, acceptedCount: 0, participants: [] });
+      setAppLoading(false);
       return undefined;
     }
     const controller = new AbortController();
-    loadQuestionLibrary(controller.signal).catch((error) => {
-      if (error.name !== 'AbortError') setNotice(error.message);
+    let active = true;
+    setAppLoading(true);
+    Promise.allSettled([
+      loadQuestionLibrary(controller.signal).catch((error) => {
+        if (error.name !== 'AbortError') setNotice(error.message);
+      }),
+      loadMemberData(account),
+      loadClub(),
+    ]).finally(() => {
+      if (active) setAppLoading(false);
     });
-    loadMemberData(account);
-    loadClub();
-    return () => controller.abort();
-  }, [account?.id]);
+    return () => {
+      active = false;
+      controller.abort();
+    };
+  }, [authReady, account?.id]);
 
   function navigate(nextView) {
     const path = nextView === 'dashboard' ? '/dashboard' : '/';
@@ -385,6 +397,7 @@ function App() {
   const clearFilters = () => { setQuery(''); setTopic('All topics'); setDifficulty('Any level'); setStructure('Any data structure'); setPattern('Any pattern'); };
 
   return <div className="app-frame">
+    {appLoading && <div className="global-loading" role="progressbar" aria-label="Loading DSAvation" aria-valuetext="Loading"><span /></div>}
     <header className="topbar">
       <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true"/><span>DSAvation</span></a>
       <nav className="main-nav" aria-label="Main navigation">
