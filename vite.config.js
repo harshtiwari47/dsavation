@@ -1,16 +1,20 @@
 import { defineConfig, loadEnv } from 'vite';
-import { createMarkHandler } from './server/mark-api.js';
+import react from '@vitejs/plugin-react';
+import { handleApiNode } from './server/api.js';
 
-function markingPasswordApi(secret) {
+function localApi() {
   return {
-    name: 'technovation-marking-password',
+    name: 'dsavation-local-api',
     configureServer(server) {
-      server.middlewares.use('/api/mark', createMarkHandler(secret));
+      server.middlewares.use((req, res, next) => {
+        if (!req.url?.startsWith('/api/')) return next();
+        return handleApiNode(req, res);
+      });
     },
   };
 }
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, process.cwd(), '');
-  return { plugins: [markingPasswordApi(env.DSA_MARK_PASSWORD)] };
+  Object.assign(process.env, loadEnv(mode, process.cwd(), ''));
+  return { plugins: [react(), localApi()] };
 });
