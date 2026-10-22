@@ -1,7 +1,7 @@
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
-import curriculum from '../src/data/questions.json' with { type: 'json' };
+import curriculum from './data/questions.json' with { type: 'json' };
 import { getDatabase } from './db.js';
 
 const TZ = 'Asia/Kolkata';
@@ -122,7 +122,7 @@ function baseUrl(req) {
 function account(user) {
   if (!user) return null;
   return {
-    id: String(user._id), name: user.name, department: user.department,
+    id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
     email: user.email, githubUsername: user.githubUsername || '',
     githubVerified: Boolean(user.githubVerifiedAt), role: user.role || 'member',
     showPublic: Boolean(user.showPublic), createdAt: user.createdAt,
@@ -207,12 +207,14 @@ async function signup(db, req, res, body) {
   await allowRequest(db, req, 'register', 5, 60 * 60 * 1000);
   const name = String(body.name || '').trim().replace(/\s+/g, ' ');
   const department = String(body.department || '').trim();
+  const studyYear = String(body.studyYear || '');
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
   const githubUsername = String(body.githubUsername || '').trim().replace(/^@/, '');
   if (name.length < 2 || name.length > 80) throw new HttpError(400, 'Enter your full name (2–80 characters).');
   if (!/^[a-z0-9.+_-]+@abes\.ac\.in$/i.test(email)) throw new HttpError(400, 'Use your college email ending exactly in @abes.ac.in.');
   if (department.length < 2 || department.length > 80) throw new HttpError(400, 'Choose or enter your department.');
+  if (!['first-year', 'second-year', 'third-year', 'fourth-year', 'passed'].includes(studyYear)) throw new HttpError(400, 'Choose your current year of study.');
   if (password.length < 10 || password.length > 128) throw new HttpError(400, 'Use a password between 10 and 128 characters.');
   if (!/^[a-z0-9-]{1,39}$/i.test(githubUsername)) throw new HttpError(400, 'Enter a valid GitHub username.');
   const existing = await db.collection('users').findOne({ email });
@@ -229,7 +231,7 @@ async function signup(db, req, res, body) {
   const now = new Date();
   const administrator = adminEmails().has(email);
   const user = {
-    name, department, email, passwordHash: await bcrypt.hash(password, 12),
+    name, department, studyYear, email, passwordHash: await bcrypt.hash(password, 12),
     githubUsername: gh.login, githubUserLower, githubId: gh.id,
     githubVerifiedAt: null, showPublic: body.showPublic === true,
     approvalStatus: administrator ? 'approved' : 'pending',
@@ -507,14 +509,7 @@ async function createAssignment(db, user, body) {
   if (!questionById.has(questionId)) throw new HttpError(400, 'Choose a question from the 220-question curriculum.');
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateKey) || dateKey < dayKey()) throw new HttpError(400, 'Choose today or a future date in Asia/Kolkata.');
   const existing = await db.collection('assignments').findOne({ dateKey });
-  if (existing) {
-    const activity = await db.collection('submissions').countDocuments({ assignmentId: existing._id });
-    if (activity) throw new HttpError(409, 'This assignment already has submissions and cannot be changed.');
-    await db.collection('assignments').updateOne({ _id: existing._id }, {
-      $set: { questionId, createdBy: user._id, createdByName: user.name, updatedAt: new Date() },
-    });
-    return { id: String(existing._id), dateKey, questionId, createdByName: user.name };
-  }
+  if (existing) throw new HttpError(409, 'A question is already published for this date. Only one Question of the Day can be published per date.');
   const assignment = {
     dateKey, questionId, createdBy: user._id, createdByName: user.name,
     timezone: TZ, createdAt: new Date(),
@@ -569,9 +564,9 @@ async function reviewSubmission(db, user, submissionId, body) {
 
 async function listMembers(db) {
   return (await db.collection('users').find({}, {
-    projection: { name: 1, department: 1, email: 1, githubUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1 },
+    projection: { name: 1, department: 1, studyYear: 1, email: 1, githubUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1 },
   }).sort({ name: 1 }).limit(500).toArray()).map((user) => ({
-    id: String(user._id), name: user.name, department: user.department,
+    id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
     email: user.email, githubUsername: user.githubUsername, role: user.role || 'member',
     approvalStatus: approvalStatus(user), showPublic: Boolean(user.showPublic), createdAt: user.createdAt, approvedAt: user.approvedAt || user.verifiedAt || null,
   }));
@@ -679,11 +674,14 @@ export async function handleApiNode(req, res) {
       return json(res, 200, { ok: true, user: account({ ...user, showPublic: body.showPublic }) });
     }
 
-    if (url.pathname === '/api/club/today' && method === 'GET') return json(res, 200, await getClubToday(db));
-    if (url.pathname === '/api/club/assignments' && method === 'GET') return json(res, 200, { assignments: await assignmentHistory(db) });
     if (url.pathname === '/api/club/leaderboard' && method === 'GET') return json(res, 200, { leaderboard: await leaderboard(db) });
 
     const user = await requireUser(req, db);
+    if (url.pathname === '/api/questions' && method === 'GET') {
+      return json(res, 200, { questions: curriculum.questions, topics: curriculum.topics });
+    }
+    if (url.pathname === '/api/club/today' && method === 'GET') return json(res, 200, await getClubToday(db));
+    if (url.pathname === '/api/club/assignments' && method === 'GET') return json(res, 200, { assignments: await assignmentHistory(db) });
     if (url.pathname === '/api/progress' && method === 'GET') {
       const progress = await db.collection('personalProgress').find({ userId: user._id }).sort({ solvedAt: -1 }).toArray();
       return json(res, 200, { progress: progress.map((item) => ({ questionId: item.questionId, solvedAt: item.solvedAt })) });
@@ -722,7 +720,9 @@ export async function handleApiNode(req, res) {
     }
     return json(res, 404, { error: 'API route not found.' });
   } catch (error) {
-    if (error?.code === 11000) return json(res, 409, { error: 'This record already exists. Refresh and try again.' });
+    if (error?.code === 11000) return json(res, 409, { error: url.pathname === '/api/admin/assignments'
+      ? 'A question is already published for this date. Only one Question of the Day can be published per date.'
+      : 'This record already exists. Refresh and try again.' });
     const status = Number(error?.status) || 500;
     if (status >= 500) console.error('DSAvation API error:', error?.message || 'Unknown error');
     return json(res, status, { error: status >= 500 && status !== 503 ? 'The request could not be completed. Try again shortly.' : error.message });

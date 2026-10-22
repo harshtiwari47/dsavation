@@ -1,6 +1,6 @@
 # DSAvation
 
-DSAvation combines a 220-question interview-prep library, private self-tracking, and an optional college-club challenge. The question library is in `src/data/questions.json`; each question includes its LeetCode ID, difficulty, data structure, pattern, recommended approach, and time and auxiliary-space complexity.
+DSAvation combines a 220-question interview-prep library, private self-tracking, and a college-club challenge. The curriculum is kept in the server-only `server/data/questions.json` file; approved members load it through an authenticated API. Each question includes its LeetCode ID, difficulty, data structure, pattern, recommended approach, and time and auxiliary-space complexity.
 
 ## Run locally
 
@@ -38,7 +38,7 @@ Keep Vercel's production deployment on HTTPS. After adding or changing variables
 
 ## Accounts and roles
 
-- Members register with a name, department, `@abes.ac.in` email, password, and GitHub username. New accounts remain pending until an administrator approves them on `/dashboard`; approval can be removed there, and administrators can delete accounts.
+- Members register with a name, department, year of study, `@abes.ac.in` email, password, and GitHub username. New accounts remain pending until an administrator approves them on `/dashboard`; approval can be removed there, and administrators can delete accounts.
 - Email addresses are checked for the `@abes.ac.in` format, but no verification email is sent. Administrators must confirm a member's identity through the club before granting access. The first account listed in `ADMIN_EMAILS` can be created as an approved administrator.
 - Passwords are hashed server-side. Sessions use opaque, `HttpOnly`, `SameSite=Lax` cookies; personal progress is scoped to the signed-in member.
 - A member links GitHub through the OAuth App before submitting a club solution. This confirms the account behind the GitHub username collected at signup.
@@ -49,7 +49,7 @@ Keep Vercel's production deployment on HTTPS. After adding or changing variables
 
 These are separate systems. Ticking a question in the library writes only to that member's private `personalProgress` records. It never creates a club submission, public participant entry, leaderboard point, streak, or punctuality percentage.
 
-The public club page shows the current Question of the Day, accepted participants, assignment history, and standings. Leads/admins publish assignments for specific dates in Asia/Kolkata time. Leave holidays and breaks unassigned; those dates are excluded from the punctuality denominator and do not break an assignment streak. A date with an existing submission cannot be reassigned.
+Approved members can view the current Question of the Day, accepted participants, assignment history, and standings. Leads/admins can publish at most one assignment for each date in Asia/Kolkata time. A published date cannot be changed or assigned a second question. Leave holidays and breaks unassigned; those dates are excluded from the punctuality denominator and do not break an assignment streak.
 
 Every member has one club submission per assigned date. The server rejects submissions for another date or question, commits outside the assignment date in Asia/Kolkata, commits by a different linked GitHub author, and files outside the expected path. New submissions wait for lead review; only accepted submissions count toward points and punctuality.
 
@@ -79,7 +79,7 @@ The webhook checks GitHub's signature, repository, branch pusher, commit author,
 
 - MongoDB stores account profiles, password hashes, sessions, private progress, daily assignments, and club submissions. Account deletion removes the member's sessions, personal progress, and club submissions.
 - Only the signed-in member can read or change their personal progress through the API. Personal progress is not part of the public leaderboard.
-- Public endpoints expose assignments and aggregate club standings; participant names follow the member's public-name preference. Email addresses and personal progress are not returned by public endpoints.
+- The curriculum and assignment details are available only to approved signed-in members. Public endpoints expose aggregate club standings; participant names follow the member's public-name preference. Email addresses and personal progress are not returned by public endpoints.
 - Administrators can remove member accounts from `/dashboard`; the account's sessions, personal checkmarks, and club submissions are deleted with it. Take regular database backups before onboarding a large club.
 
 ## Curriculum

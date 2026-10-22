@@ -1,14 +1,15 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
-import curriculum from './data/questions.json';
 import './style.css';
 
-const questions = curriculum.questions.map((row, index) => ({
-  topic: row[0], id: Number(row[1]), title: row[2], difficulty: row[3],
-  structures: row[4], pattern: row[5], algorithm: row[6], time: row[7], space: row[8], day: index + 1,
-}));
-const byId = new Map(questions.map((question) => [question.id, question]));
+function normalizeQuestions(rows = []) {
+  return rows.map((row, index) => ({
+    topic: row[0], id: Number(row[1]), title: row[2], difficulty: row[3],
+    structures: row[4], pattern: row[5], algorithm: row[6], time: row[7], space: row[8], day: index + 1,
+  }));
+}
 const localDay = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const studyYearLabel = (year) => ({ 'first-year': 'First year', 'second-year': 'Second year', 'third-year': 'Third year', 'fourth-year': 'Fourth year', passed: 'Passed out' }[year] || 'Year not provided');
 const initials = (name = '') => name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('') || 'D';
 
 async function api(path, options = {}) {
@@ -70,6 +71,8 @@ function QuestionRow({ question, solved, solvedAt, bookmarked, expanded, onSolve
 function App() {
   const [view, setView] = useState(() => window.location.pathname === '/dashboard' ? 'dashboard' : 'general');
   const [account, setAccount] = useState(null);
+  const [questions, setQuestions] = useState([]);
+  const [topics, setTopics] = useState([]);
   const [authReady, setAuthReady] = useState(false);
   const [authOpen, setAuthOpen] = useState(false);
   const [authMode, setAuthMode] = useState('login');
@@ -88,7 +91,7 @@ function App() {
   const [fontScale, setFontScale] = useState(() => {
     const stored = localStorage.getItem('dsavation-font-scale');
     const saved = Number(stored);
-    if (!stored || !Number.isFinite(saved) || saved < .9 || saved > 1.2 || saved === 1) return 1.1;
+    if (!stored || !Number.isFinite(saved) || saved < .9 || saved > 1.5 || saved === 1 || saved === 1.1) return 1.3;
     return saved;
   });
   const [bookmarks, setBookmarks] = useState(() => JSON.parse(localStorage.getItem('dsavation-bookmarks') || '[]'));
@@ -108,8 +111,9 @@ function App() {
   const [memberQuery, setMemberQuery] = useState('');
   const [publicPreferenceBusy, setPublicPreferenceBusy] = useState(false);
 
-  const patterns = useMemo(() => [...new Set(questions.map((item) => item.pattern))].sort((a, b) => a.localeCompare(b)), []);
-  const structures = useMemo(() => [...new Set(questions.map((item) => item.structures))].sort((a, b) => a.localeCompare(b)), []);
+  const byId = useMemo(() => new Map(questions.map((question) => [question.id, question])), [questions]);
+  const patterns = useMemo(() => [...new Set(questions.map((item) => item.pattern))].sort((a, b) => a.localeCompare(b)), [questions]);
+  const structures = useMemo(() => [...new Set(questions.map((item) => item.structures))].sort((a, b) => a.localeCompare(b)), [questions]);
   const visibleQuestions = useMemo(() => {
     const needle = query.trim().toLowerCase();
     const list = questions.filter((item) => (!needle || `${item.title} ${item.id} ${item.topic} ${item.pattern} ${item.structures} ${item.algorithm}`.toLowerCase().includes(needle)) &&
@@ -117,7 +121,7 @@ function App() {
       (structure === 'Any data structure' || item.structures === structure) && (pattern === 'Any pattern' || item.pattern === pattern));
     if (sort === 'title') list.sort((a, b) => a.title.localeCompare(b.title));
     return list;
-  }, [query, topic, difficulty, structure, pattern, sort]);
+  }, [questions, query, topic, difficulty, structure, pattern, sort]);
   const solvedCount = Object.keys(progress).length;
   const isLeader = account && ['lead', 'admin'].includes(account.role);
   const isAdmin = account?.role === 'admin';
@@ -137,6 +141,12 @@ function App() {
     } catch (error) {
       setApiNotice(error.message.includes('MONGODB_URI') ? 'Community features need the DSAvation database configured.' : error.message);
     }
+  }
+
+  async function loadQuestionLibrary(signal) {
+    const result = await api('/questions', { signal });
+    setQuestions(normalizeQuestions(result.questions));
+    setTopics(result.topics || []);
   }
 
   async function loadMemberData(user = account) {
@@ -160,7 +170,6 @@ function App() {
     api('/auth/me').then(({ user }) => setAccount(user)).catch((error) => {
       setApiNotice(error.message.includes('MONGODB_URI') ? 'Connect MongoDB to enable member accounts and club activity.' : 'Member services are temporarily unavailable.');
     }).finally(() => setAuthReady(true));
-    loadClub();
     const params = new URLSearchParams(window.location.search);
     if (params.get('github') === 'connected') {
       setNotice('Your GitHub account is linked and verified.');
@@ -181,7 +190,21 @@ function App() {
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
-  useEffect(() => { if (account) loadMemberData(account); else { setProgress({}); setSubmissions([]); setPending([]); setMembers([]); } }, [account?.id]);
+  useEffect(() => {
+    if (!account) {
+      setQuestions([]); setTopics([]); setProgress({}); setSubmissions([]); setPending([]); setMembers([]);
+      setHistory([]); setLeaderboard([]);
+      setClub({ dateKey: localDay(), assignment: null, submittedCount: 0, acceptedCount: 0, participants: [] });
+      return undefined;
+    }
+    const controller = new AbortController();
+    loadQuestionLibrary(controller.signal).catch((error) => {
+      if (error.name !== 'AbortError') setNotice(error.message);
+    });
+    loadMemberData(account);
+    loadClub();
+    return () => controller.abort();
+  }, [account?.id]);
 
   function navigate(nextView) {
     const path = nextView === 'dashboard' ? '/dashboard' : '/';
@@ -221,7 +244,7 @@ function App() {
       if (authMode === 'signup') {
         const result = await api('/auth/register', { method: 'POST', body: {
           name: values.name, department: values.department, email: values.email,
-          password: values.password, githubUsername: values.githubUsername,
+          studyYear: values.studyYear, password: values.password, githubUsername: values.githubUsername,
           showPublic: values.showPublic === 'on',
         } });
         setAuthOpen(false);
@@ -310,7 +333,7 @@ function App() {
   }
 
   function changeFontSize(amount) {
-    setFontScale((value) => Math.max(.9, Math.min(1.2, Math.round((value + amount) * 100) / 100)));
+    setFontScale((value) => Math.max(.9, Math.min(1.5, Math.round((value + amount) * 100) / 100)));
   }
 
   const clearFilters = () => { setQuery(''); setTopic('All topics'); setDifficulty('Any level'); setStructure('Any data structure'); setPattern('Any pattern'); };
@@ -325,7 +348,7 @@ function App() {
         {isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={15}/>Dashboard{pendingMembers.length > 0 && <span className="nav-count">{pendingMembers.length}</span>}</button>}
       </nav>
       <div className="account-actions">
-        <div className="font-controls" aria-label="Text size controls"><span>TEXT</span><button onClick={() => changeFontSize(-.05)} aria-label="Decrease text size" disabled={fontScale <= .9}>A−</button><output aria-live="polite">{Math.round(fontScale * 100)}%</output><button onClick={() => changeFontSize(.05)} aria-label="Increase text size" disabled={fontScale >= 1.2}>A+</button></div>
+        <div className="font-controls" aria-label="Text size controls"><span>TEXT</span><button onClick={() => changeFontSize(-.05)} aria-label="Decrease text size" disabled={fontScale <= .9}>A−</button><output aria-live="polite">{Math.round(fontScale * 100)}%</output><button onClick={() => changeFontSize(.05)} aria-label="Increase text size" disabled={fontScale >= 1.5}>A+</button></div>
         {account ? <><span className="account-name"><span className="avatar">{initials(account.name)}</span><span>{account.name.split(' ')[0]}{account.role !== 'member' && <small>{account.role}</small>}</span></span>{!account.githubVerified && <button className="button button-quiet github-link" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/>Link GitHub</button>}<button className="button button-quiet sign-out" onClick={logout}>Sign out</button></> : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
       </div>
     </header>
@@ -338,17 +361,18 @@ function App() {
 
       <section className="overview-grid" aria-label="Club and personal overview">
         <article className="overview-card today-card"><div className="card-kicker"><span className="live-dot"/>QUESTION OF THE DAY <span className="card-count">01</span></div>
-          {assignedQuestion ? <><div className="today-date">{club.assignment.dateKey} <span>·</span> {assignedQuestion.topic}</div><h2>{assignedQuestion.title}</h2><div className="today-details"><Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill><span>LeetCode #{assignedQuestion.id}</span><span>Day {assignedQuestion.day} / 220</span></div><div className="club-participation"><strong>{club.acceptedCount}</strong><span>accepted club submissions</span><span className="participation-divider"/><span>{club.submittedCount} submitted</span><button className="text-button" onClick={() => navigate('club')}>View challenge <Icon name="arrow" size={14}/></button></div></> : <div className="empty-assignment"><h2>No question assigned today</h2><p>Club leads can publish the next Question of the Day. Holidays and break days do not count as missed practice.</p></div>}
+          {!account ? <div className="empty-assignment"><h2>Sign in to view today’s question</h2><p>Approved members can see the daily question and track their practice.</p></div> : assignedQuestion ? <><div className="today-date">{club.assignment.dateKey} <span>·</span> {assignedQuestion.topic}</div><h2>{assignedQuestion.title}</h2><div className="today-details"><Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill><span>LeetCode #{assignedQuestion.id}</span><span>Day {assignedQuestion.day} / 220</span></div><div className="club-participation"><strong>{club.acceptedCount}</strong><span>accepted club submissions</span><span className="participation-divider"/><span>{club.submittedCount} submitted</span><button className="text-button" onClick={() => navigate('club')}>View challenge <Icon name="arrow" size={14}/></button></div></> : <div className="empty-assignment"><h2>No question assigned today</h2><p>Club leads can publish the next Question of the Day. Holidays and break days do not count as missed practice.</p></div>}
         </article>
         <article className="overview-card personal-card"><div className="card-kicker">YOUR PRIVATE TRACKER <span className="card-count">02</span></div><div className="personal-stat"><strong>{account ? solvedCount : '—'}</strong><span><b>{account ? `${Math.round((solvedCount / 220) * 100)}%` : 'Personal'}</b><br/>{account ? 'of the 220 questions tracked' : 'progress stays private'}</span></div><div className="personal-track"><i style={{ width: `${account ? Math.min(100, solvedCount / 220 * 100) : 0}%` }}/></div><p>{account ? 'Your manual checkmarks are visible only to you. They never add club points.' : 'Sign in to save which questions you have solved.'}</p><button className="text-button" onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}>{account ? 'Open my progress' : 'Sign in to track'} <Icon name="arrow" size={14}/></button></article>
         <article className="overview-card community-card"><div className="card-kicker"><Icon name="users" size={14}/> CLUB PARTICIPATION <span className="card-count">03</span></div><div className="community-figure"><strong>{club.acceptedCount}</strong><span>members accepted today</span></div>{club.participants?.length ? <div className="participant-list">{club.participants.slice(0, 4).map((person) => <span className="participant" key={`${person.githubUsername}-${person.name}`}><i>{initials(person.name)}</i>{person.name.split(' ')[0]}</span>)}{club.participants.length > 4 && <span className="participant-more">+{club.participants.length - 4}</span>}</div> : <p className="privacy-note">Approved members with accepted club submissions appear here; personal checkmarks stay private.</p>}<button className="text-button" onClick={() => navigate('club')}>See the scoreboard <Icon name="arrow" size={14}/></button></article>
       </section>
 
-      <section className="library-section" id="library"><div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>THE QUESTION LIBRARY</div><h2>Find your next rep<span>.</span></h2></div><span className="question-total">{visibleQuestions.length} <i>/</i> 220 QUESTIONS</span></div>
-        <div className="filter-bar"><label className="search-input"><Icon name="search" size={16}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a title, pattern, algorithm or LC number"/><kbd>/</kbd></label><label className="filter-select"><span>TOPIC</span><select value={topic} onChange={(event) => setTopic(event.target.value)}><option>All topics</option>{curriculum.topics.map((item) => <option key={item}>{item}</option>)}</select></label><label className="filter-select"><span>LEVEL</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}><option>Any level</option>{['Easy', 'Medium', 'Hard'].map((item) => <option key={item}>{item}</option>)}</select></label><label className="filter-select"><span>DATA STRUCTURE</span><select value={structure} onChange={(event) => setStructure(event.target.value)}><option>Any data structure</option>{structures.map((item) => <option key={item}>{item}</option>)}</select></label><label className="filter-select"><span>PATTERN</span><select value={pattern} onChange={(event) => setPattern(event.target.value)}><option>Any pattern</option>{patterns.map((item) => <option key={item}>{item}</option>)}</select></label><button className="sort-button" onClick={() => setSort((current) => current === 'day' ? 'title' : 'day')}>Sort: {sort === 'day' ? 'Day' : 'Title'} ↕</button></div>
+      {!account && <section className="library-locked panel"><div><div className="eyebrow"><span className="eyebrow-line"/>THE QUESTION LIBRARY</div><h2>Sign in to access the curriculum<span>.</span></h2><p>Question titles, patterns, and solution notes are available to approved members.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></section>}
+      {account && <section className="library-section" id="library"><div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>THE QUESTION LIBRARY</div><h2>Find your next rep<span>.</span></h2></div><span className="question-total">{visibleQuestions.length} <i>/</i> 220 QUESTIONS</span></div>
+        <div className="filter-bar"><label className="search-input"><Icon name="search" size={16}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a title, pattern, algorithm or LC number"/><kbd>/</kbd></label><label className="filter-select"><span>TOPIC</span><select value={topic} onChange={(event) => setTopic(event.target.value)}><option>All topics</option>{topics.map((item) => <option key={item}>{item}</option>)}</select></label><label className="filter-select"><span>LEVEL</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}><option>Any level</option>{['Easy', 'Medium', 'Hard'].map((item) => <option key={item}>{item}</option>)}</select></label><label className="filter-select"><span>DATA STRUCTURE</span><select value={structure} onChange={(event) => setStructure(event.target.value)}><option>Any data structure</option>{structures.map((item) => <option key={item}>{item}</option>)}</select></label><label className="filter-select"><span>PATTERN</span><select value={pattern} onChange={(event) => setPattern(event.target.value)}><option>Any pattern</option>{patterns.map((item) => <option key={item}>{item}</option>)}</select></label><button className="sort-button" onClick={() => setSort((current) => current === 'day' ? 'title' : 'day')}>Sort: {sort === 'day' ? 'Day' : 'Title'} ↕</button></div>
         <div className="library-meta"><span><Icon name="filter" size={14}/>{visibleQuestions.length === questions.length ? 'All 220 questions' : `${visibleQuestions.length} matching questions`}</span>{(query || topic !== 'All topics' || difficulty !== 'Any level' || structure !== 'Any data structure' || pattern !== 'Any pattern') && <button onClick={clearFilters}>Clear filters</button>}<span className="personal-legend"><i/> Personal completion {account ? '' : '· sign in to track'}</span></div>
         <div className="question-list">{visibleQuestions.length ? visibleQuestions.map((question) => <QuestionRow key={question.id} question={question} solved={Boolean(progress[question.id])} solvedAt={progress[question.id]} bookmarked={bookmarks.includes(question.id)} expanded={expandedId === question.id} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)} onExpand={() => setExpandedId((id) => id === question.id ? null : question.id)}/>) : <div className="no-results"><span>⌕</span><strong>No questions match those filters.</strong><p>Try a different topic, level, or keyword.</p><button onClick={clearFilters}>Reset filters</button></div>}</div>
-      </section>
+      </section>}
       <footer className="site-footer"><span>DSAvation · ABES technical club</span><span>220 interview questions · curated from Striver and NeetCode</span></footer>
     </main>}
 
@@ -365,7 +389,7 @@ function App() {
         <div className="member-dashboard-toolbar"><div className="member-filter-tabs" role="tablist" aria-label="Filter member accounts">{[['pending', `Pending · ${pendingMembers.length}`], ['approved', `Approved · ${approvedMembers.length}`], ['all', `All · ${members.length}`]].map(([key, label]) => <button key={key} role="tab" aria-selected={memberFilter === key} className={memberFilter === key ? 'selected' : ''} onClick={() => setMemberFilter(key)}>{label}</button>)}</div><label className="member-search"><Icon name="search" size={15}/><input value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} placeholder="Search name, email, department"/></label></div>
         {displayedMembers.length ? <div className="dashboard-member-list">{displayedMembers.map((member) => <article className="dashboard-member-row" key={member.id}>
           <span className="avatar">{initials(member.name)}</span>
-          <div className="dashboard-member-identity"><div className="member-name-line"><strong>{member.name}</strong><Pill tone={member.approvalStatus === 'approved' ? 'green' : 'amber'}>{member.approvalStatus === 'approved' ? 'Approved' : 'Pending'}</Pill></div><span>{member.email}</span><small>{member.department} · @{member.githubUsername || 'No GitHub username'}</small><small>Joined {member.createdAt ? new Date(member.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'date unavailable'}</small></div>
+          <div className="dashboard-member-identity"><div className="member-name-line"><strong>{member.name}</strong><Pill tone={member.approvalStatus === 'approved' ? 'green' : 'amber'}>{member.approvalStatus === 'approved' ? 'Approved' : 'Pending'}</Pill></div><span>{member.email}</span><small>{member.department} · {studyYearLabel(member.studyYear)} · @{member.githubUsername || 'No GitHub username'}</small><small>Joined {member.createdAt ? new Date(member.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'date unavailable'}</small></div>
           <div className="dashboard-member-actions">
             <select aria-label={`Role for ${member.name}`} value={member.role} disabled={memberBusy === member.id || member.id === account.id || member.approvalStatus !== 'approved'} onChange={(event) => updateRole(member, event.target.value)}><option value="member">Member</option><option value="lead">Club lead</option><option value="admin">Admin</option></select>
             {member.approvalStatus === 'approved' ? <button className="button button-quiet" disabled={memberBusy === member.id || member.id === account.id} onClick={() => setMemberApproval(member, 'pending')}>De-approve</button> : <button className="button button-green" disabled={memberBusy === member.id} onClick={() => setMemberApproval(member, 'approved')}>{memberBusy === member.id ? 'Saving…' : 'Approve account'} <Icon name="check" size={14}/></button>}
@@ -378,7 +402,7 @@ function App() {
 
     {view === 'club' && <main className="content-shell page-content">
       <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>SHARED CLUB CHALLENGE</div><h1>Show up. Ship a solution<span>.</span></h1><p>Only reviewed submissions to a published Question of the Day count toward these standings.</p></div><div className="club-date-badge"><span>INDIA TIME</span><strong>{club.dateKey || localDay()}</strong></div></div>
-      <div className="club-grid">
+      {account ? <div className="club-grid">
         <div className="club-main-column">
           <section className="panel qotd-panel"><div className="panel-header"><div><div className="eyebrow"><span className="eyebrow-line"/>TODAY'S ASSIGNMENT</div><h2>{assignedQuestion ? assignedQuestion.title : 'No assignment today'}</h2></div>{assignedQuestion && <Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill>}</div>
             {assignedQuestion ? <><div className="assignment-meta"><span>{club.assignment.dateKey}</span><span>{assignedQuestion.topic}</span><span>LeetCode #{assignedQuestion.id}</span><span>{assignedQuestion.pattern}</span></div><p className="assignment-prompt">Club credit is for this published assignment only. The API checks the active date, your linked GitHub identity, the configured club repository, and the question path in your commit.</p><div className="assignment-counts"><div><strong>{club.submittedCount}</strong><span>SUBMITTED</span></div><div><strong>{club.acceptedCount}</strong><span>ACCEPTED</span></div><a href={`https://leetcode.com/problems/${assignedQuestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`} target="_blank" rel="noreferrer">Open problem <Icon name="external" size={14}/></a></div>
@@ -387,7 +411,7 @@ function App() {
 
           {account && <section className="panel profile-panel"><div className="profile-head"><span className="avatar large">{initials(account.name)}</span><div><h3>{account.name}</h3><p>{account.department} <span>·</span> @{account.githubUsername || 'GitHub not linked'}</p></div><Pill tone={account.role === 'member' ? 'neutral' : 'green'}>{account.role}</Pill></div><label className="privacy-toggle"><input type="checkbox" checked={account.showPublic} disabled={publicPreferenceBusy} onChange={(event) => updatePublicPreference(event.target.checked)}/><span>Show my full name and department publicly; otherwise use only my GitHub username.</span></label></section>}
 
-          {isLeader && <section className="panel leader-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>LEAD TOOLS</div><h2>Publish a Question of the Day</h2></div><Pill tone="green">{account.role}</Pill></div><form className="publish-form" onSubmit={publishAssignment}><label><span>ASSIGNMENT DATE <i>Asia/Kolkata</i></span><input type="date" value={assignmentDate} min={localDay()} onChange={(event) => setAssignmentDate(event.target.value)} required/></label><label className="wide"><span>QUESTION</span><select value={assignmentQuestion} onChange={(event) => setAssignmentQuestion(event.target.value)} required><option value="">Choose from the 220 question curriculum</option>{questions.map((question) => <option key={question.id} value={question.id}>Day {String(question.day).padStart(3, '0')} · LC {question.id} · {question.title}</option>)}</select></label><button className="button button-green" disabled={assignmentBusy || !assignmentQuestion}>{assignmentBusy ? 'Publishing…' : 'Publish assignment'} <Icon name="arrow" size={14}/></button></form><p className="helper-copy">Leave a date unassigned for a holiday or break. An assignment with a submission cannot be changed.</p></section>}
+          {isLeader && <section className="panel leader-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>LEAD TOOLS</div><h2>Publish a Question of the Day</h2></div><Pill tone="green">{account.role}</Pill></div><form className="publish-form" onSubmit={publishAssignment}><label><span>ASSIGNMENT DATE <i>Asia/Kolkata</i></span><input type="date" value={assignmentDate} min={localDay()} onChange={(event) => setAssignmentDate(event.target.value)} required/></label><label className="wide"><span>QUESTION</span><select value={assignmentQuestion} onChange={(event) => setAssignmentQuestion(event.target.value)} required><option value="">Choose from the 220 question curriculum</option>{questions.map((question) => <option key={question.id} value={question.id}>Day {String(question.day).padStart(3, '0')} · LC {question.id} · {question.title}</option>)}</select></label><button className="button button-green" disabled={assignmentBusy || !assignmentQuestion || history.some((item) => item.dateKey === assignmentDate)}>{assignmentBusy ? 'Publishing…' : 'Publish assignment'} <Icon name="arrow" size={14}/></button></form><p className="helper-copy">{history.some((item) => item.dateKey === assignmentDate) ? 'A question is already published for this date.' : 'Publish at most one question per date. Leave holidays and breaks unassigned.'}</p></section>}
 
           {isLeader && <section className="panel review-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>MODERATION</div><h2>Submissions to review <span className="count-badge">{pending.length}</span></h2></div></div>{pending.length ? <div className="review-list">{pending.map((item) => <article className="review-item" key={item.id}><div><strong>{item.member?.name || 'Member'} <span>· {item.member?.department}</span></strong><p>{item.assignment?.dateKey} · LC {item.assignment?.questionId} · {item.assignment?.question}</p><div className="review-evidence">{item.verifiedPusher ? <Pill tone="green">PUSH VERIFIED</Pill> : <Pill tone="amber">COMMIT LINK ONLY</Pill>}<a href={item.commitUrl} target="_blank" rel="noreferrer">Review commit <Icon name="external" size={13}/></a></div></div><div className="review-actions"><button className="button button-quiet" disabled={memberBusy === item.id} onClick={() => review(item, 'rejected')}>Decline</button><button className="button button-green" disabled={memberBusy === item.id} onClick={() => review(item, 'accepted')}>Accept <Icon name="check" size={14}/></button></div></article>)}</div> : <div className="soft-empty">No submissions are waiting for review.</div>}</section>}
 
@@ -397,13 +421,13 @@ function App() {
           <section className="panel history-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ASSIGNMENT LOG</div><h2>Published days</h2></div><span className="micro-count">{history.length}</span></div>{history.length ? <div className="history-list">{history.slice(0, 8).map((item) => { const question = byId.get(Number(item.questionId)); return <div className="history-row" key={item.id}><span className="history-date">{item.dateKey.slice(5)}</span><span>{question?.title || `LeetCode #${item.questionId}`}</span></div>; })}</div> : <div className="soft-empty">No questions have been assigned yet.</div>}</section>
           {submissions.length > 0 && <section className="panel my-submissions"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR CLUB SUBMISSIONS</div><h2>Review history</h2></div></div>{submissions.slice(0, 5).map((item) => <div className="my-submission" key={item.id}><span>{item.assignment?.dateKey} · LC {item.assignment?.questionId}</span><Pill tone={item.status === 'accepted' ? 'green' : item.status === 'rejected' ? 'red' : 'amber'}>{item.status}</Pill></div>)}</section>}
         </aside>
-      </div>
+      </div> : <div className="library-locked panel"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Sign in to view club questions and activity.</h2><p>Approved club members can view the current assignment, history, and standings.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div>}
       <footer className="site-footer"><span>DSAvation · ABES technical club</span><span>Club score comes from reviewed submissions only</span></footer>
     </main>}
 
     {authOpen && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuthOpen(false); }}><section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button className="modal-close" onClick={() => setAuthOpen(false)} aria-label="Close">×</button><div className="eyebrow"><span className="eyebrow-line"/>DSAVATION MEMBER ACCESS</div><h2 id="auth-title">{authMode === 'signup' ? 'Create your account' : 'Welcome back'}<span>.</span></h2><p className="auth-lede">{authMode === 'signup' ? 'Use your college email to request access to the private tracker and club challenge. An administrator must approve your account.' : 'Sign in to save private progress and submit to the club challenge.'}</p>
         <form onSubmit={submitAuth} className="auth-form">
-          {authMode === 'signup' && <><label>FULL NAME<input name="name" autoComplete="name" required minLength="2" maxLength="80" placeholder="Your name"/></label><label>DEPARTMENT<input name="department" required maxLength="80" placeholder="e.g. Computer Science"/></label><label>ABES EMAIL<input name="email" type="email" autoComplete="email" required pattern=".+@abes\.ac\.in" title="Use your @abes.ac.in email" placeholder="you@abes.ac.in"/></label><label>GITHUB USERNAME<input name="githubUsername" required pattern="[A-Za-z0-9-]{1,39}" placeholder="your-github-handle"/></label><label>PASSWORD<input name="password" type="password" autoComplete="new-password" minLength="10" maxLength="128" required placeholder="At least 10 characters"/></label><label className="check-label"><input type="checkbox" name="showPublic"/><span>Show my full name and department publicly for accepted club submissions. If unchecked, the public board uses my GitHub username.</span></label></>}
+          {authMode === 'signup' && <><label>FULL NAME<input name="name" autoComplete="name" required minLength="2" maxLength="80" placeholder="Your name"/></label><label>DEPARTMENT<input name="department" required maxLength="80" placeholder="e.g. Computer Science"/></label><label>YEAR OF STUDY<select name="studyYear" required defaultValue=""><option value="" disabled>Select your current year</option><option value="first-year">First year</option><option value="second-year">Second year</option><option value="third-year">Third year</option><option value="fourth-year">Fourth year</option><option value="passed">Passed out</option></select></label><label>ABES EMAIL<input name="email" type="email" autoComplete="email" required pattern=".+@abes\.ac\.in" title="Use your @abes.ac.in email" placeholder="you@abes.ac.in"/></label><label>GITHUB USERNAME<input name="githubUsername" required pattern="[A-Za-z0-9-]{1,39}" placeholder="your-github-handle"/></label><label>PASSWORD<input name="password" type="password" autoComplete="new-password" minLength="10" maxLength="128" required placeholder="At least 10 characters"/></label><label className="check-label"><input type="checkbox" name="showPublic"/><span>Show my full name and department publicly for accepted club submissions. If unchecked, the public board uses my GitHub username.</span></label></>}
           {authMode === 'login' && <><label>ABES EMAIL<input name="email" type="email" autoComplete="email" required pattern=".+@abes\.ac\.in" placeholder="you@abes.ac.in"/></label><label>PASSWORD<input name="password" type="password" autoComplete="current-password" required placeholder="Your password"/></label></>}
           {authError && <p className="form-error" role="alert">{authError}</p>}
           <button className="button button-dark auth-submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'signup' ? 'Request account' : 'Sign in'} <Icon name="arrow" size={14}/></button>
