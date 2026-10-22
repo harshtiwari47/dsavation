@@ -40,8 +40,8 @@ button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .58; }
 svg { flex: none; }
 .app-frame { min-height: 100vh; }
-.global-loading { height: 3px; position: fixed; inset: 0 0 auto; z-index: 60; overflow: hidden; pointer-events: none; }
-.global-loading span { width: 34%; height: 100%; display: block; background: linear-gradient(90deg, transparent, var(--green), #a7d5a7, transparent); transform: translateX(-110%); animation: global-load-sweep 1.15s var(--ease-out) infinite; }
+.global-loading { height: 7px; position: fixed; inset: 0 0 auto; z-index: 60; overflow: hidden; pointer-events: none; background: rgba(30,106,80,.22); box-shadow: 0 1px 5px rgba(30,106,80,.24); }
+.global-loading span { width: 38%; height: 100%; display: block; background: linear-gradient(90deg, var(--green-dark), var(--green), #a7d5a7); box-shadow: 0 0 12px rgba(30,106,80,.65); transform: translateX(-110%); animation: global-load-sweep 1.15s var(--ease-out) infinite; }
 @keyframes global-load-sweep { to { transform: translateX(330%); } }
 .library-locked { min-height: 170px; margin-bottom: 38px; padding: 24px; display: flex; align-items: center; gap: 18px; }
 .library-locked h2 { margin: 7px 0; color: #2e3931; font: 600 1.375rem var(--display); }
@@ -555,7 +555,7 @@ h1, h2, h3, p { margin-top: 0; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
-  .global-loading span { width: 100%; transform: none; animation: none; opacity: .75; }
+  .global-loading span { width: 100%; transform: none; animation: none; opacity: 1; }
 }
 
 :root[data-theme="dark"] {
