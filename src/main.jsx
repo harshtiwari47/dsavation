@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import './style.css';
 
@@ -47,6 +47,7 @@ function Icon({ name, size = 17 }) {
     github: <><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.8A5.3 5.3 0 0 0 18.8 5a4.9 4.9 0 0 0-.1-3S17.5 1.7 15 3.4a13.5 13.5 0 0 0-7 0C5.5 1.7 4.3 2 4.3 2a4.9 4.9 0 0 0-.1 3A5.3 5.3 0 0 0 2.8 7.7c0 5.3 3.1 6.5 6.1 6.8A3.4 3.4 0 0 0 8 17.1V22"/></>,
     close: <><path d="m6 6 12 12M18 6 6 18"/></>,
     lock: <><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></>,
+    logout: <><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></>,
     external: <><path d="M14 3h7v7M10 14 21 3"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></>,
     moon: <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z"/>,
@@ -113,7 +114,7 @@ function App() {
   const [fontScale, setFontScale] = useState(() => {
     const stored = localStorage.getItem('dsavation-font-scale');
     const saved = Number(stored);
-    if (!stored || !Number.isFinite(saved) || saved < .9 || saved > 1.5 || saved === 1 || saved === 1.1 || saved === 1.3) return 1.2;
+    if (!stored || !Number.isFinite(saved) || saved < .9 || saved > 1.5) return 1.2;
     return saved;
   });
   const [bookmarks, setBookmarks] = useState(() => JSON.parse(localStorage.getItem('dsavation-bookmarks') || '[]'));
@@ -262,9 +263,8 @@ function App() {
     document.documentElement.dataset.theme = theme;
     localStorage.setItem('dsavation-theme', theme);
   }, [theme]);
-  useEffect(() => {
-    const shell = document.querySelector('.app-frame');
-    if (shell) shell.style.zoom = String(fontScale);
+  useLayoutEffect(() => {
+    document.documentElement.style.fontSize = `${Math.round(fontScale * 100)}%`;
     localStorage.setItem('dsavation-font-scale', String(fontScale));
   }, [fontScale]);
 
@@ -396,7 +396,7 @@ function App() {
       <div className="account-actions">
         <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15}/><span>{theme === 'dark' ? 'Light' : 'Dark'}</span></button>
         <div className="font-controls" aria-label="Text size controls"><span>TEXT</span><button onClick={() => changeFontSize(-.05)} aria-label="Decrease text size" disabled={fontScale <= .9}>A−</button><output aria-live="polite">{Math.round(fontScale * 100)}%</output><button onClick={() => changeFontSize(.05)} aria-label="Increase text size" disabled={fontScale >= 1.5}>A+</button></div>
-        {account ? <><span className="account-name"><span className="avatar">{initials(account.name)}</span><span>{account.name.split(' ')[0]}{account.role !== 'member' && <small>{account.role}</small>}</span></span>{!account.githubVerified && <button className="button button-quiet github-link" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/>Link GitHub</button>}<button className="button button-quiet sign-out" onClick={logout}>Sign out</button></> : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
+        {account ? <><span className="account-name"><span className="avatar">{initials(account.name)}</span><span>{account.name.split(' ')[0]}{account.role !== 'member' && <small>{account.role}</small>}</span></span>{!account.githubVerified && <button className="button button-quiet github-link" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/><span>Link GitHub</span></button>}<button className="button button-quiet sign-out" onClick={logout} aria-label="Sign out" title="Sign out"><span>Sign out</span><Icon name="logout" size={14}/></button></> : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
       </div>
     </header>
 
