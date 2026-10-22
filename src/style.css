@@ -38,7 +38,7 @@ a { color: inherit; text-decoration: none; }
 button { cursor: pointer; }
 button:disabled { cursor: not-allowed; opacity: .58; }
 svg { flex: none; }
-.app-frame { min-height: 100vh; }
+.app-frame { min-height: 100vh; zoom: 1.1; }
 
 .topbar { height: 72px; padding: 0 clamp(20px, 4vw, 68px); display: flex; align-items: center; gap: 30px; border-bottom: 1px solid var(--line); background: rgba(255,254,250,.94); position: sticky; top: 0; z-index: 20; backdrop-filter: blur(16px); }
 .brand { display: inline-flex; align-items: center; gap: 10px; min-width: 200px; color: #27342c; font: 700 18px var(--display); letter-spacing: -.65px; }

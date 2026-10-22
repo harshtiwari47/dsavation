@@ -86,8 +86,10 @@ function App() {
   const [expandedId, setExpandedId] = useState(null);
   const [progress, setProgress] = useState({});
   const [fontScale, setFontScale] = useState(() => {
-    const saved = Number(localStorage.getItem('dsavation-font-scale'));
-    return Number.isFinite(saved) && saved >= .9 && saved <= 1.2 ? saved : 1;
+    const stored = localStorage.getItem('dsavation-font-scale');
+    const saved = Number(stored);
+    if (!stored || !Number.isFinite(saved) || saved < .9 || saved > 1.2 || saved === 1) return 1.1;
+    return saved;
   });
   const [bookmarks, setBookmarks] = useState(() => JSON.parse(localStorage.getItem('dsavation-bookmarks') || '[]'));
   const [club, setClub] = useState({ dateKey: localDay(), assignment: null, submittedCount: 0, acceptedCount: 0, participants: [] });
