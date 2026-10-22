@@ -9,6 +9,11 @@ function normalizeQuestions(rows = []) {
   }));
 }
 const localDay = () => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+const shiftDay = (dateKey, offset) => {
+  const date = new Date(`${dateKey}T00:00:00.000Z`);
+  date.setUTCDate(date.getUTCDate() + offset);
+  return date.toISOString().slice(0, 10);
+};
 const studyYearLabel = (year) => ({ 'first-year': 'First year', 'second-year': 'Second year', 'third-year': 'Third year', 'fourth-year': 'Fourth year', passed: 'Passed out' }[year] || 'Year not provided');
 const initials = (name = '') => name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('') || 'D';
 function initialTheme() {
@@ -52,7 +57,16 @@ function Icon({ name, size = 17 }) {
 
 function Pill({ children, tone = '' }) { return <span className={`pill ${tone}`}>{children}</span>; }
 
-function QuestionRow({ question, solved, solvedAt, bookmarked, expanded, onSolve, onBookmark, onExpand }) {
+function QuestionActionsGuide() {
+  return <div className="question-actions-guide" aria-label="Question controls">
+    <span><i className="guide-check"><Icon name="check" size={12}/></i>Mark solved for personal progress</span>
+    <span><i className="guide-bookmark">◇</i>Save for review</span>
+    <span><i className="guide-expand">+</i>Show approach and complexity</span>
+  </div>;
+}
+
+function QuestionRow({ question, solved, solvedAt, bookmarked, onSolve, onBookmark }) {
+  const [expanded, setExpanded] = useState(false);
   return <article className={`question-card ${solved ? 'is-solved' : ''} ${expanded ? 'is-expanded' : ''}`}>
     <div className="question-main">
       <span className="day-number">{String(question.day).padStart(3, '0')}</span>
@@ -63,12 +77,12 @@ function QuestionRow({ question, solved, solvedAt, bookmarked, expanded, onSolve
       <div className="question-topic"><Pill>{question.topic}</Pill></div>
       <div className="question-level"><span className={`difficulty ${question.difficulty.toLowerCase()}`}><i/>{question.difficulty}</span></div>
       <div className="question-actions">
-        <button className={`icon-button solve-button ${solved ? 'complete' : ''}`} onClick={onSolve} aria-label={solved ? 'Remove from personal progress' : 'Mark in personal progress'} title={solved ? 'Remove from personal progress' : 'Personal progress only'}>{solved ? <Icon name="check" size={15}/> : <span className="check-empty"/>}</button>
-        <button className={`icon-button bookmark-button ${bookmarked ? 'saved' : ''}`} onClick={onBookmark} aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark'} title="Save for review">{bookmarked ? '◆' : '◇'}</button>
-        <button className="icon-button expand-button" onClick={onExpand} aria-label={expanded ? 'Hide analysis' : 'Show analysis'}>{expanded ? '−' : '+'}</button>
+        <button type="button" className={`icon-button solve-button ${solved ? 'complete' : ''}`} onClick={onSolve} aria-label={solved ? 'Remove from personal progress' : 'Mark in personal progress'} title={solved ? 'Remove from personal progress' : 'Mark solved for personal progress'}>{solved ? <Icon name="check" size={15}/> : <span className="check-empty"/>}</button>
+        <button type="button" className={`icon-button bookmark-button ${bookmarked ? 'saved' : ''}`} onClick={onBookmark} aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark'} title="Save for review">{bookmarked ? '◆' : '◇'}</button>
+        <button type="button" className="icon-button expand-button" onClick={() => setExpanded((open) => !open)} aria-expanded={expanded} aria-controls={`question-analysis-${question.id}`} aria-label={expanded ? 'Hide analysis' : 'Show approach and complexity'} title={expanded ? 'Hide approach and complexity' : 'Show approach and complexity'}>{expanded ? '−' : '+'}</button>
       </div>
     </div>
-    {expanded && <div className="question-analysis">
+    {expanded && <div id={`question-analysis-${question.id}`} className="question-analysis">
       <div className="analysis-intro"><span className="micro-label">INTERVIEW NOTES</span><p>{question.algorithm}. Focus on why <strong>{question.pattern.toLowerCase()}</strong> reduces the work compared with a direct approach.</p></div>
       <div className="analysis-metrics"><div><span>DATA STRUCTURE</span><strong>{question.structures}</strong></div><div><span>RECOMMENDED APPROACH</span><strong>{question.algorithm}</strong></div><div><span>TIME</span><strong className="complexity">{question.time}</strong></div><div><span>AUXILIARY SPACE</span><strong className="complexity">{question.space}</strong></div></div>
       <a className="text-link" href={`https://leetcode.com/problems/${question.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`} target="_blank" rel="noreferrer">Open problem on LeetCode <Icon name="external" size={13}/></a>
@@ -95,7 +109,6 @@ function App() {
   const [structure, setStructure] = useState('Any data structure');
   const [pattern, setPattern] = useState('Any pattern');
   const [sort, setSort] = useState('day');
-  const [expandedId, setExpandedId] = useState(null);
   const [progress, setProgress] = useState({});
   const [fontScale, setFontScale] = useState(() => {
     const stored = localStorage.getItem('dsavation-font-scale');
@@ -133,6 +146,25 @@ function App() {
     return list;
   }, [questions, query, topic, difficulty, structure, pattern, sort]);
   const solvedCount = Object.keys(progress).length;
+  const personalStreak = useMemo(() => {
+    const solvedDays = new Set(Object.values(progress).map((value) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(value))));
+    const orderedDays = [...solvedDays].sort();
+    let best = 0;
+    let run = 0;
+    let previous = '';
+    for (const day of orderedDays) {
+      run = previous && shiftDay(previous, 1) === day ? run + 1 : 1;
+      best = Math.max(best, run);
+      previous = day;
+    }
+    let cursor = solvedDays.has(localDay()) ? localDay() : shiftDay(localDay(), -1);
+    let current = 0;
+    while (solvedDays.has(cursor)) {
+      current += 1;
+      cursor = shiftDay(cursor, -1);
+    }
+    return { current, best };
+  }, [progress]);
   const isLeader = account && ['lead', 'admin'].includes(account.role);
   const isAdmin = account?.role === 'admin';
   const assignedQuestion = club.assignment ? byId.get(Number(club.assignment.questionId)) : null;
@@ -386,14 +418,15 @@ function App() {
       {account && <section className="library-section" id="library"><div className="section-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>THE QUESTION LIBRARY</div><h2>Find your next rep<span>.</span></h2></div><span className="question-total">{visibleQuestions.length} <i>/</i> 220 QUESTIONS</span></div>
         <div className="filter-bar"><label className="search-input"><Icon name="search" size={16}/><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search a title, pattern, algorithm or LC number"/><kbd>/</kbd></label><label className="filter-select"><span>TOPIC</span><select value={topic} onChange={(event) => setTopic(event.target.value)}><option>All topics</option>{topics.map((item) => <option key={item}>{item}</option>)}</select></label><label className="filter-select"><span>LEVEL</span><select value={difficulty} onChange={(event) => setDifficulty(event.target.value)}><option>Any level</option>{['Easy', 'Medium', 'Hard'].map((item) => <option key={item}>{item}</option>)}</select></label><label className="filter-select"><span>DATA STRUCTURE</span><select value={structure} onChange={(event) => setStructure(event.target.value)}><option>Any data structure</option>{structures.map((item) => <option key={item}>{item}</option>)}</select></label><label className="filter-select"><span>PATTERN</span><select value={pattern} onChange={(event) => setPattern(event.target.value)}><option>Any pattern</option>{patterns.map((item) => <option key={item}>{item}</option>)}</select></label><button className="sort-button" onClick={() => setSort((current) => current === 'day' ? 'title' : 'day')}>Sort: {sort === 'day' ? 'Day' : 'Title'} ↕</button></div>
         <div className="library-meta"><span><Icon name="filter" size={14}/>{visibleQuestions.length === questions.length ? 'All 220 questions' : `${visibleQuestions.length} matching questions`}</span>{(query || topic !== 'All topics' || difficulty !== 'Any level' || structure !== 'Any data structure' || pattern !== 'Any pattern') && <button onClick={clearFilters}>Clear filters</button>}<span className="personal-legend"><i/> Personal completion {account ? '' : '· sign in to track'}</span></div>
-        <div className="question-list">{visibleQuestions.length ? visibleQuestions.map((question) => <QuestionRow key={question.id} question={question} solved={Boolean(progress[question.id])} solvedAt={progress[question.id]} bookmarked={bookmarks.includes(question.id)} expanded={expandedId === question.id} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)} onExpand={() => setExpandedId((id) => id === question.id ? null : question.id)}/>) : <div className="no-results"><span>⌕</span><strong>No questions match those filters.</strong><p>Try a different topic, level, or keyword.</p><button onClick={clearFilters}>Reset filters</button></div>}</div>
+        <QuestionActionsGuide/>
+        <div className="question-list">{visibleQuestions.length ? visibleQuestions.map((question) => <QuestionRow key={question.id} question={question} solved={Boolean(progress[question.id])} solvedAt={progress[question.id]} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>) : <div className="no-results"><span>⌕</span><strong>No questions match those filters.</strong><p>Try a different topic, level, or keyword.</p><button onClick={clearFilters}>Reset filters</button></div>}</div>
       </section>}
       <footer className="site-footer"><span>DSAvation · ABES technical club</span><span>220 interview questions · curated from Striver and NeetCode</span></footer>
     </main>}
 
     {view === 'progress' && <main className="content-shell page-content">
       <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>PRIVATE WORKSPACE</div><h1>My progress<span>.</span></h1><p>Only your manual checkmarks appear here. They do not affect club points or standings.</p></div><div className="metric-card"><strong>{solvedCount}</strong><span>QUESTIONS TRACKED</span></div></div>
-      {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Your progress is private to your account.</h2><p>Sign in to keep a dated record of questions you have solved.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <><div className="progress-summary"><article><span>COMPLETED</span><strong>{solvedCount}<small> / 220</small></strong></article><article><span>CURRICULUM COVERED</span><strong>{Math.round(solvedCount / 220 * 100)}<small>%</small></strong></article><article><span>DAILY PRACTICE</span><strong>{new Set(Object.values(progress).map((value) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))).size}<small> sessions</small></strong></article><article><span>SAVED FOR REVIEW</span><strong>{bookmarks.length}<small> questions</small></strong></article></div><div className="section-heading compact"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR COMPLETIONS</div><h2>{solvedCount ? 'Recently tracked' : 'A clean slate'}</h2></div><button className="button button-quiet" onClick={() => { navigate('general'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Browse questions <Icon name="arrow" size={14}/></button></div>{solvedCount ? <div className="question-list">{Object.entries(progress).sort((a, b) => new Date(b[1]) - new Date(a[1])).map(([id, solvedAt]) => byId.get(Number(id)) && ({ question: byId.get(Number(id)), solvedAt })).filter(Boolean).map(({ question, solvedAt }) => <QuestionRow key={question.id} question={question} solved={true} solvedAt={solvedAt} bookmarked={bookmarks.includes(question.id)} expanded={expandedId === question.id} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)} onExpand={() => setExpandedId((id) => id === question.id ? null : id)}/>)}</div> : <div className="empty-panel"><span>01</span><h2>Your first question starts the record.</h2><p>Use the personal checkmark in the question library when you finish a problem. Club challenge submissions are tracked separately.</p><button className="button button-dark" onClick={() => navigate('general')}>Browse the library <Icon name="arrow" size={14}/></button></div>}</>}
+      {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Your progress is private to your account.</h2><p>Sign in to keep a dated record of questions you have solved.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <><div className="progress-summary"><article><span>COMPLETED</span><strong>{solvedCount}<small> / 220</small></strong></article><article><span>CURRICULUM COVERED</span><strong>{Math.round(solvedCount / 220 * 100)}<small>%</small></strong></article><article><span>DAILY PRACTICE</span><strong>{new Set(Object.values(progress).map((value) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))).size}<small> sessions</small></strong></article><article><span>PERSONAL STREAK</span><strong>{personalStreak.current}<small> days</small></strong><small className="streak-best">Best: {personalStreak.best} days · checkmarks only</small></article><article><span>SAVED FOR REVIEW</span><strong>{bookmarks.length}<small> questions</small></strong></article></div><div className="section-heading compact"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR COMPLETIONS</div><h2>{solvedCount ? 'Recently tracked' : 'A clean slate'}</h2></div><button className="button button-quiet" onClick={() => { navigate('general'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Browse questions <Icon name="arrow" size={14}/></button></div>{solvedCount ? <><QuestionActionsGuide/><div className="question-list">{Object.entries(progress).sort((a, b) => new Date(b[1]) - new Date(a[1])).map(([id, solvedAt]) => byId.get(Number(id)) && ({ question: byId.get(Number(id)), solvedAt })).filter(Boolean).map(({ question, solvedAt }) => <QuestionRow key={question.id} question={question} solved={true} solvedAt={solvedAt} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>)}</div></> : <div className="empty-panel"><span>01</span><h2>Your first question starts the record.</h2><p>Use the personal checkmark in the question library when you finish a problem. Club challenge submissions are tracked separately.</p><button className="button button-dark" onClick={() => navigate('general')}>Browse the library <Icon name="arrow" size={14}/></button></div>}</>}
     </main>}
 
     {view === 'dashboard' && isAdmin && <main className="content-shell page-content dashboard-page">

@@ -163,6 +163,10 @@ h1, h2, h3, p { margin-top: 0; }
 .library-meta button { padding: 0; border: 0; color: var(--green); background: transparent; font-size: 9px; }
 .personal-legend { margin-left: auto; display: inline-flex; align-items: center; gap: 5px; }
 .personal-legend i { width: 6px; height: 6px; border-radius: 50%; background: #6fa27c; }
+.question-actions-guide { min-height: 38px; padding: 6px 13px; display: flex; flex-wrap: wrap; align-items: center; gap: 7px 18px; border: 1px solid var(--line); border-bottom: 0; border-radius: 5px 5px 0 0; color: var(--body); background: var(--surface-muted); font-size: 9px; }
+.question-actions-guide span { display: inline-flex; align-items: center; gap: 6px; }
+.question-actions-guide i { width: 20px; height: 20px; display: inline-grid; place-items: center; border: 1px solid var(--line-dark); border-radius: 4px; color: var(--green); background: var(--surface); font: 600 12px var(--mono); font-style: normal; }
+.question-actions-guide .guide-bookmark { color: var(--orange); }
 .question-list { border: 1px solid var(--line); border-radius: 0 0 6px 6px; overflow: hidden; background: var(--surface); }
 .question-card { border-bottom: 1px solid #edefe8; }
 .question-card:last-child { border-bottom: 0; }
@@ -214,11 +218,12 @@ h1, h2, h3, p { margin-top: 0; }
 .metric-card span, .club-date-badge span { color: #9aa196; font: 8px var(--mono); letter-spacing: .7px; }
 .club-date-badge { min-width: 145px; text-align: right; }
 .club-date-badge strong { color: #566355; font: 11px var(--mono); }
-.progress-summary { margin-bottom: 37px; display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.progress-summary { margin-bottom: 37px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
 .progress-summary article { min-height: 100px; padding: 15px; display: grid; align-content: space-between; border: 1px solid var(--line); border-radius: 5px; background: var(--surface); }
 .progress-summary article span { color: #9aa196; font: 8px var(--mono); letter-spacing: .6px; }
 .progress-summary article strong { color: #35443a; font: 600 25px var(--display); }
 .progress-summary small { color: #a3aa9f; font: 9px 'DM Sans', sans-serif; letter-spacing: 0; }
+.progress-summary .streak-best { color: var(--green); font-size: 8px; }
 .section-heading.compact { margin-bottom: 14px; }
 .section-heading.compact h2 { font-size: 21px; }
 .login-prompt { margin: 30px 0; padding: 24px; display: flex; align-items: center; gap: 16px; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); }
@@ -389,6 +394,7 @@ h1, h2, h3, p { margin-top: 0; }
   .question-main { grid-template-columns: 36px minmax(180px, 1.5fr) minmax(110px, .9fr) 65px 98px; gap: 8px; }
   .question-analysis { grid-template-columns: 1fr 1.8fr; }
   .question-analysis .text-link { grid-column: 2; }
+  .progress-summary { grid-template-columns: repeat(3, 1fr); }
   .club-grid { grid-template-columns: minmax(0, 1.3fr) minmax(265px, .8fr); }
   .publish-form { grid-template-columns: 140px minmax(0, 1fr); }
   .publish-form button { grid-column: 1 / -1; justify-self: start; }
@@ -463,6 +469,9 @@ h1, h2, h3, p { margin-top: 0; }
   .library-meta { padding-inline: 9px; font-size: 7px; }
   .personal-legend { font-size: 0; }
   .personal-legend i { width: 8px; height: 8px; }
+  .question-actions-guide { padding-inline: 8px; gap: 6px 10px; font-size: 8px; }
+  .question-actions-guide span { gap: 4px; }
+  .question-actions-guide i { width: 18px; height: 18px; }
   .question-main { min-height: 65px; padding: 8px; grid-template-columns: 29px minmax(0, 1fr) 78px; gap: 5px; }
   .day-number { font-size: 8px; }
   .question-title { font-size: 10px; }
@@ -550,6 +559,7 @@ h1, h2, h3, p { margin-top: 0; }
 :root[data-theme="dark"] .filter-select select,
 :root[data-theme="dark"] .sort-button,
 :root[data-theme="dark"] .question-list,
+:root[data-theme="dark"] .question-actions-guide,
 :root[data-theme="dark"] .question-card,
 :root[data-theme="dark"] .metric-card,
 :root[data-theme="dark"] .club-date-badge,
@@ -684,6 +694,9 @@ h1, h2, h3, p { margin-top: 0; }
 :root[data-theme="dark"] .question-card { border-color: #2a352d; }
 :root[data-theme="dark"] .question-card:hover { background: #202b24; }
 :root[data-theme="dark"] .question-card.is-solved .question-title { color: #89968b; }
+:root[data-theme="dark"] .question-actions-guide { border-color: var(--line); color: #aebbb0; background: #202a23; }
+:root[data-theme="dark"] .question-actions-guide i { border-color: #435047; background: #141b16; }
+:root[data-theme="dark"] .progress-summary .streak-best { color: #8ac69a; }
 :root[data-theme="dark"] .question-analysis { border-color: #2d3931; background: #18211b; }
 :root[data-theme="dark"] .icon-button:hover { background: #29362d; }
 :root[data-theme="dark"] .check-empty { border-color: #5b695d; }
