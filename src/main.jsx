@@ -386,7 +386,7 @@ function App() {
 
   return <div className="app-frame">
     <header className="topbar">
-      <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><span className="brand-mark">D<span>S</span></span><span>DSAvation</span></a>
+      <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true"/><span>DSAvation</span></a>
       <nav className="main-nav" aria-label="Main navigation">
         <button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><Icon name="book" size={15}/>General</button>
         <button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={15}/>My progress</button>

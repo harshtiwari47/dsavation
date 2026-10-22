@@ -47,8 +47,7 @@ svg { flex: none; }
 
 .topbar { height: 72px; padding: 0 clamp(20px, 4vw, 68px); display: flex; align-items: center; gap: 30px; border-bottom: 1px solid var(--line); background: rgba(255,254,250,.94); position: sticky; top: 0; z-index: 20; backdrop-filter: blur(16px); }
 .brand { display: inline-flex; align-items: center; gap: 10px; min-width: 200px; color: #27342c; font: 700 18px var(--display); letter-spacing: -.65px; }
-.brand-mark { width: 31px; height: 31px; display: grid; place-items: center; border-radius: 9px; transform: rotate(-4deg); color: #fffdf6; background: var(--green); font: 700 13px var(--display); letter-spacing: -1.6px; }
-.brand-mark span { color: #dcebb8; }
+.brand-mark { width: 33px; height: 33px; display: block; flex: none; border-radius: 9px; }
 .main-nav { height: 100%; display: flex; align-items: center; gap: 4px; }
 .main-nav button { height: 38px; padding: 0 12px; display: inline-flex; align-items: center; gap: 8px; border: 0; border-radius: 5px; color: #7b8378; background: transparent; font-size: 12px; transition: background-color 150ms ease, color 150ms ease, transform 150ms ease-out; }
 .main-nav button:hover { color: var(--ink); background: #f1f2ec; }
@@ -438,7 +437,7 @@ h1, h2, h3, p { margin-top: 0; }
   .library-locked .button { margin-left: auto; }
   .topbar { height: 58px; padding-inline: 14px; }
   .brand { gap: 7px; font-size: 15px; }
-  .brand-mark { width: 28px; height: 28px; }
+  .brand-mark { width: 30px; height: 30px; }
   .main-nav { display: none; }
   .account-actions { margin-left: auto; }
   .font-controls { height: 28px; }
