@@ -7,6 +7,7 @@ import { handleApiFetch, isAssignmentSolutionPath, isOnAssignmentDay, parsePerso
 const indiaDay = (date = new Date()) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 const dateAtIndiaNoon = (dateKey) => new Date(`${dateKey}T12:00:00+05:30`);
 const commits = new Map();
+const commitTrees = new Map();
 let originalFetch;
 let originalAdminEmails;
 let originalSecureCookie;
@@ -175,10 +176,11 @@ async function seedAdmin(db) {
 
 function commitFixture({ sha, username = 'student-gh', questionId = 217, date = indiaDay() } = {}) {
   const timestamp = dateAtIndiaNoon(date).toISOString();
+  commitTrees.set(sha, [{ path: `${questionId}/Solution.cpp`, type: 'blob', size: 128 }]);
   return {
     sha, html_url: `https://github.com/${username}/dsa-solutions/commit/${sha}`,
     author: { login: username }, committer: { login: username },
-    commit: { author: { date: timestamp }, committer: { date: timestamp } },
+    commit: { author: { date: timestamp }, committer: { date: timestamp }, tree: { sha } },
     files: [{ filename: `${questionId}/Solution.cpp`, status: 'added' }],
   };
 }
@@ -201,6 +203,11 @@ before(() => {
       const login = decodeURIComponent(url.pathname.split('/').pop());
       return new Response(JSON.stringify({ id: 987, login }), { status: 200 });
     }
+    if (url.hostname === 'api.github.com' && url.pathname.includes('/git/trees/')) {
+      const treeSha = url.pathname.split('/').pop();
+      const tree = commitTrees.get(treeSha);
+      return new Response(JSON.stringify({ tree: tree || [], truncated: false }), { status: tree ? 200 : 404 });
+    }
     const sha = url.pathname.split('/').pop();
     const commit = commits.get(sha);
     return new Response(JSON.stringify(commit || { message: 'Not Found' }), { status: commit ? 200 : 404 });
@@ -215,7 +222,7 @@ after(() => {
   else process.env.SESSION_COOKIE_SECURE = originalSecureCookie;
 });
 
-beforeEach(() => commits.clear());
+beforeEach(() => { commits.clear(); commitTrees.clear(); });
 
 test('commit links, solution paths, and India assignment dates reject malformed or nested values', () => {
   assert.deepEqual(parsePersonalCommitUrl('https://github.com/alex/dsa/commit/abcdef0123456789'), { owner: 'alex', repository: 'dsa', sha: 'abcdef0123456789' });
@@ -433,10 +440,16 @@ test('commit verification rejects mismatches and accepts a linked author with Gi
   assert.equal((await submit(`https://github.com/student-gh/repo/commit/${dateSha}`)).response.status, 400);
   const pathSha = hash('f'); commits.set(pathSha, { ...commitFixture({ sha: pathSha }), files: [{ filename: '217/src/Solution.cpp', status: 'added' }] });
   assert.equal((await submit(`https://github.com/student-gh/repo/commit/${pathSha}`)).response.status, 400);
-  const modifiedSha = hash('1'); commits.set(modifiedSha, { ...commitFixture({ sha: modifiedSha }), files: [{ filename: '217/Solution.cpp', status: 'modified' }] });
-  assert.equal((await submit(`https://github.com/student-gh/repo/commit/${modifiedSha}`)).response.status, 400);
+  const removedSha = hash('1'); commits.set(removedSha, { ...commitFixture({ sha: removedSha }), files: [{ filename: '217/Solution.cpp', status: 'removed' }] });
+  assert.equal((await submit(`https://github.com/student-gh/repo/commit/${removedSha}`)).response.status, 400);
   const staleAssignment = await submit(`https://github.com/student-gh/repo/commit/${hash('2')}`, new ObjectId().toString());
   assert.equal(staleAssignment.response.status, 409);
+  const emptySha = hash('4');
+  commits.set(emptySha, commitFixture({ sha: emptySha }));
+  commitTrees.set(emptySha, [{ path: '217/Solution.cpp', type: 'blob', size: 0 }]);
+  const emptyFile = await submit(`https://github.com/student-gh/repo/commit/${emptySha}`);
+  assert.equal(emptyFile.response.status, 400);
+  assert.match(emptyFile.data.error, /must contain solution content/i);
   const webFlowSha = hash('3');
   const webFlowCommit = commitFixture({ sha: webFlowSha });
   webFlowCommit.committer = { login: 'web-flow' };
@@ -445,6 +458,37 @@ test('commit verification rejects mismatches and accepts a linked author with Gi
   assert.equal(webFlowSubmission.response.status, 201);
   assert.equal(webFlowSubmission.data.submission.status, 'accepted');
   assert.equal(webFlowSubmission.data.submission.points, 1);
+});
+
+test('same-day renamed or edited solution files are accepted when the question-folder file is non-empty', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const student = await seedUser(db, { name: 'Daily Solver', email: 'solver@abes.ac.in', username: 'student-gh' });
+  const assigned = await call(db, '/admin/assignments', { method: 'POST', cookie: admin.cookie, body: { dateKey: indiaDay(), questionId: 217 } });
+  const sha = '8'.repeat(40);
+  const renamedCommit = commitFixture({ sha });
+  renamedCommit.files = [{ filename: '217/Solution.java', previous_filename: 'solutions/Solution.java', status: 'renamed', additions: 0, deletions: 0, changes: 0 }];
+  commitTrees.set(sha, [{ path: '217/Solution.java', type: 'blob', size: 84 }]);
+  commits.set(sha, renamedCommit);
+  const submission = await call(db, '/submissions', { method: 'POST', cookie: student.cookie, body: {
+    assignmentId: assigned.data.assignment.id, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${sha}`,
+  } });
+  assert.equal(submission.response.status, 201);
+  assert.equal(submission.data.submission.points, 1);
+  assert.equal(db.collection('submissions').documents[0].solutionPath, '217/Solution.java');
+  assert.equal(db.collection('submissions').documents[0].solutionSizeBytes, 84);
+
+  const anotherStudent = await seedUser(db, { name: 'Another Solver', email: 'another@abes.ac.in', username: 'another-gh' });
+  const modifiedSha = '9'.repeat(40);
+  const modifiedCommit = commitFixture({ sha: modifiedSha, username: 'another-gh' });
+  modifiedCommit.files = [{ filename: '217/Solution.java', status: 'modified' }];
+  commitTrees.set(modifiedSha, [{ path: '217/Solution.java', type: 'blob', size: 102 }]);
+  commits.set(modifiedSha, modifiedCommit);
+  const editedSubmission = await call(db, '/submissions', { method: 'POST', cookie: anotherStudent.cookie, body: {
+    assignmentId: assigned.data.assignment.id, commitUrl: `https://github.com/another-gh/dsa-solutions/commit/${modifiedSha}`,
+  } });
+  assert.equal(editedSubmission.response.status, 201);
+  assert.equal(editedSubmission.data.submission.points, 1);
 });
 
 test('admin reset links store only a hash, expire, work once, and revoke sessions', async () => {

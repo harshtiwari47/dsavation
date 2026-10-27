@@ -477,14 +477,19 @@ async function makeSubmission(db, req, user, body) {
   if (!isOnAssignmentDay(commitDate, assignment.dateKey) || !isOnAssignmentDay(authorDate, assignment.dateKey)) {
     throw new HttpError(400, 'The file must be created and committed during the assignment day in Asia/Kolkata.');
   }
-  const matchingFile = (commit.files || []).find((file) => file.status === 'added' && isAssignmentSolutionPath(file.filename, assignment.questionId));
-  if (!matchingFile) throw new HttpError(400, `Add a new solution file at ${assignment.questionId}/YOUR_SOLUTION_FILE before submitting.`);
+  const matchingFiles = (commit.files || []).filter((file) => file.status !== 'removed' && isAssignmentSolutionPath(file.filename, assignment.questionId));
+  if (!matchingFiles.length) throw new HttpError(400, `Include a solution file directly inside ${assignment.questionId}/ in this commit.`);
+  const tree = await githubJson(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/git/trees/${encodeURIComponent(commit.commit.tree.sha)}?recursive=1`, process.env.GITHUB_TOKEN);
+  const sizeByPath = new Map((tree.tree || []).filter((item) => item.type === 'blob').map((item) => [item.path, Number(item.size)]));
+  const matchingFile = matchingFiles.find((file) => Number.isFinite(sizeByPath.get(file.filename)) && sizeByPath.get(file.filename) > 0);
+  const solutionSizeBytes = matchingFile ? sizeByPath.get(matchingFile.filename) : 0;
+  if (!matchingFile) throw new HttpError(400, `At least one changed file directly inside ${assignment.questionId}/ must contain solution content.`);
   const now = new Date();
   const submission = {
     assignmentId: assignment._id, userId: user._id, questionId: assignment.questionId,
     repository: `${parsed.owner}/${parsed.repository}`, commitSha: commit.sha,
     commitUrl: commit.html_url || `https://github.com/${parsed.owner}/${parsed.repository}/commit/${commit.sha}`,
-    solutionPath: matchingFile.filename, commitDate: new Date(commitDate), submittedAt: now,
+    solutionPath: matchingFile.filename, solutionSizeBytes, commitDate: new Date(commitDate), submittedAt: now,
     status: 'accepted', points: 1, authorLogin: commit.author.login, committerLogin: commit.committer.login,
     verifiedPusher: true, verificationSource: 'github-commit-api', reviewedAt: now,
     reviewedBy: null, reviewNote: '', activeSlot: true,

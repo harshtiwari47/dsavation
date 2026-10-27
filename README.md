@@ -50,20 +50,20 @@ These are separate systems. Ticking a question in the library writes only to tha
 
 Approved members can view the current Question of the Day, accepted participants, assignment history, and standings. Leads/admins can publish at most one assignment for each date in Asia/Kolkata time. They can correct today's assignment; existing submissions are invalidated and their points removed so members can submit the corrected question. Leave holidays and breaks unassigned; those dates are excluded from the punctuality denominator and do not break an assignment streak.
 
-Members submit one direct commit link per assigned date. GitHub's commit API checks that the repository belongs to the member's linked GitHub account, the GitHub author matches the linked account (GitHub web-editor commits use its web-flow committer), the commit and author dates are on the assignment day in Asia/Kolkata, and the commit adds a new file at `<LEETCODE_ID>/<solution-file>`. A valid submission is accepted and receives one point immediately. Administrators can adjust an accepted submission from 0 to 10 points; each adjustment appears in the admin activity log. Personal question checkmarks remain private and do not affect club points.
+Members submit one direct commit link per assigned date. GitHub's commit API checks that the repository belongs to the member's linked GitHub account, the GitHub author matches the linked account (GitHub web-editor commits use its web-flow committer), the commit and author dates are on the assignment day in Asia/Kolkata, and the commit adds, edits, or moves a non-empty file to `<LEETCODE_ID>/<solution-file>` (the file must contain at least one byte at that commit). A valid submission is accepted and receives one point immediately. Administrators can adjust an accepted submission from 0 to 10 points; each adjustment appears in the admin activity log. Personal question checkmarks remain private and do not affect club points.
 
 ### GitHub commit workflow
 
 1. A lead publishes the question for the date.
 2. The member links their GitHub account in DSAvation.
 3. The member creates or uses a public GitHub repository they own.
-4. The member adds a new solution file directly under a folder named with the assigned LeetCode question number:
+4. The member keeps a non-empty solution file directly under a folder named with the assigned LeetCode question number. The submitted commit may add, edit, or move the file into that folder:
 
    ```text
    LEETCODE_ID/solution.ext
    ```
 
-5. Commit and push the new file during the assignment day, then paste the direct commit URL, such as `https://github.com/USERNAME/REPOSITORY/commit/FULL_SHA`.
+5. Commit and push the file during the assignment day, then paste the direct commit URL, such as `https://github.com/USERNAME/REPOSITORY/commit/FULL_SHA`.
 6. DSAvation verifies the commit through GitHub and awards the point automatically. The repository must be owned by the linked GitHub account. Private repositories require a server-side `GITHUB_TOKEN` with access to that repository.
 
 Assignment history, leaderboard, member list, submission list, and admin activity use server-side pagination. Admin and lead changes to assignments or submissions, member access and roles, reset-link generation, and elevated account actions are recorded for administrators to review.
