@@ -36,13 +36,13 @@ Keep Vercel's production deployment on HTTPS. After adding or changing variables
 
 ## Accounts and roles
 
-- Members register with a name, department, year of study, `@abes.ac.in` email, password, GitHub username, and LeetCode username. New accounts remain pending until an administrator approves them on `/dashboard`; approval can be removed there, and administrators can delete accounts.
+- Members register with a name, Club Department, year of study, `@abes.ac.in` email, password, GitHub username, and LeetCode username. New accounts remain pending until an administrator approves them on `/dashboard`; approval can be removed there, and administrators can delete accounts.
 - Email addresses are checked for the `@abes.ac.in` format, but no verification email is sent. Administrators must confirm a member's identity through the club before granting access. The first account listed in `ADMIN_EMAILS` can be created as an approved administrator.
 - Passwords are hashed server-side. Sessions use opaque, `HttpOnly`, `SameSite=Lax` cookies; personal progress is scoped to the signed-in member.
 - Administrators can generate a password reset link from the member dashboard. Its random token is stored only as a hash, expires in 30 minutes, works once, and revokes the member's existing sessions after use. The administrator shares the link with the member.
-- A member links GitHub through the OAuth App before submitting a club solution. This confirms the account behind the GitHub username collected at signup.
+- A member links GitHub through the OAuth App before submitting a club solution. The verified GitHub login becomes the member's DSAvation username, replacing the signup value. Members can disconnect GitHub from DSAvation on the Account page; this does not sign them out of github.com.
 - The initial admin email is listed in `ADMIN_EMAILS`. Admins can promote members to lead or admin. Leads can publish and correct Questions of the Day; admins can adjust awarded points.
-- Full name and department are hidden on public standings by default. Members can opt in from their account panel; otherwise standings and accepted-submission lists show only their GitHub username. Leads/admins can see the member details needed for club administration.
+- Full name and Club Department are hidden on public standings by default. Members can opt in from their account panel; otherwise standings and accepted-submission lists show only their GitHub username. Leads/admins can see the member details needed for club administration.
 
 ## Personal progress and club scoring
 

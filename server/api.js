@@ -226,7 +226,7 @@ async function signup(db, req, res, body) {
   const leetcodeUsername = String(body.leetcodeUsername || '').trim();
   if (name.length < 2 || name.length > 80) throw new HttpError(400, 'Enter your full name (2–80 characters).');
   if (!/^[a-z0-9.+_-]+@abes\.ac\.in$/i.test(email)) throw new HttpError(400, 'Use your college email ending exactly in @abes.ac.in.');
-  if (department.length < 2 || department.length > 80) throw new HttpError(400, 'Choose or enter your department.');
+  if (department.length < 2 || department.length > 80) throw new HttpError(400, 'Choose or enter your Club Department.');
   if (!['first-year', 'second-year', 'third-year', 'fourth-year', 'passed'].includes(studyYear)) throw new HttpError(400, 'Choose your current year of study.');
   if (password.length < 10 || password.length > 128) throw new HttpError(400, 'Use a password between 10 and 128 characters.');
   if (!/^[a-z0-9-]{1,39}$/i.test(githubUsername)) throw new HttpError(400, 'Enter a valid GitHub username.');
@@ -328,12 +328,17 @@ async function updateProfile(db, user, body) {
   const githubUsername = String(body.githubUsername ?? user.githubUsername ?? '').trim().replace(/^@/, '');
   const leetcodeUsername = String(body.leetcodeUsername ?? user.leetcodeUsername ?? '').trim();
   if (name.length < 2 || name.length > 80) throw new HttpError(400, 'Enter your full name (2–80 characters).');
-  if (department.length < 2 || department.length > 80) throw new HttpError(400, 'Enter your department (2–80 characters).');
+  if (department.length < 2 || department.length > 80) throw new HttpError(400, 'Enter your Club Department (2–80 characters).');
   if (!['first-year', 'second-year', 'third-year', 'fourth-year', 'passed'].includes(studyYear)) throw new HttpError(400, 'Choose your current year of study.');
-  if (!/^[a-z0-9-]{1,39}$/i.test(githubUsername)) throw new HttpError(400, 'Enter a valid GitHub username.');
   if (leetcodeUsername && !/^[a-z0-9_-]{1,40}$/i.test(leetcodeUsername)) throw new HttpError(400, 'Enter a valid LeetCode username.');
   const update = { name, department, studyYear, leetcodeUsername, updatedAt: new Date() };
-  if (githubUsername.toLowerCase() !== String(user.githubUsername || '').toLowerCase()) {
+  let unset;
+  if (!githubUsername) {
+    Object.assign(update, { githubUsername: '' });
+    unset = { githubUserLower: '', githubId: '', githubVerifiedAt: '' };
+  } else if (!/^[a-z0-9-]{1,39}$/i.test(githubUsername)) {
+    throw new HttpError(400, 'Enter a valid GitHub username.');
+  } else if (githubUsername.toLowerCase() !== String(user.githubUsername || '').toLowerCase()) {
     const gh = await githubJson(`/users/${encodeURIComponent(githubUsername)}`);
     if (gh.login.toLowerCase() !== githubUsername.toLowerCase()) throw new HttpError(400, 'GitHub username does not match a public GitHub account.');
     const githubUserLower = gh.login.toLowerCase();
@@ -342,9 +347,20 @@ async function updateProfile(db, user, body) {
     Object.assign(update, { githubUsername: gh.login, githubUserLower, githubId: gh.id, githubVerifiedAt: null });
   }
   if (typeof body.showPublic === 'boolean') update.showPublic = body.showPublic;
-  await db.collection('users').updateOne({ _id: user._id }, { $set: update });
+  await db.collection('users').updateOne({ _id: user._id }, { $set: update, ...(unset ? { $unset: unset } : {}) });
   if (['admin', 'lead'].includes(user.role)) await recordAdminActivity(db, user, 'administrator_profile_updated', { id: user._id, label: user.email }, { fields: Object.keys(update).filter((key) => key !== 'updatedAt') });
-  return account({ ...user, ...update });
+  return account({ ...user, ...update, ...(unset ? { githubVerifiedAt: null, githubUserLower: undefined, githubId: undefined } : {}) });
+}
+
+async function disconnectGithub(db, user) {
+  if (!user.githubVerifiedAt && !user.githubUserLower) throw new HttpError(409, 'There is no verified GitHub account to disconnect.');
+  const updatedAt = new Date();
+  await db.collection('users').updateOne({ _id: user._id }, {
+    $set: { githubUsername: '', updatedAt },
+    $unset: { githubUserLower: '', githubId: '', githubVerifiedAt: '' },
+  });
+  await recordAdminActivity(db, user, 'github_account_disconnected', { id: user._id, label: user.email }, { previousUsername: user.githubUsername || '' });
+  return { ok: true, user: account({ ...user, githubUsername: '', githubVerifiedAt: null, githubUserLower: undefined, githubId: undefined, updatedAt }) };
 }
 
 async function githubStart(db, req, res) {
@@ -381,9 +397,6 @@ async function githubCallback(db, req, res, url) {
   const tokenBody = await tokenResponse.json();
   if (!tokenResponse.ok || !tokenBody.access_token) throw new HttpError(502, 'GitHub account linking failed. Please try again.');
   const gh = await githubJson('/user', tokenBody.access_token);
-  if (current.githubUserLower && current.githubUserLower !== gh.login.toLowerCase()) {
-    throw new HttpError(409, `Sign in to the GitHub account you entered at signup (@${current.githubUsername}).`);
-  }
   const other = await db.collection('users').findOne({ githubUserLower: gh.login.toLowerCase(), _id: { $ne: current._id } });
   if (other) throw new HttpError(409, 'That GitHub account is linked to another DSAvation member.');
   await db.collection('users').updateOne({ _id: current._id }, {
@@ -426,7 +439,7 @@ async function getClubToday(db) {
   const participants = activeSubmissions.filter((item) => item.status === 'accepted').flatMap((item) => {
     const profile = profileById.get(String(item.userId));
     return profile ? [{
-      name: profile.showPublic ? profile.name : `@${profile.githubUsername}`,
+      name: profile.showPublic ? profile.name : profile.githubUsername ? `@${profile.githubUsername}` : 'ABES member',
       department: profile.showPublic ? profile.department : '',
       githubUsername: profile.githubUsername,
     }] : [];
@@ -550,7 +563,7 @@ async function leaderboard(db, url) {
       streak += 1;
     }
     return {
-      name: profile.showPublic ? profile.name : `@${profile.githubUsername}`,
+      name: profile.showPublic ? profile.name : profile.githubUsername ? `@${profile.githubUsername}` : 'ABES member',
       department: profile.showPublic ? profile.department : 'ABES member',
       githubUsername: profile.githubUsername,
       points: row.points ?? row.accepted, completed: row.accepted, scheduled: eligible.length,
@@ -820,6 +833,10 @@ export async function handleApiNode(req, res, options = {}) {
     if (url.pathname === '/api/auth/profile' && method === 'PATCH') {
       const user = await requireUser(req, db);
       return json(res, 200, { ok: true, user: await updateProfile(db, user, await readBody(req)) });
+    }
+    if (url.pathname === '/api/auth/github' && method === 'DELETE') {
+      const user = await requireUser(req, db);
+      return json(res, 200, await disconnectGithub(db, user));
     }
 
     if (url.pathname === '/api/club/leaderboard' && method === 'GET') return json(res, 200, await leaderboard(db, url));

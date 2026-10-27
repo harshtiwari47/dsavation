@@ -349,7 +349,9 @@ h1, h2, h3, p { margin-top: 0; }
 .account-settings, .dashboard-activity-panel { margin-bottom: 16px; padding: 20px; }
 .account-form { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 13px; }
 .account-form > label { min-width: 0; display: grid; gap: 5px; color: #899388; font: 0.5rem var(--mono); letter-spacing: .5px; }
+.account-form > label small { color: var(--muted); font: 500 .625rem/1.4 'DM Sans', sans-serif; letter-spacing: 0; }
 .account-form input, .account-form select { width: 100%; height: 38px; padding: 0 10px; border: 1px solid var(--line-dark); border-radius: 4px; outline: 0; color: var(--ink); background: var(--surface); font: 0.6875rem 'DM Sans', sans-serif; }
+.account-form input[readonly] { color: var(--body); background: var(--surface-muted); cursor: default; }
 .account-form-actions { display: flex; flex-wrap: wrap; align-items: end; gap: 8px; }
 .pagination-controls { margin-top: 10px; padding-top: 10px; display: flex; align-items: center; justify-content: space-between; gap: 8px; border-top: 1px solid var(--line); }
 .pagination-controls > span { color: #929a8f; font: 0.5rem var(--mono); text-align: center; }
@@ -736,6 +738,7 @@ h1, h2, h3, p { margin-top: 0; }
 :root[data-theme="dark"] .dashboard-member-actions select,
 :root[data-theme="dark"] .account-form input,
 :root[data-theme="dark"] .account-form select,
+:root[data-theme="dark"] .account-form input[readonly],
 :root[data-theme="dark"] .points-control select,
 :root[data-theme="dark"] .reset-link-field input,
 :root[data-theme="dark"] .auth-form input:not([type=checkbox]),
@@ -801,6 +804,7 @@ h1, h2, h3, p { margin-top: 0; }
 :root[data-theme="dark"] .auth-modal { border-color: #354239; box-shadow: 0 24px 80px #0009; }
 :root[data-theme="dark"] .auth-form > label:not(.check-label) { color: #a9b7ab; }
 :root[data-theme="dark"] .account-form > label,
+:root[data-theme="dark"] .account-form > label small,
 :root[data-theme="dark"] .points-control,
 :root[data-theme="dark"] .reset-link-field { color: #a9b7ab; }
 :root[data-theme="dark"] .admin-activity-row strong { color: #e5ede6; }

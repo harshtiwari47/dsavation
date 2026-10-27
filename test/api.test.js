@@ -10,6 +10,7 @@ const commits = new Map();
 let originalFetch;
 let originalAdminEmails;
 let originalSecureCookie;
+let oauthGithubUsername = 'canonical-github-user';
 
 function equalValue(left, right) {
   if (left instanceof Date || right instanceof Date) return new Date(left).getTime() === new Date(right).getTime();
@@ -190,6 +191,12 @@ before(() => {
   process.env.SESSION_COOKIE_SECURE = 'false';
   globalThis.fetch = async (input) => {
     const url = new URL(String(input));
+    if (url.hostname === 'github.com' && url.pathname === '/login/oauth/access_token') {
+      return new Response(JSON.stringify({ access_token: 'test-github-access-token' }), { status: 200 });
+    }
+    if (url.hostname === 'api.github.com' && url.pathname === '/user') {
+      return new Response(JSON.stringify({ id: 4321, login: oauthGithubUsername }), { status: 200 });
+    }
     if (url.hostname === 'api.github.com' && url.pathname.startsWith('/users/')) {
       const login = decodeURIComponent(url.pathname.split('/').pop());
       return new Response(JSON.stringify({ id: 987, login }), { status: 200 });
@@ -294,6 +301,48 @@ test('authenticated profile and private-progress APIs validate and persist membe
   const signedOut = await call(db, '/auth/me', { cookie });
   assert.equal(signedOut.data.user, null);
   assert.equal(String(user._id).length, 24);
+});
+
+test('GitHub OAuth username becomes canonical and members can disconnect the linked account', async () => {
+  const db = new FakeDatabase();
+  const member = await seedUser(db, { name: 'GitHub Member', email: 'github-member@abes.ac.in', username: 'typed-at-signup' });
+  const oldClientId = process.env.GITHUB_OAUTH_CLIENT_ID;
+  const oldClientSecret = process.env.GITHUB_OAUTH_CLIENT_SECRET;
+  process.env.GITHUB_OAUTH_CLIENT_ID = 'test-client-id';
+  process.env.GITHUB_OAUTH_CLIENT_SECRET = 'test-client-secret';
+  oauthGithubUsername = 'canonical-github-user';
+  try {
+    const start = await handleApiFetch(new Request('http://localhost/api/auth/github/start', {
+      headers: { host: 'localhost', cookie: member.cookie },
+    }), { db });
+    assert.equal(start.status, 302);
+    const stateCookie = start.headers.get('set-cookie');
+    const state = stateCookie?.match(/dsavation_github_state=([^;]+)/)?.[1];
+    assert.ok(state);
+    const callback = await handleApiFetch(new Request(`http://localhost/api/auth/github/callback?code=oauth-code&state=${state}`, {
+      headers: { host: 'localhost', cookie: `${member.cookie}; dsavation_github_state=${state}` },
+    }), { db });
+    assert.equal(callback.status, 302);
+    const connected = await call(db, '/auth/me', { cookie: member.cookie });
+    assert.equal(connected.data.user.githubUsername, oauthGithubUsername);
+    assert.equal(connected.data.user.githubVerified, true);
+    const stored = db.collection('users').documents.find((item) => String(item._id) === String(member.user._id));
+    assert.equal(stored.githubUserLower, oauthGithubUsername);
+
+    const disconnected = await call(db, '/auth/github', { method: 'DELETE', cookie: member.cookie });
+    assert.equal(disconnected.response.status, 200);
+    assert.equal(disconnected.data.user.githubUsername, '');
+    assert.equal(disconnected.data.user.githubVerified, false);
+    assert.equal(stored.githubUserLower, undefined);
+    const blockedSubmission = await call(db, '/submissions', { method: 'POST', cookie: member.cookie, body: {} });
+    assert.equal(blockedSubmission.response.status, 403);
+    assert.match(blockedSubmission.data.error, /link your verified github/i);
+  } finally {
+    if (oldClientId === undefined) delete process.env.GITHUB_OAUTH_CLIENT_ID;
+    else process.env.GITHUB_OAUTH_CLIENT_ID = oldClientId;
+    if (oldClientSecret === undefined) delete process.env.GITHUB_OAUTH_CLIENT_SECRET;
+    else process.env.GITHUB_OAUTH_CLIENT_SECRET = oldClientSecret;
+  }
 });
 
 test('personal-repo commits score automatically, admin adjustments and assignment correction are audited', async () => {
@@ -433,6 +482,11 @@ test('admin routes enforce roles and paginate the member roster and audit histor
   assert.equal(page.data.members.length, 10);
   assert.equal(page.data.pagination.page, 2);
   assert.equal(page.data.pagination.total, 26);
+  const approvedPage = await call(db, '/admin/members?page=2&pageSize=5&status=approved', { cookie: admin.cookie });
+  assert.equal(approvedPage.response.status, 200);
+  assert.equal(approvedPage.data.members.length, 5);
+  assert.equal(approvedPage.data.pagination.total, 14);
+  assert.equal(approvedPage.data.pagination.totalPages, 3);
   const search = await call(db, '/admin/members?status=approved&q=roster-21&page=1&pageSize=10', { cookie: admin.cookie });
   assert.equal(search.data.members.length, 1);
   const activityPage = await call(db, '/admin/activity?page=1&pageSize=1', { cookie: admin.cookie });
