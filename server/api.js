@@ -478,12 +478,12 @@ async function makeSubmission(db, req, user, body) {
     throw new HttpError(400, 'The file must be created and committed during the assignment day in Asia/Kolkata.');
   }
   const matchingFiles = (commit.files || []).filter((file) => file.status !== 'removed' && isAssignmentSolutionPath(file.filename, assignment.questionId));
-  if (!matchingFiles.length) throw new HttpError(400, `Include a solution file directly inside ${assignment.questionId}/ in this commit.`);
+  if (!matchingFiles.length) throw new HttpError(400, `This commit must create or change ${assignment.questionId}/solution.txt.`);
   const tree = await githubJson(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/git/trees/${encodeURIComponent(commit.commit.tree.sha)}?recursive=1`, process.env.GITHUB_TOKEN);
   const sizeByPath = new Map((tree.tree || []).filter((item) => item.type === 'blob').map((item) => [item.path, Number(item.size)]));
   const matchingFile = matchingFiles.find((file) => Number.isFinite(sizeByPath.get(file.filename)) && sizeByPath.get(file.filename) > 0);
   const solutionSizeBytes = matchingFile ? sizeByPath.get(matchingFile.filename) : 0;
-  if (!matchingFile) throw new HttpError(400, `At least one changed file directly inside ${assignment.questionId}/ must contain solution content.`);
+  if (!matchingFile) throw new HttpError(400, `${assignment.questionId}/solution.txt must contain at least one byte at this commit.`);
   const now = new Date();
   const submission = {
     assignmentId: assignment._id, userId: user._id, questionId: assignment.questionId,
@@ -521,9 +521,7 @@ export function parsePersonalCommitUrl(rawUrl) {
 }
 
 export function isAssignmentSolutionPath(filename, questionId) {
-  const path = String(filename || '').replaceAll('\\', '/');
-  const escaped = String(Number(questionId));
-  return new RegExp(`^${escaped}/[^/]+$`).test(path);
+  return String(filename || '') === `${Number(questionId)}/solution.txt`;
 }
 
 async function githubWebhook() {
