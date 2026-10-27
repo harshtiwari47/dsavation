@@ -469,8 +469,8 @@ async function makeSubmission(db, req, user, body) {
   const commit = await githubJson(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/commits/${encodeURIComponent(parsed.sha)}`, process.env.GITHUB_TOKEN);
   const author = String(commit.author?.login || '').toLowerCase();
   const committer = String(commit.committer?.login || '').toLowerCase();
-  if (author !== username || committer !== username) {
-    throw new HttpError(403, 'GitHub could not confirm that both the author and committer are your linked account.');
+  if (author !== username || (committer !== username && committer !== 'web-flow')) {
+    throw new HttpError(403, 'GitHub could not confirm that the commit author is your linked account.');
   }
   const commitDate = commit.commit?.committer?.date;
   const authorDate = commit.commit?.author?.date;

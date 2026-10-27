@@ -413,7 +413,7 @@ test('personal-repo commits score automatically, admin adjustments and assignmen
   assert.equal(logPage.data.assignments[0].questionId, 242);
 });
 
-test('commit submission rejects a different owner, wrong author, wrong day, and non-added or nested file', async () => {
+test('commit verification rejects mismatches and accepts a linked author with GitHub web-flow committer', async () => {
   const db = new FakeDatabase();
   const admin = await seedAdmin(db);
   const student = await seedUser(db, { name: 'Daily Solver', email: 'solver@abes.ac.in', username: 'student-gh' });
@@ -437,6 +437,14 @@ test('commit submission rejects a different owner, wrong author, wrong day, and 
   assert.equal((await submit(`https://github.com/student-gh/repo/commit/${modifiedSha}`)).response.status, 400);
   const staleAssignment = await submit(`https://github.com/student-gh/repo/commit/${hash('2')}`, new ObjectId().toString());
   assert.equal(staleAssignment.response.status, 409);
+  const webFlowSha = hash('3');
+  const webFlowCommit = commitFixture({ sha: webFlowSha });
+  webFlowCommit.committer = { login: 'web-flow' };
+  commits.set(webFlowSha, webFlowCommit);
+  const webFlowSubmission = await submit(`https://github.com/student-gh/repo/commit/${webFlowSha}`);
+  assert.equal(webFlowSubmission.response.status, 201);
+  assert.equal(webFlowSubmission.data.submission.status, 'accepted');
+  assert.equal(webFlowSubmission.data.submission.points, 1);
 });
 
 test('admin reset links store only a hash, expire, work once, and revoke sessions', async () => {
