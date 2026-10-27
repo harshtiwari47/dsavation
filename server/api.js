@@ -1,4 +1,4 @@
-import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
+import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
 import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
 import curriculum from './data/questions.json' with { type: 'json' };
@@ -36,6 +36,11 @@ function json(res, status, body, headers = {}) {
 
 function dayKey(date = new Date()) {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+}
+
+export function isOnAssignmentDay(value, dateKey) {
+  const date = new Date(value);
+  return Number.isFinite(date.getTime()) && dayKey(date) === dateKey;
 }
 
 function cookieSecure(req) {
@@ -87,18 +92,6 @@ async function readBody(req) {
   return parseCookies(Buffer.concat(chunks));
 }
 
-async function readRawBody(req) {
-  if (Buffer.isBuffer(req.rawBody)) return req.rawBody;
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > 1_000_000) throw new HttpError(413, 'GitHub webhook payload is too large.');
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-}
-
 function assertSameOrigin(req) {
   const origin = req.headers.origin;
   if (!origin) return;
@@ -123,7 +116,7 @@ function account(user) {
   if (!user) return null;
   return {
     id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
-    email: user.email, githubUsername: user.githubUsername || '',
+    email: user.email, githubUsername: user.githubUsername || '', leetcodeUsername: user.leetcodeUsername || '',
     githubVerified: Boolean(user.githubVerifiedAt), role: user.role || 'member',
     showPublic: Boolean(user.showPublic), createdAt: user.createdAt,
   };
@@ -166,6 +159,25 @@ async function requireUser(req, db) {
 
 function requireRole(user, ...roles) {
   if (!roles.includes(user.role)) throw new HttpError(403, 'You do not have permission to do that.');
+}
+
+function pageOptions(url, defaultSize = 10, maxSize = 50) {
+  const page = Math.max(1, Number.parseInt(url.searchParams.get('page') || '1', 10) || 1);
+  const pageSize = Math.min(maxSize, Math.max(1, Number.parseInt(url.searchParams.get('pageSize') || String(defaultSize), 10) || defaultSize));
+  return { page, pageSize, skip: (page - 1) * pageSize };
+}
+
+function pageMeta(page, pageSize, total) {
+  return { page, pageSize, total, totalPages: Math.max(1, Math.ceil(total / pageSize)) };
+}
+
+async function recordAdminActivity(db, user, action, target = {}, details = {}) {
+  if (!['admin', 'lead'].includes(user?.role)) return;
+  await db.collection('adminActivity').insertOne({
+    actorId: user._id, actorName: user.name, actorRole: user.role,
+    action, targetId: target.id ? String(target.id) : '', targetLabel: String(target.label || '').slice(0, 160),
+    details, createdAt: new Date(),
+  });
 }
 
 async function newSession(db, user, req, res) {
@@ -211,12 +223,14 @@ async function signup(db, req, res, body) {
   const email = String(body.email || '').trim().toLowerCase();
   const password = String(body.password || '');
   const githubUsername = String(body.githubUsername || '').trim().replace(/^@/, '');
+  const leetcodeUsername = String(body.leetcodeUsername || '').trim();
   if (name.length < 2 || name.length > 80) throw new HttpError(400, 'Enter your full name (2–80 characters).');
   if (!/^[a-z0-9.+_-]+@abes\.ac\.in$/i.test(email)) throw new HttpError(400, 'Use your college email ending exactly in @abes.ac.in.');
   if (department.length < 2 || department.length > 80) throw new HttpError(400, 'Choose or enter your department.');
   if (!['first-year', 'second-year', 'third-year', 'fourth-year', 'passed'].includes(studyYear)) throw new HttpError(400, 'Choose your current year of study.');
   if (password.length < 10 || password.length > 128) throw new HttpError(400, 'Use a password between 10 and 128 characters.');
   if (!/^[a-z0-9-]{1,39}$/i.test(githubUsername)) throw new HttpError(400, 'Enter a valid GitHub username.');
+  if (!/^[a-z0-9_-]{1,40}$/i.test(leetcodeUsername)) throw new HttpError(400, 'Enter a valid LeetCode username.');
   const existing = await db.collection('users').findOne({ email });
   if (existing) {
     if (isApproved(existing)) throw new HttpError(409, 'An account already uses this email. Sign in instead.');
@@ -231,7 +245,7 @@ async function signup(db, req, res, body) {
   const now = new Date();
   const administrator = adminEmails().has(email);
   const user = {
-    name, department, studyYear, email, passwordHash: await bcrypt.hash(password, 12),
+    name, department, studyYear, email, passwordHash: await bcrypt.hash(password, 12), leetcodeUsername,
     githubUsername: gh.login, githubUserLower, githubId: gh.id,
     githubVerifiedAt: null, showPublic: body.showPublic === true,
     approvalStatus: administrator ? 'approved' : 'pending',
@@ -242,6 +256,7 @@ async function signup(db, req, res, body) {
   await db.collection('users').insertOne(user);
   if (administrator) {
     await newSession(db, user, req, res);
+    await recordAdminActivity(db, user, 'administrator_account_created', { id: user._id, label: user.email });
     json(res, 201, { ok: true, approvalStatus: 'approved', user: account(user) });
   } else {
     json(res, 201, { ok: true, approvalStatus: 'pending', email });
@@ -262,7 +277,74 @@ async function login(db, req, res, body) {
   }
   if (!isApproved(user)) throw new HttpError(403, 'Your account is not currently approved. New accounts need administrator approval; contact a DSAvation administrator if you believe your access was removed by mistake.');
   await newSession(db, user, req, res);
+  await recordAdminActivity(db, user, 'administrator_signed_in', { id: user._id, label: user.email });
   json(res, 200, { ok: true, user: account(user) });
+}
+
+async function generatePasswordReset(db, req, user, memberId) {
+  requireRole(user, 'admin');
+  if (!ObjectId.isValid(memberId)) throw new HttpError(404, 'Member not found.');
+  const targetId = new ObjectId(memberId);
+  const target = await db.collection('users').findOne({ _id: targetId }, { projection: { name: 1, email: 1 } });
+  if (!target) throw new HttpError(404, 'Member not found.');
+  const token = randomBytes(32).toString('base64url');
+  const expiresAt = new Date(Date.now() + 30 * 60 * 1000);
+  await db.collection('passwordResets').deleteMany({ userId: targetId });
+  await db.collection('passwordResets').insertOne({
+    tokenHash: hash(token), userId: targetId, createdBy: user._id,
+    createdAt: new Date(), expiresAt,
+  });
+  await recordAdminActivity(db, user, 'password_reset_link_generated', { id: targetId, label: `${target.name} · ${target.email}` }, { expiresAt });
+  return { resetUrl: `${baseUrl(req)}/reset-password?token=${encodeURIComponent(token)}`, expiresAt };
+}
+
+async function resetPassword(db, req, res, body) {
+  const token = String(body.token || '');
+  const password = String(body.password || '');
+  if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) throw new HttpError(400, 'This password reset link is invalid or expired. Ask an administrator for a new one.');
+  if (password.length < 10 || password.length > 128) throw new HttpError(400, 'Use a password between 10 and 128 characters.');
+  const now = new Date();
+  const reset = await db.collection('passwordResets').findOne({ tokenHash: hash(token), expiresAt: { $gt: now }, usedAt: { $exists: false } });
+  if (!reset) throw new HttpError(400, 'This password reset link is invalid or expired. Ask an administrator for a new one.');
+  const consumed = await db.collection('passwordResets').updateOne(
+    { _id: reset._id, expiresAt: { $gt: now }, usedAt: { $exists: false } },
+    { $set: { usedAt: now } },
+  );
+  if (!consumed.matchedCount) throw new HttpError(400, 'This password reset link has already been used. Ask an administrator for a new one.');
+  const updated = await db.collection('users').updateOne(
+    { _id: reset.userId },
+    { $set: { passwordHash: await bcrypt.hash(password, 12), updatedAt: now } },
+  );
+  if (!updated.matchedCount) throw new HttpError(400, 'The account for this reset link no longer exists.');
+  await db.collection('sessions').deleteMany({ userId: reset.userId });
+  clearCookie(res, req, 'dsavation_session');
+  return { ok: true };
+}
+
+async function updateProfile(db, user, body) {
+  const name = String(body.name ?? user.name).trim().replace(/\s+/g, ' ');
+  const department = String(body.department ?? user.department).trim();
+  const studyYear = String(body.studyYear ?? user.studyYear ?? '');
+  const githubUsername = String(body.githubUsername ?? user.githubUsername ?? '').trim().replace(/^@/, '');
+  const leetcodeUsername = String(body.leetcodeUsername ?? user.leetcodeUsername ?? '').trim();
+  if (name.length < 2 || name.length > 80) throw new HttpError(400, 'Enter your full name (2–80 characters).');
+  if (department.length < 2 || department.length > 80) throw new HttpError(400, 'Enter your department (2–80 characters).');
+  if (!['first-year', 'second-year', 'third-year', 'fourth-year', 'passed'].includes(studyYear)) throw new HttpError(400, 'Choose your current year of study.');
+  if (!/^[a-z0-9-]{1,39}$/i.test(githubUsername)) throw new HttpError(400, 'Enter a valid GitHub username.');
+  if (leetcodeUsername && !/^[a-z0-9_-]{1,40}$/i.test(leetcodeUsername)) throw new HttpError(400, 'Enter a valid LeetCode username.');
+  const update = { name, department, studyYear, leetcodeUsername, updatedAt: new Date() };
+  if (githubUsername.toLowerCase() !== String(user.githubUsername || '').toLowerCase()) {
+    const gh = await githubJson(`/users/${encodeURIComponent(githubUsername)}`);
+    if (gh.login.toLowerCase() !== githubUsername.toLowerCase()) throw new HttpError(400, 'GitHub username does not match a public GitHub account.');
+    const githubUserLower = gh.login.toLowerCase();
+    const occupied = await db.collection('users').findOne({ githubUserLower, _id: { $ne: user._id } });
+    if (occupied) throw new HttpError(409, 'That GitHub account is already linked to another member.');
+    Object.assign(update, { githubUsername: gh.login, githubUserLower, githubId: gh.id, githubVerifiedAt: null });
+  }
+  if (typeof body.showPublic === 'boolean') update.showPublic = body.showPublic;
+  await db.collection('users').updateOne({ _id: user._id }, { $set: update });
+  if (['admin', 'lead'].includes(user.role)) await recordAdminActivity(db, user, 'administrator_profile_updated', { id: user._id, label: user.email }, { fields: Object.keys(update).filter((key) => key !== 'updatedAt') });
+  return account({ ...user, ...update });
 }
 
 async function githubStart(db, req, res) {
@@ -307,6 +389,7 @@ async function githubCallback(db, req, res, url) {
   await db.collection('users').updateOne({ _id: current._id }, {
     $set: { githubUsername: gh.login, githubUserLower: gh.login.toLowerCase(), githubId: gh.id, githubVerifiedAt: new Date(), updatedAt: new Date() },
   });
+  await recordAdminActivity(db, current, 'github_account_verified', { id: current._id, label: gh.login });
   res.statusCode = 302;
   res.setHeader('Location', `${baseUrl(req)}/?github=connected`);
   res.end();
@@ -339,7 +422,7 @@ async function getClubToday(db) {
     projection: { name: 1, department: 1, showPublic: 1, githubUsername: 1 },
   }).toArray() : [];
   const profileById = new Map(profiles.map((profile) => [String(profile._id), profile]));
-  const activeSubmissions = submissions.filter((item) => profileById.has(String(item.userId)));
+  const activeSubmissions = submissions.filter((item) => item.status !== 'invalidated' && profileById.has(String(item.userId)));
   const participants = activeSubmissions.filter((item) => item.status === 'accepted').flatMap((item) => {
     const profile = profileById.get(String(item.userId));
     return profile ? [{
@@ -364,125 +447,99 @@ async function makeSubmission(db, req, user, body) {
   if (!assignment || String(assignment._id) !== String(body.assignmentId || '')) {
     throw new HttpError(409, 'Submissions are only open for today’s published Question of the Day.');
   }
-  const repoName = String(process.env.GITHUB_REPOSITORY || '').trim();
-  if (!/^[A-Za-z0-9_.-]+\/[A-Za-z0-9_.-]+$/.test(repoName)) throw new HttpError(503, 'Club repository verification is not configured. Set GITHUB_REPOSITORY.');
-  const parsed = (() => {
-    try { return new URL(String(body.commitUrl || '')); } catch { return null; }
-  })();
-  if (!parsed || parsed.hostname.toLowerCase() !== 'github.com') throw new HttpError(400, 'Paste a GitHub commit URL from the club repository.');
-  const parts = parsed.pathname.split('/').filter(Boolean);
-  if (parts.length < 4 || !['commit', 'commits'].includes(parts[2].toLowerCase())) throw new HttpError(400, 'Use the direct GitHub commit page, not a repository or branch link.');
-  const [owner, repository, , sha] = parts;
-  if (`${owner}/${repository}`.toLowerCase() !== repoName.toLowerCase()) throw new HttpError(400, `Submit from the club repository ${repoName}.`);
-  if (!/^[a-f0-9]{7,40}$/i.test(sha)) throw new HttpError(400, 'The commit URL does not contain a valid commit SHA.');
-  const commit = await githubJson(`/repos/${owner}/${repository}/commits/${sha}`, process.env.GITHUB_TOKEN);
-  const username = String(user.githubUsername).toLowerCase();
-  if (String(commit.author?.login || '').toLowerCase() !== username) {
-    throw new HttpError(403, 'The commit’s GitHub author does not match your linked account.');
+  const existing = await db.collection('submissions').findOne({ assignmentId: assignment._id, userId: user._id });
+  if (existing && existing.status !== 'invalidated') throw new HttpError(409, 'You already submitted for today’s assignment.');
+  const parsed = parsePersonalCommitUrl(body.commitUrl);
+  if (!parsed) throw new HttpError(400, 'Paste a direct GitHub commit URL like https://github.com/YOUR-USERNAME/YOUR-REPO/commit/FULL_SHA.');
+  const username = String(user.githubUsername || '').toLowerCase();
+  if (parsed.owner.toLowerCase() !== username) throw new HttpError(403, 'Use a repository owned by your linked GitHub account.');
+  const commit = await githubJson(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/commits/${encodeURIComponent(parsed.sha)}`, process.env.GITHUB_TOKEN);
+  const author = String(commit.author?.login || '').toLowerCase();
+  const committer = String(commit.committer?.login || '').toLowerCase();
+  if (author !== username || committer !== username) {
+    throw new HttpError(403, 'GitHub could not confirm that both the author and committer are your linked account.');
   }
   const commitDate = commit.commit?.committer?.date;
-  if (!commitDate || dayKey(new Date(commitDate)) !== dayKey()) {
-    throw new HttpError(400, 'The commit date must fall within today in Asia/Kolkata.');
+  const authorDate = commit.commit?.author?.date;
+  if (!isOnAssignmentDay(commitDate, assignment.dateKey) || !isOnAssignmentDay(authorDate, assignment.dateKey)) {
+    throw new HttpError(400, 'The file must be created and committed during the assignment day in Asia/Kolkata.');
   }
-  const expectedPath = `submissions/${dayKey()}/${username}/lc-${assignment.questionId}/`.toLowerCase();
-  const hasQuestionFile = (commit.files || []).some((file) => String(file.filename || '').toLowerCase().startsWith(expectedPath));
-  if (!hasQuestionFile) throw new HttpError(400, `Include your solution under ${expectedPath} in the club repository.`);
-  const alreadySubmitted = await db.collection('submissions').findOne({ assignmentId: assignment._id, userId: user._id });
-  if (alreadySubmitted) {
-    if (alreadySubmitted.commitSha === commit.sha && alreadySubmitted.status === 'pending') {
-      await db.collection('submissions').updateOne({ _id: alreadySubmitted._id }, { $set: { verifiedPusher: true, verificationSource: 'github-webhook', pushReceivedAt: alreadySubmitted.pushReceivedAt || new Date() } });
-      return { ...alreadySubmitted, verifiedPusher: true };
-    }
-    throw new HttpError(409, 'You already submitted for today’s assignment.');
-  }
+  const matchingFile = (commit.files || []).find((file) => file.status === 'added' && isAssignmentSolutionPath(file.filename, assignment.questionId));
+  if (!matchingFile) throw new HttpError(400, `Add a new solution file at ${assignment.questionId}/YOUR_SOLUTION_FILE before submitting.`);
+  const now = new Date();
   const submission = {
     assignmentId: assignment._id, userId: user._id, questionId: assignment.questionId,
-    repository: `${owner}/${repository}`, commitSha: commit.sha, commitUrl: commit.html_url,
-    commitDate: new Date(commitDate), submittedAt: new Date(), status: 'pending',
-    authorLogin: commit.author.login, verifiedPusher: false, verificationSource: 'commit-link',
-    reviewedAt: null, reviewedBy: null, reviewNote: '',
+    repository: `${parsed.owner}/${parsed.repository}`, commitSha: commit.sha,
+    commitUrl: commit.html_url || `https://github.com/${parsed.owner}/${parsed.repository}/commit/${commit.sha}`,
+    solutionPath: matchingFile.filename, commitDate: new Date(commitDate), submittedAt: now,
+    status: 'accepted', points: 1, authorLogin: commit.author.login, committerLogin: commit.committer.login,
+    verifiedPusher: true, verificationSource: 'github-commit-api', reviewedAt: now,
+    reviewedBy: null, reviewNote: '', activeSlot: true,
   };
-  await db.collection('submissions').insertOne(submission);
-  return { ...submission, id: String(submission._id || '') };
-}
-
-async function githubWebhook(db, req) {
-  const secret = process.env.GITHUB_WEBHOOK_SECRET;
-  if (!secret) throw new HttpError(503, 'GitHub push verification is not configured.');
-  const raw = await readRawBody(req);
-  const signatureHeader = String(req.headers['x-hub-signature-256'] || '');
-  const expected = `sha256=${createHmac('sha256', secret).update(raw).digest('hex')}`;
-  if (!safeEqual(signatureHeader, expected)) throw new HttpError(401, 'GitHub webhook signature is invalid.');
-  if (String(req.headers['x-github-event'] || '') === 'ping') return { ok: true, message: 'Webhook connected.' };
-  if (String(req.headers['x-github-event'] || '') !== 'push') return { ok: true, ignored: true };
-  let payload;
-  try { payload = JSON.parse(raw.toString('utf8')); }
-  catch { throw new HttpError(400, 'GitHub webhook body is not valid JSON.'); }
-  const repoName = String(process.env.GITHUB_REPOSITORY || '').toLowerCase();
-  if (!repoName || String(payload.repository?.full_name || '').toLowerCase() !== repoName) return { ok: true, ignored: true };
-  const today = dayKey();
-  const assignment = await db.collection('assignments').findOne({ dateKey: today });
-  if (!assignment) return { ok: true, ignored: true, reason: 'No assignment is active today.' };
-  const sender = String(payload.sender?.login || '').toLowerCase();
-  if (!sender || String(payload.ref || '').toLowerCase() !== `refs/heads/submissions/${sender}`) return { ok: true, ignored: true };
-  const user = await db.collection('users').findOne(approvedUserFilter({ githubUserLower: sender, githubVerifiedAt: { $ne: null } }));
-  if (!user) return { ok: true, ignored: true };
-  const receivedAt = new Date();
-  if (dayKey(receivedAt) !== assignment.dateKey) return { ok: true, ignored: true };
-  const expectedPath = `submissions/${today}/${sender}/lc-${assignment.questionId}/`.toLowerCase();
-  const commits = Array.isArray(payload.commits) ? payload.commits : [];
-  let recorded = 0;
-  for (const commit of commits) {
-    const sha = String(commit.id || '');
-    const paths = [...(commit.added || []), ...(commit.modified || [])].map((path) => String(path).toLowerCase());
-    if (!/^[a-f0-9]{40}$/i.test(sha) || !paths.some((path) => path.startsWith(expectedPath))) continue;
-    const verifiedCommit = await githubJson(`/repos/${repoName}/commits/${sha}`, process.env.GITHUB_TOKEN);
-    if (String(verifiedCommit.author?.login || '').toLowerCase() !== sender) continue;
-    const commitDate = verifiedCommit.commit?.committer?.date;
-    if (!commitDate || dayKey(new Date(commitDate)) !== today) continue;
-    const verifiedPaths = (verifiedCommit.files || []).map((file) => String(file.filename || '').toLowerCase());
-    if (!verifiedPaths.some((path) => path.startsWith(expectedPath))) continue;
-    const commitUrl = `${payload.repository.html_url}/commit/${sha}`;
-    const existing = await db.collection('submissions').findOne({ assignmentId: assignment._id, userId: user._id });
-    if (existing) {
-      if (existing.commitSha === sha && existing.status === 'pending') {
-        await db.collection('submissions').updateOne({ _id: existing._id }, { $set: { verifiedPusher: true, verificationSource: 'github-webhook', pushReceivedAt: receivedAt } });
-        recorded += 1;
-      }
-      continue;
-    }
-    await db.collection('submissions').insertOne({
-      assignmentId: assignment._id, userId: user._id, questionId: assignment.questionId,
-      repository: payload.repository.full_name, commitSha: sha, commitUrl,
-      commitDate: new Date(commitDate), submittedAt: receivedAt, pushReceivedAt: receivedAt,
-      status: 'pending', authorLogin: verifiedCommit.author.login, verifiedPusher: true,
-      verificationSource: 'github-webhook', reviewedAt: null, reviewedBy: null, reviewNote: '',
+  if (existing) {
+    const previousAttempt = {
+      commitUrl: existing.commitUrl, commitSha: existing.commitSha,
+      questionId: existing.questionId, status: existing.status, invalidatedAt: existing.invalidatedAt,
+    };
+    await db.collection('submissions').updateOne({ _id: existing._id }, {
+      $set: submission,
+      $push: { supersededAttempts: previousAttempt },
     });
-    recorded += 1;
+    return { ...submission, _id: existing._id, id: String(existing._id) };
   }
-  return { ok: true, recorded };
+  const result = await db.collection('submissions').insertOne(submission);
+  return { ...submission, _id: result.insertedId, id: String(result.insertedId) };
 }
 
-async function assignmentHistory(db) {
-  const assignments = await db.collection('assignments').find({ dateKey: { $lte: dayKey() } }).sort({ dateKey: -1 }).limit(45).toArray();
-  return assignments.map((assignment) => ({
+export function parsePersonalCommitUrl(rawUrl) {
+  let parsed;
+  try { parsed = new URL(String(rawUrl || '')); } catch { return null; }
+  if (parsed.protocol !== 'https:' || parsed.hostname.toLowerCase() !== 'github.com') return null;
+  const parts = parsed.pathname.split('/').filter(Boolean);
+  if (parts.length !== 4 || !['commit', 'commits'].includes(parts[2].toLowerCase()) || !/^[a-f0-9]{7,40}$/i.test(parts[3])) return null;
+  const [owner, repository] = parts;
+  if (!/^[A-Za-z0-9_.-]+$/.test(owner) || !/^[A-Za-z0-9_.-]+$/.test(repository)) return null;
+  return { owner, repository, sha: parts[3] };
+}
+
+export function isAssignmentSolutionPath(filename, questionId) {
+  const path = String(filename || '').replaceAll('\\', '/');
+  const escaped = String(Number(questionId));
+  return new RegExp(`^${escaped}/[^/]+$`).test(path);
+}
+
+async function githubWebhook() {
+  return { ok: true, ignored: true, reason: 'Members submit commit links from their personal repositories; verification runs when they submit.' };
+}
+
+async function assignmentHistory(db, url) {
+  const filter = { dateKey: { $lte: dayKey() } };
+  const { page, pageSize, skip } = pageOptions(url, 8, 20);
+  const [total, assignments] = await Promise.all([
+    db.collection('assignments').countDocuments(filter),
+    db.collection('assignments').find(filter).sort({ dateKey: -1 }).skip(skip).limit(pageSize).toArray(),
+  ]);
+  return {
+    assignments: assignments.map((assignment) => ({
     id: String(assignment._id), dateKey: assignment.dateKey, questionId: assignment.questionId,
     createdByName: assignment.createdByName,
-  }));
+    })),
+    pagination: pageMeta(page, pageSize, total),
+  };
 }
 
-async function leaderboard(db) {
+async function leaderboard(db, url) {
   const assignments = await db.collection('assignments').find({ dateKey: { $lte: dayKey() } }).sort({ dateKey: 1 }).toArray();
   const totals = await db.collection('submissions').aggregate([
     { $match: { status: 'accepted' } },
-    { $group: { _id: '$userId', accepted: { $sum: 1 }, acceptedAssignments: { $addToSet: '$assignmentId' }, lastAcceptedAt: { $max: '$reviewedAt' } } },
+    { $group: { _id: '$userId', accepted: { $sum: 1 }, points: { $sum: { $ifNull: ['$points', 1] } }, acceptedAssignments: { $addToSet: '$assignmentId' }, lastAcceptedAt: { $max: '$reviewedAt' } } },
     { $sort: { accepted: -1, lastAcceptedAt: 1 } },
   ]).toArray();
   const profiles = await db.collection('users').find(approvedUserFilter(), {
     projection: { name: 1, department: 1, githubUsername: 1, showPublic: 1, createdAt: 1 },
   }).toArray();
   const totalById = new Map(totals.map((row) => [String(row._id), row]));
-  return profiles.map((profile) => {
+  const sortedProfiles = profiles.map((profile) => {
     const row = totalById.get(String(profile._id)) || { accepted: 0, acceptedAssignments: [] };
     const joinedKey = dayKey(profile.createdAt || new Date());
     const eligible = assignments.filter((assignment) => assignment.dateKey > joinedKey || new Date(assignment.createdAt || 0) >= profile.createdAt);
@@ -496,11 +553,13 @@ async function leaderboard(db) {
       name: profile.showPublic ? profile.name : `@${profile.githubUsername}`,
       department: profile.showPublic ? profile.department : 'ABES member',
       githubUsername: profile.githubUsername,
-      points: row.accepted, completed: row.accepted, scheduled: eligible.length,
+      points: row.points ?? row.accepted, completed: row.accepted, scheduled: eligible.length,
       punctuality: eligible.length ? Math.round((row.accepted / eligible.length) * 100) : 0,
       streak,
     };
   }).sort((a, b) => b.points - a.points || b.punctuality - a.punctuality || a.name.localeCompare(b.name));
+  const { page, pageSize, skip } = pageOptions(url, 12, 50);
+  return { leaderboard: sortedProfiles.slice(skip, skip + pageSize), pagination: pageMeta(page, pageSize, sortedProfiles.length) };
 }
 
 async function createAssignment(db, user, body) {
@@ -516,32 +575,60 @@ async function createAssignment(db, user, body) {
     timezone: TZ, createdAt: new Date(),
   };
   const result = await db.collection('assignments').insertOne(assignment);
+  await recordAdminActivity(db, user, 'assignment_published', { id: result.insertedId, label: `${dateKey} · LC ${questionId}` }, { questionId });
   return { id: String(result.insertedId), dateKey, questionId, createdByName: user.name };
+}
+
+async function updateAssignment(db, user, assignmentId, body) {
+  requireRole(user, 'lead', 'admin');
+  if (!ObjectId.isValid(assignmentId)) throw new HttpError(404, 'Assignment not found.');
+  const questionId = Number(body.questionId);
+  if (!questionById.has(questionId)) throw new HttpError(400, 'Choose a question from the 220-question curriculum.');
+  const id = new ObjectId(assignmentId);
+  const assignment = await db.collection('assignments').findOne({ _id: id });
+  if (!assignment || assignment.dateKey !== dayKey()) throw new HttpError(404, 'Only today’s published assignment can be changed here.');
+  if (assignment.questionId === questionId) throw new HttpError(400, 'Choose a different question before saving.');
+  const now = new Date();
+  const invalidationNote = `Assignment corrected by ${user.name}; submit the newly selected question to regain today’s point.`;
+  const changed = await db.collection('assignments').updateOne({ _id: id, questionId: assignment.questionId }, {
+    $set: { questionId, updatedAt: now, updatedBy: user._id, updatedByName: user.name },
+  });
+  if (!changed.matchedCount) throw new HttpError(409, 'The assignment changed while you were editing it. Refresh and try again.');
+  const affected = await db.collection('submissions').updateMany(
+    { assignmentId: id, questionId: { $ne: questionId }, status: { $ne: 'invalidated' } },
+    { $set: { status: 'invalidated', points: 0, invalidatedAt: now, invalidatedBy: user._id, reviewNote: invalidationNote } },
+  );
+  await recordAdminActivity(db, user, 'assignment_changed', { id, label: `${assignment.dateKey} · LC ${assignment.questionId} → LC ${questionId}` }, { fromQuestionId: assignment.questionId, toQuestionId: questionId, invalidatedSubmissions: affected.modifiedCount });
+  return { id: String(id), dateKey: assignment.dateKey, questionId, invalidatedSubmissions: affected.modifiedCount };
 }
 
 async function listSubmissions(db, req, user, url) {
   const isReview = url.pathname === '/api/admin/submissions';
   if (isReview) requireRole(user, 'lead', 'admin');
   const match = isReview ? { status: url.searchParams.get('status') || 'pending' } : { userId: user._id };
-  const items = await db.collection('submissions').find(match).sort({ submittedAt: -1 }).limit(100).toArray();
+  const { page, pageSize, skip } = pageOptions(url, 10, 30);
+  const [total, items] = await Promise.all([
+    db.collection('submissions').countDocuments(match),
+    db.collection('submissions').find(match).sort({ submittedAt: -1 }).skip(skip).limit(pageSize).toArray(),
+  ]);
   const userIds = [...new Set(items.map((item) => String(item.userId)))].map((id) => new ObjectId(id));
   const assignmentIds = [...new Set(items.map((item) => String(item.assignmentId)))].map((id) => new ObjectId(id));
   const profiles = userIds.length ? await db.collection('users').find({ _id: { $in: userIds } }, { projection: { name: 1, department: 1, githubUsername: 1 } }).toArray() : [];
   const assignments = assignmentIds.length ? await db.collection('assignments').find({ _id: { $in: assignmentIds } }).toArray() : [];
   const profileById = new Map(profiles.map((item) => [String(item._id), item]));
   const assignmentById = new Map(assignments.map((item) => [String(item._id), item]));
-  return items.map((item) => ({
-    id: String(item._id), status: item.status, commitUrl: item.commitUrl, submittedAt: item.submittedAt,
+  return { submissions: items.map((item) => ({
+    id: String(item._id), status: item.status, points: item.points ?? (item.status === 'accepted' ? 1 : 0), commitUrl: item.commitUrl, solutionPath: item.solutionPath, submittedAt: item.submittedAt,
     commitDate: item.commitDate, reviewNote: item.reviewNote,
     verifiedPusher: Boolean(item.verifiedPusher), verificationSource: item.verificationSource || 'commit-link',
     member: (() => { const profile = profileById.get(String(item.userId)); return profile ? {
       name: profile.name, department: profile.department, githubUsername: profile.githubUsername,
     } : null; })(),
     assignment: (() => { const assignment = assignmentById.get(String(item.assignmentId)); return assignment ? {
-      dateKey: assignment.dateKey, questionId: assignment.questionId,
-      question: questionById.get(assignment.questionId)?.title || 'Question',
+      dateKey: assignment.dateKey, questionId: item.questionId || assignment.questionId,
+      question: questionById.get(item.questionId || assignment.questionId)?.title || 'Question',
     } : null; })(),
-  }));
+  })), pagination: pageMeta(page, pageSize, total) };
 }
 
 async function reviewSubmission(db, user, submissionId, body) {
@@ -552,37 +639,72 @@ async function reviewSubmission(db, user, submissionId, body) {
   const note = String(body.note || '').trim().slice(0, 400);
   const submission = await db.collection('submissions').findOne({ _id: new ObjectId(submissionId), status: 'pending' });
   if (!submission) throw new HttpError(404, 'Pending submission not found.');
-  if (status === 'accepted' && process.env.GITHUB_WEBHOOK_SECRET && !submission.verifiedPusher) {
-    throw new HttpError(409, 'This club requires a matching GitHub push webhook before a submission can receive points.');
-  }
   const result = await db.collection('submissions').updateOne(
     { _id: new ObjectId(submissionId), status: 'pending' },
-    { $set: { status, reviewNote: note, reviewedAt: new Date(), reviewedBy: user._id } },
+    { $set: { status, points: status === 'accepted' ? 1 : 0, reviewNote: note, reviewedAt: new Date(), reviewedBy: user._id } },
   );
   if (!result.matchedCount) throw new HttpError(404, 'Pending submission not found.');
+  await recordAdminActivity(db, user, 'submission_reviewed', { id: submission._id, label: submission.commitUrl }, { status, points: status === 'accepted' ? 1 : 0, note });
   return { ok: true };
 }
 
-async function listMembers(db) {
-  return (await db.collection('users').find({}, {
-    projection: { name: 1, department: 1, studyYear: 1, email: 1, githubUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1 },
-  }).sort({ name: 1 }).limit(500).toArray()).map((user) => ({
+async function adjustSubmissionPoints(db, user, submissionId, body) {
+  requireRole(user, 'admin');
+  if (!ObjectId.isValid(submissionId)) throw new HttpError(404, 'Submission not found.');
+  const points = Number(body.points);
+  if (!Number.isInteger(points) || points < 0 || points > 10) throw new HttpError(400, 'Points must be a whole number from 0 to 10.');
+  const id = new ObjectId(submissionId);
+  const submission = await db.collection('submissions').findOne({ _id: id, status: 'accepted' });
+  if (!submission) throw new HttpError(404, 'Accepted submission not found.');
+  const previousPoints = submission.points ?? 1;
+  const note = String(body.note || '').trim().slice(0, 400);
+  const result = await db.collection('submissions').updateOne({ _id: id, status: 'accepted' }, {
+    $set: { points, pointsAdjustedAt: new Date(), pointsAdjustedBy: user._id, pointsAdjustmentNote: note },
+  });
+  if (!result.matchedCount) throw new HttpError(409, 'The submission changed while you were adjusting points. Refresh and try again.');
+  await recordAdminActivity(db, user, 'submission_points_adjusted', { id, label: submission.commitUrl }, { fromPoints: previousPoints, toPoints: points, note });
+  return { ok: true, points };
+}
+
+async function listMembers(db, url) {
+  const status = url.searchParams.get('status') || 'all';
+  const query = String(url.searchParams.get('q') || '').trim().slice(0, 80);
+  const filters = [];
+  if (status === 'approved') filters.push(approvedUserFilter());
+  if (status === 'pending') filters.push({ $or: [{ approvalStatus: 'pending' }, { approvalStatus: { $exists: false }, verifiedAt: null }] });
+  if (query) {
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'i');
+    filters.push({ $or: [{ name: regex }, { department: regex }, { email: regex }, { githubUsername: regex }, { leetcodeUsername: regex }] });
+  }
+  const filter = filters.length > 1 ? { $and: filters } : filters[0] || {};
+  const { page, pageSize, skip } = pageOptions(url, 20, 50);
+  const [total, members, pending, approved] = await Promise.all([
+    db.collection('users').countDocuments(filter),
+    db.collection('users').find(filter, {
+      projection: { name: 1, department: 1, studyYear: 1, email: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1 },
+    }).sort({ name: 1 }).skip(skip).limit(pageSize).toArray(),
+    db.collection('users').countDocuments({ $or: [{ approvalStatus: 'pending' }, { approvalStatus: { $exists: false }, verifiedAt: null }] }),
+    db.collection('users').countDocuments(approvedUserFilter()),
+  ]);
+  return { members: members.map((user) => ({
     id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
-    email: user.email, githubUsername: user.githubUsername, role: user.role || 'member',
+    email: user.email, githubUsername: user.githubUsername, leetcodeUsername: user.leetcodeUsername || '', role: user.role || 'member',
     approvalStatus: approvalStatus(user), showPublic: Boolean(user.showPublic), createdAt: user.createdAt, approvedAt: user.approvedAt || user.verifiedAt || null,
-  }));
+  })), pagination: pageMeta(page, pageSize, total), counts: { pending, approved } };
 }
 
 async function updateMember(db, user, memberId, body) {
   requireRole(user, 'admin');
   if (!ObjectId.isValid(memberId)) throw new HttpError(404, 'Member not found.');
+  const member = await db.collection('users').findOne({ _id: new ObjectId(memberId) });
+  if (!member) throw new HttpError(404, 'Member not found.');
   const update = {};
   if (body.role !== undefined) {
     if (!['member', 'lead', 'admin'].includes(body.role)) throw new HttpError(400, 'Role must be member, lead, or admin.');
     if (String(user._id) === memberId && body.role !== 'admin') throw new HttpError(400, 'You cannot remove your own admin access.');
     if (String(user._id) !== memberId && body.role !== 'admin') {
-      const target = await db.collection('users').findOne({ _id: new ObjectId(memberId) }, { projection: { role: 1, approvalStatus: 1, verifiedAt: 1 } });
-      if (target?.role === 'admin' && isApproved(target)) {
+      if (member.role === 'admin' && isApproved(member)) {
         const admins = await db.collection('users').countDocuments(approvedUserFilter({ role: 'admin' }));
         if (admins <= 1) throw new HttpError(409, 'Promote another approved administrator before changing this role.');
       }
@@ -593,8 +715,6 @@ async function updateMember(db, user, memberId, body) {
   if (body.approvalStatus !== undefined) {
     if (!['approved', 'pending'].includes(body.approvalStatus)) throw new HttpError(400, 'Approval status must be approved or pending.');
     if (String(user._id) === memberId && body.approvalStatus !== 'approved') throw new HttpError(400, 'You cannot remove your own account approval.');
-    const member = await db.collection('users').findOne({ _id: new ObjectId(memberId) });
-    if (!member) throw new HttpError(404, 'Member not found.');
     if (member.role === 'admin' && body.approvalStatus !== 'approved') {
       const admins = await db.collection('users').countDocuments(approvedUserFilter({ role: 'admin' }));
       if (admins <= 1) throw new HttpError(409, 'Approve another administrator before de-approving this account.');
@@ -612,6 +732,11 @@ async function updateMember(db, user, memberId, body) {
   const result = await db.collection('users').updateOne({ _id: new ObjectId(memberId) }, operation);
   if (!result.matchedCount) throw new HttpError(404, 'Member not found.');
   if (body.approvalStatus === 'pending') await db.collection('sessions').deleteMany({ userId: new ObjectId(memberId) });
+  const changes = Object.fromEntries(Object.keys(update).filter((key) => !['updatedAt', 'approvedAt', 'approvedBy'].includes(key)).map((key) => [key, {
+    from: key === 'approvalStatus' ? approvalStatus(member) : (member[key] ?? null),
+    to: key === 'approvalStatus' ? body.approvalStatus : update[key],
+  }]));
+  await recordAdminActivity(db, user, 'member_updated', { id: memberId, label: `${member.name} · ${member.email}` }, { changes });
   return { ok: true, approvalStatus: body.approvalStatus };
 }
 
@@ -620,7 +745,7 @@ async function deleteMember(db, user, memberId) {
   if (!ObjectId.isValid(memberId)) throw new HttpError(404, 'Member not found.');
   if (String(user._id) === memberId) throw new HttpError(400, 'You cannot delete your own administrator account.');
   const id = new ObjectId(memberId);
-  const member = await db.collection('users').findOne({ _id: id }, { projection: { role: 1, approvalStatus: 1, verifiedAt: 1 } });
+  const member = await db.collection('users').findOne({ _id: id }, { projection: { name: 1, email: 1, role: 1, approvalStatus: 1, verifiedAt: 1 } });
   if (!member) throw new HttpError(404, 'Member not found.');
   if (member.role === 'admin' && isApproved(member)) {
     const admins = await db.collection('users').countDocuments(approvedUserFilter({ role: 'admin' }));
@@ -635,54 +760,76 @@ async function deleteMember(db, user, memberId) {
     db.collection('assignments').updateMany({ createdBy: id }, { $set: { createdByName: 'Former member' }, $unset: { createdBy: '' } }),
   ]);
   await db.collection('users').deleteOne({ _id: id });
+  await recordAdminActivity(db, user, 'member_deleted', { id, label: `${member.name} · ${member.email}` });
   return { ok: true };
 }
 
-export async function handleApiNode(req, res) {
+async function listAdminActivity(db, url) {
+  const { page, pageSize, skip } = pageOptions(url, 10, 50);
+  const [total, activity] = await Promise.all([
+    db.collection('adminActivity').countDocuments({}),
+    db.collection('adminActivity').find({}).sort({ createdAt: -1, _id: -1 }).skip(skip).limit(pageSize).toArray(),
+  ]);
+  return {
+    activity: activity.map((item) => ({
+      id: String(item._id), actorName: item.actorName, actorRole: item.actorRole,
+      action: item.action, targetLabel: item.targetLabel, details: item.details || {}, createdAt: item.createdAt,
+    })),
+    pagination: pageMeta(page, pageSize, total),
+  };
+}
+
+export async function handleApiNode(req, res, options = {}) {
   const url = normalizedUrl(req.url || '/');
   const method = String(req.method || 'GET').toUpperCase();
   let db;
+  const getDb = () => options.db ? Promise.resolve(options.db) : getDatabase();
   try {
     if (url.pathname === '/api/integrations/github/webhook' && method === 'POST') {
-      db = await getDatabase();
+      db = await getDb();
       return json(res, 200, await githubWebhook(db, req));
     }
     if (url.pathname === '/api/auth/github/callback' && method === 'GET') {
-      db = await getDatabase();
+      db = await getDb();
       return await githubCallback(db, req, res, url);
     }
     if (url.pathname === '/api/auth/github/start' && method === 'GET') {
-      db = await getDatabase();
+      db = await getDb();
       return await githubStart(db, req, res);
     }
     if (method !== 'GET' && method !== 'HEAD') assertSameOrigin(req);
-    db = await getDatabase();
+    db = await getDb();
 
     if (url.pathname === '/api/auth/register' && method === 'POST') return await signup(db, req, res, await readBody(req));
     if (url.pathname === '/api/auth/login' && method === 'POST') return await login(db, req, res, await readBody(req));
+    if (url.pathname === '/api/auth/reset-password' && method === 'POST') return json(res, 200, await resetPassword(db, req, res, await readBody(req)));
     if (url.pathname === '/api/auth/logout' && method === 'POST') {
       const token = getCookie(req, 'dsavation_session');
-      if (token) await db.collection('sessions').deleteOne({ tokenHash: hash(token) });
+      if (token) {
+        const session = await db.collection('sessions').findOne({ tokenHash: hash(token) });
+        if (session) {
+          const exiting = await db.collection('users').findOne({ _id: session.userId });
+          await recordAdminActivity(db, exiting, 'administrator_signed_out', { id: exiting?._id, label: exiting?.email });
+        }
+        await db.collection('sessions').deleteOne({ tokenHash: hash(token) });
+      }
       clearCookie(res, req, 'dsavation_session');
       return json(res, 200, { ok: true });
     }
     if (url.pathname === '/api/auth/me' && method === 'GET') return json(res, 200, { user: account(await currentUser(req, db)) });
     if (url.pathname === '/api/auth/profile' && method === 'PATCH') {
       const user = await requireUser(req, db);
-      const body = await readBody(req);
-      if (typeof body.showPublic !== 'boolean') throw new HttpError(400, 'Choose whether your name appears on the public club board.');
-      await db.collection('users').updateOne({ _id: user._id }, { $set: { showPublic: body.showPublic, updatedAt: new Date() } });
-      return json(res, 200, { ok: true, user: account({ ...user, showPublic: body.showPublic }) });
+      return json(res, 200, { ok: true, user: await updateProfile(db, user, await readBody(req)) });
     }
 
-    if (url.pathname === '/api/club/leaderboard' && method === 'GET') return json(res, 200, { leaderboard: await leaderboard(db) });
+    if (url.pathname === '/api/club/leaderboard' && method === 'GET') return json(res, 200, await leaderboard(db, url));
 
     const user = await requireUser(req, db);
     if (url.pathname === '/api/questions' && method === 'GET') {
       return json(res, 200, { questions: curriculum.questions, topics: curriculum.topics });
     }
     if (url.pathname === '/api/club/today' && method === 'GET') return json(res, 200, await getClubToday(db));
-    if (url.pathname === '/api/club/assignments' && method === 'GET') return json(res, 200, { assignments: await assignmentHistory(db) });
+    if (url.pathname === '/api/club/assignments' && method === 'GET') return json(res, 200, await assignmentHistory(db, url));
     if (url.pathname === '/api/progress' && method === 'GET') {
       const progress = await db.collection('personalProgress').find({ userId: user._id }).sort({ solvedAt: -1 }).toArray();
       return json(res, 200, { progress: progress.map((item) => ({ questionId: item.questionId, solvedAt: item.solvedAt })) });
@@ -693,24 +840,30 @@ export async function handleApiNode(req, res) {
       await setProgress(db, user, progressMatch[1], Boolean(body.solved));
       return json(res, 200, { ok: true, questionId: Number(progressMatch[1]), solved: Boolean(body.solved) });
     }
-    if (url.pathname === '/api/submissions' && method === 'GET') return json(res, 200, { submissions: await listSubmissions(db, req, user, url) });
+    if (url.pathname === '/api/submissions' && method === 'GET') return json(res, 200, await listSubmissions(db, req, user, url));
     if (url.pathname === '/api/submissions' && method === 'POST') {
       const submission = await makeSubmission(db, req, user, await readBody(req));
-      return json(res, 201, { ok: true, submission: { status: submission.status, commitUrl: submission.commitUrl } });
+      return json(res, 201, { ok: true, submission: { status: submission.status, points: submission.points, questionId: submission.questionId, solutionPath: submission.solutionPath, commitUrl: submission.commitUrl } });
     }
     if (url.pathname === '/api/admin/assignments' && method === 'POST') {
       return json(res, 201, { assignment: await createAssignment(db, user, await readBody(req)) });
     }
+    const assignmentMatch = url.pathname.match(/^\/api\/admin\/assignments\/([a-f0-9]{24})$/i);
+    if (assignmentMatch && method === 'PATCH') {
+      return json(res, 200, { assignment: await updateAssignment(db, user, assignmentMatch[1], await readBody(req)) });
+    }
     if (url.pathname === '/api/admin/submissions' && method === 'GET') {
-      return json(res, 200, { submissions: await listSubmissions(db, req, user, url) });
+      return json(res, 200, await listSubmissions(db, req, user, url));
     }
     const reviewMatch = url.pathname.match(/^\/api\/admin\/submissions\/([a-f0-9]{24})$/i);
     if (reviewMatch && method === 'PATCH') {
-      return json(res, 200, await reviewSubmission(db, user, reviewMatch[1], await readBody(req)));
+      const body = await readBody(req);
+      if (body.points !== undefined && body.status === undefined) return json(res, 200, await adjustSubmissionPoints(db, user, reviewMatch[1], body));
+      return json(res, 200, await reviewSubmission(db, user, reviewMatch[1], body));
     }
     if (url.pathname === '/api/admin/members' && method === 'GET') {
       requireRole(user, 'admin');
-      return json(res, 200, { members: await listMembers(db) });
+      return json(res, 200, await listMembers(db, url));
     }
     const memberMatch = url.pathname.match(/^\/api\/admin\/members\/([a-f0-9]{24})$/i);
     if (memberMatch && method === 'PATCH') {
@@ -718,6 +871,16 @@ export async function handleApiNode(req, res) {
     }
     if (memberMatch && method === 'DELETE') {
       return json(res, 200, await deleteMember(db, user, memberMatch[1]));
+    }
+    const resetMatch = url.pathname.match(/^\/api\/admin\/members\/([a-f0-9]{24})\/password-reset$/i);
+    if (resetMatch && method === 'POST') {
+      const admin = await requireUser(req, db);
+      return json(res, 201, await generatePasswordReset(db, req, admin, resetMatch[1]));
+    }
+    if (url.pathname === '/api/admin/activity' && method === 'GET') {
+      const admin = await requireUser(req, db);
+      requireRole(admin, 'admin');
+      return json(res, 200, await listAdminActivity(db, url));
     }
     return json(res, 404, { error: 'API route not found.' });
   } catch (error) {
@@ -730,7 +893,7 @@ export async function handleApiNode(req, res) {
   }
 }
 
-export async function handleApiFetch(request) {
+export async function handleApiFetch(request, options = {}) {
   const rawBody = Buffer.from(await request.arrayBuffer());
   const headers = Object.fromEntries(request.headers.entries());
   const requestUrl = new URL(request.url);
@@ -751,6 +914,6 @@ export async function handleApiFetch(request) {
   await handleApiNode({
     url: `${requestUrl.pathname}${requestUrl.search}`,
     method: request.method, headers, body, rawBody,
-  }, res);
+  }, res, options);
   return new Response(res.body, { status: res.statusCode, headers: responseHeaders });
 }

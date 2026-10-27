@@ -1,0 +1,497 @@
+import assert from 'node:assert/strict';
+import { after, before, beforeEach, test } from 'node:test';
+import bcrypt from 'bcryptjs';
+import { ObjectId } from 'mongodb';
+import { handleApiFetch, isAssignmentSolutionPath, isOnAssignmentDay, parsePersonalCommitUrl } from '../server/api.js';
+
+const indiaDay = (date = new Date()) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
+const dateAtIndiaNoon = (dateKey) => new Date(`${dateKey}T12:00:00+05:30`);
+const commits = new Map();
+let originalFetch;
+let originalAdminEmails;
+let originalSecureCookie;
+
+function equalValue(left, right) {
+  if (left instanceof Date || right instanceof Date) return new Date(left).getTime() === new Date(right).getTime();
+  if (left instanceof ObjectId || right instanceof ObjectId) return String(left) === String(right);
+  return left === right;
+}
+
+function matchesValue(value, expected) {
+  if (expected instanceof RegExp) return expected.test(String(value ?? ''));
+  if (expected && typeof expected === 'object' && !(expected instanceof Date) && !(expected instanceof ObjectId) && !Array.isArray(expected)) {
+    for (const [operator, operand] of Object.entries(expected)) {
+      if (operator === '$exists' && (value !== undefined) !== operand) return false;
+      if (operator === '$ne' && (operand === null ? value == null : equalValue(value, operand))) return false;
+      if (operator === '$gt' && !(new Date(value).getTime() > new Date(operand).getTime())) return false;
+      if (operator === '$gte' && !(new Date(value).getTime() >= new Date(operand).getTime())) return false;
+      if (operator === '$lte' && !(String(value) <= String(operand))) return false;
+      if (operator === '$in' && !operand.some((candidate) => equalValue(value, candidate))) return false;
+      if (operator === '$type' && !(typeof value === operand || (operand === 'string' && typeof value === 'string'))) return false;
+      if (!['$exists', '$ne', '$gt', '$gte', '$lte', '$in', '$type'].includes(operator)) return false;
+    }
+    return true;
+  }
+  return equalValue(value, expected);
+}
+
+function matches(document, filter = {}) {
+  return Object.entries(filter).every(([key, expected]) => {
+    if (key === '$or') return expected.some((item) => matches(document, item));
+    if (key === '$and') return expected.every((item) => matches(document, item));
+    return matchesValue(document[key], expected);
+  });
+}
+
+function applyUpdate(document, update) {
+  if (!Object.keys(update).some((key) => key.startsWith('$'))) {
+    for (const key of Object.keys(document)) delete document[key];
+    Object.assign(document, update);
+    return;
+  }
+  for (const [key, value] of Object.entries(update.$set || {})) document[key] = value;
+  for (const [key, value] of Object.entries(update.$inc || {})) document[key] = (document[key] || 0) + value;
+  for (const [key, value] of Object.entries(update.$push || {})) {
+    if (!Array.isArray(document[key])) document[key] = [];
+    document[key].push(value);
+  }
+  for (const key of Object.keys(update.$unset || {})) delete document[key];
+}
+
+class FakeCursor {
+  constructor(documents) { this.documents = documents; this.offset = 0; this.count = Infinity; }
+  sort(specification) {
+    const keys = Object.entries(specification);
+    this.documents.sort((left, right) => {
+      for (const [key, direction] of keys) {
+        const a = left[key]; const b = right[key];
+        const av = a instanceof Date ? a.getTime() : String(a ?? '');
+        const bv = b instanceof Date ? b.getTime() : String(b ?? '');
+        if (av < bv) return -direction;
+        if (av > bv) return direction;
+      }
+      return 0;
+    });
+    return this;
+  }
+  skip(amount) { this.offset = amount; return this; }
+  limit(amount) { this.count = amount; return this; }
+  async toArray() { return this.documents.slice(this.offset, this.offset + this.count); }
+}
+
+class FakeCollection {
+  constructor() { this.documents = []; }
+  async findOne(filter = {}) { return this.documents.find((document) => matches(document, filter)) || null; }
+  find(filter = {}) { return new FakeCursor(this.documents.filter((document) => matches(document, filter))); }
+  async insertOne(document) {
+    const inserted = { ...document, _id: document._id || new ObjectId() };
+    this.documents.push(inserted);
+    return { insertedId: inserted._id };
+  }
+  async updateOne(filter, update, options = {}) {
+    let document = this.documents.find((item) => matches(item, filter));
+    if (!document && options.upsert) {
+      document = Object.fromEntries(Object.entries(filter).filter(([, value]) => !(value && typeof value === 'object' && Object.keys(value).some((key) => key.startsWith('$')))));
+      document._id ??= new ObjectId();
+      Object.assign(document, update.$setOnInsert || {});
+      this.documents.push(document);
+      applyUpdate(document, update);
+      return { matchedCount: 0, upsertedId: document._id, modifiedCount: 0 };
+    }
+    if (!document) return { matchedCount: 0, modifiedCount: 0 };
+    applyUpdate(document, update);
+    return { matchedCount: 1, modifiedCount: 1 };
+  }
+  async updateMany(filter, update) {
+    const documents = this.documents.filter((item) => matches(item, filter));
+    for (const document of documents) applyUpdate(document, update);
+    return { matchedCount: documents.length, modifiedCount: documents.length };
+  }
+  async deleteOne(filter) {
+    const index = this.documents.findIndex((item) => matches(item, filter));
+    if (index < 0) return { deletedCount: 0 };
+    this.documents.splice(index, 1);
+    return { deletedCount: 1 };
+  }
+  async deleteMany(filter) {
+    const beforeCount = this.documents.length;
+    this.documents = this.documents.filter((item) => !matches(item, filter));
+    return { deletedCount: beforeCount - this.documents.length };
+  }
+  async countDocuments(filter = {}) { return this.documents.filter((item) => matches(item, filter)).length; }
+  aggregate(pipeline) {
+    const accepted = this.documents.filter((item) => matches(item, pipeline[0]?.$match || {}));
+    const groups = new Map();
+    for (const item of accepted) {
+      const id = String(item.userId);
+      const row = groups.get(id) || { _id: item.userId, accepted: 0, points: 0, acceptedAssignments: [], lastAcceptedAt: null };
+      row.accepted += 1;
+      row.points += item.points ?? 1;
+      if (!row.acceptedAssignments.some((assignment) => String(assignment) === String(item.assignmentId))) row.acceptedAssignments.push(item.assignmentId);
+      if (!row.lastAcceptedAt || new Date(item.reviewedAt || 0) > new Date(row.lastAcceptedAt)) row.lastAcceptedAt = item.reviewedAt;
+      groups.set(id, row);
+    }
+    return new FakeCursor([...groups.values()]);
+  }
+}
+
+class FakeDatabase {
+  constructor() { this.collections = new Map(); }
+  collection(name) {
+    if (!this.collections.has(name)) this.collections.set(name, new FakeCollection());
+    return this.collections.get(name);
+  }
+}
+
+async function call(db, path, { method = 'GET', body, cookie = '' } = {}) {
+  const headers = { origin: 'http://localhost', host: 'localhost' };
+  if (cookie) headers.cookie = cookie;
+  if (body !== undefined) headers['content-type'] = 'application/json';
+  const response = await handleApiFetch(new Request(`http://localhost/api${path}`, {
+    method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
+  }), { db });
+  return { response, data: await response.json() };
+}
+
+async function seedUser(db, { name, email, username, role = 'member', approved = true, leetcodeUsername = 'leet-id' }) {
+  const user = {
+    _id: new ObjectId(), name, department: 'Computer Science', studyYear: 'third-year',
+    email, passwordHash: await bcrypt.hash('correct-horse-123', 4),
+    githubUsername: username, githubUserLower: username.toLowerCase(), githubId: 100,
+    githubVerifiedAt: new Date(), leetcodeUsername, showPublic: true, role,
+    approvalStatus: approved ? 'approved' : 'pending', approvedAt: approved ? new Date() : null,
+    createdAt: new Date(), updatedAt: new Date(),
+  };
+  await db.collection('users').insertOne(user);
+  const login = await call(db, '/auth/login', { method: 'POST', body: { email, password: 'correct-horse-123' } });
+  const cookie = login.response.headers.get('set-cookie').split(';')[0];
+  return { user, cookie };
+}
+
+async function seedAdmin(db) {
+  return seedUser(db, { name: 'Club Admin', email: 'admin@abes.ac.in', username: 'club-admin', role: 'admin' });
+}
+
+function commitFixture({ sha, username = 'student-gh', questionId = 217, date = indiaDay() } = {}) {
+  const timestamp = dateAtIndiaNoon(date).toISOString();
+  return {
+    sha, html_url: `https://github.com/${username}/dsa-solutions/commit/${sha}`,
+    author: { login: username }, committer: { login: username },
+    commit: { author: { date: timestamp }, committer: { date: timestamp } },
+    files: [{ filename: `${questionId}/Solution.cpp`, status: 'added' }],
+  };
+}
+
+before(() => {
+  originalFetch = globalThis.fetch;
+  originalAdminEmails = process.env.ADMIN_EMAILS;
+  originalSecureCookie = process.env.SESSION_COOKIE_SECURE;
+  process.env.ADMIN_EMAILS = 'admin@abes.ac.in';
+  process.env.SESSION_COOKIE_SECURE = 'false';
+  globalThis.fetch = async (input) => {
+    const url = new URL(String(input));
+    if (url.hostname === 'api.github.com' && url.pathname.startsWith('/users/')) {
+      const login = decodeURIComponent(url.pathname.split('/').pop());
+      return new Response(JSON.stringify({ id: 987, login }), { status: 200 });
+    }
+    const sha = url.pathname.split('/').pop();
+    const commit = commits.get(sha);
+    return new Response(JSON.stringify(commit || { message: 'Not Found' }), { status: commit ? 200 : 404 });
+  };
+});
+
+after(() => {
+  globalThis.fetch = originalFetch;
+  if (originalAdminEmails === undefined) delete process.env.ADMIN_EMAILS;
+  else process.env.ADMIN_EMAILS = originalAdminEmails;
+  if (originalSecureCookie === undefined) delete process.env.SESSION_COOKIE_SECURE;
+  else process.env.SESSION_COOKIE_SECURE = originalSecureCookie;
+});
+
+beforeEach(() => commits.clear());
+
+test('commit links, solution paths, and India assignment dates reject malformed or nested values', () => {
+  assert.deepEqual(parsePersonalCommitUrl('https://github.com/alex/dsa/commit/abcdef0123456789'), { owner: 'alex', repository: 'dsa', sha: 'abcdef0123456789' });
+  assert.equal(parsePersonalCommitUrl('https://github.com/alex/dsa/blob/main/217/Solution.cpp'), null);
+  assert.equal(parsePersonalCommitUrl('http://github.com/alex/dsa/commit/abcdef0'), null);
+  assert.equal(isAssignmentSolutionPath('217/Solution.cpp', 217), true);
+  assert.equal(isAssignmentSolutionPath('217/src/Solution.cpp', 217), false);
+  assert.equal(isAssignmentSolutionPath('218/Solution.cpp', 217), false);
+  assert.equal(isOnAssignmentDay('2026-10-28T18:29:59.000Z', '2026-10-28'), true);
+  assert.equal(isOnAssignmentDay('2026-10-28T18:30:00.000Z', '2026-10-28'), false);
+  assert.equal(isOnAssignmentDay('not-a-date', '2026-10-28'), false);
+});
+
+test('signup stores a password hash and login distinguishes unknown account, wrong password, and pending approval', async () => {
+  const db = new FakeDatabase();
+  const signup = await call(db, '/auth/register', { method: 'POST', body: {
+    name: 'New Student', department: 'Computer Science', studyYear: 'second-year',
+    email: 'student@abes.ac.in', password: 'correct-horse-123', githubUsername: 'new-student',
+    leetcodeUsername: 'new-leet-id',
+  } });
+  assert.equal(signup.response.status, 201);
+  assert.equal(signup.data.approvalStatus, 'pending');
+  const stored = db.collection('users').documents[0];
+  assert.notEqual(stored.passwordHash, 'correct-horse-123');
+  assert.equal(await bcrypt.compare('correct-horse-123', stored.passwordHash), true);
+  assert.equal(stored.leetcodeUsername, 'new-leet-id');
+
+  const wrong = await call(db, '/auth/login', { method: 'POST', body: { email: 'student@abes.ac.in', password: 'wrong-password' } });
+  assert.equal(wrong.response.status, 401);
+  assert.match(wrong.data.error, /password is incorrect/i);
+  const unknown = await call(db, '/auth/login', { method: 'POST', body: { email: 'missing@abes.ac.in', password: 'wrong-password' } });
+  assert.equal(unknown.response.status, 404);
+  assert.match(unknown.data.error, /no account/i);
+  const pending = await call(db, '/auth/login', { method: 'POST', body: { email: 'student@abes.ac.in', password: 'correct-horse-123' } });
+  assert.equal(pending.response.status, 403);
+  assert.match(pending.data.error, /not currently approved/i);
+
+  const missingLeet = await call(db, '/auth/register', { method: 'POST', body: {
+    name: 'Second Student', department: 'Computer Science', studyYear: 'second-year',
+    email: 'second@abes.ac.in', password: 'correct-horse-123', githubUsername: 'second-student',
+  } });
+  assert.equal(missingLeet.response.status, 400);
+  assert.match(missingLeet.data.error, /leetcode username/i);
+});
+
+test('authenticated profile and private-progress APIs validate and persist member fields', async () => {
+  const db = new FakeDatabase();
+  const { user, cookie } = await seedUser(db, { name: 'A Student', email: 'a@abes.ac.in', username: 'student-gh' });
+  const anonymous = await call(db, '/questions');
+  assert.equal(anonymous.response.status, 401);
+  const library = await call(db, '/questions', { cookie });
+  assert.equal(library.response.status, 200);
+  assert.equal(library.data.questions.length, 220);
+
+  const update = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
+    name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
+    githubUsername: 'student-gh', leetcodeUsername: 'leet-updated', showPublic: true,
+  } });
+  assert.equal(update.response.status, 200);
+  assert.equal(update.data.user.leetcodeUsername, 'leet-updated');
+  assert.equal(update.data.user.studyYear, 'fourth-year');
+  const newGithub = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
+    name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
+    githubUsername: 'student-new-gh', leetcodeUsername: 'leet-updated',
+  } });
+  assert.equal(newGithub.response.status, 200);
+  assert.equal(newGithub.data.user.githubVerified, false);
+  assert.equal(db.collection('users').documents.find((item) => String(item._id) === String(user._id)).githubVerifiedAt, null);
+
+  const solved = await call(db, '/progress/217', { method: 'PUT', cookie, body: { solved: true } });
+  assert.equal(solved.response.status, 200);
+  const progress = await call(db, '/progress', { cookie });
+  assert.deepEqual(progress.data.progress.map((item) => item.questionId), [217]);
+  const other = await seedUser(db, { name: 'Another Student', email: 'b@abes.ac.in', username: 'another-gh' });
+  const emptyProgress = await call(db, '/progress', { cookie: other.cookie });
+  assert.deepEqual(emptyProgress.data.progress, []);
+  const invalidQuestion = await call(db, '/progress/999999', { method: 'PUT', cookie, body: { solved: true } });
+  assert.equal(invalidQuestion.response.status, 404);
+  const me = await call(db, '/auth/me', { cookie });
+  assert.equal(me.data.user.leetcodeUsername, 'leet-updated');
+  const logout = await call(db, '/auth/logout', { method: 'POST', cookie, body: {} });
+  assert.equal(logout.response.status, 200);
+  const signedOut = await call(db, '/auth/me', { cookie });
+  assert.equal(signedOut.data.user, null);
+  assert.equal(String(user._id).length, 24);
+});
+
+test('personal-repo commits score automatically, admin adjustments and assignment correction are audited', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const student = await seedUser(db, { name: 'Daily Solver', email: 'solver@abes.ac.in', username: 'student-gh' });
+  const assigned = await call(db, '/admin/assignments', { method: 'POST', cookie: admin.cookie, body: { dateKey: indiaDay(), questionId: 217 } });
+  assert.equal(assigned.response.status, 201);
+  const assignmentId = assigned.data.assignment.id;
+  const secondAssignment = await call(db, '/admin/assignments', { method: 'POST', cookie: admin.cookie, body: { dateKey: indiaDay(), questionId: 242 } });
+  assert.equal(secondAssignment.response.status, 409);
+  const sha = 'a'.repeat(40);
+  commits.set(sha, commitFixture({ sha, questionId: 217 }));
+  const submission = await call(db, '/submissions', { method: 'POST', cookie: student.cookie, body: {
+    assignmentId, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${sha}`,
+  } });
+  assert.equal(submission.response.status, 201);
+  assert.equal(submission.data.submission.status, 'accepted');
+  assert.equal(submission.data.submission.points, 1);
+  const duplicate = await call(db, '/submissions', { method: 'POST', cookie: student.cookie, body: {
+    assignmentId, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${sha}`,
+  } });
+  assert.equal(duplicate.response.status, 409);
+
+  const board = await call(db, '/club/leaderboard?page=1&pageSize=1');
+  assert.equal(board.data.pagination.total, 2);
+  assert.equal(board.data.leaderboard[0].githubUsername, 'student-gh');
+  assert.equal(board.data.leaderboard[0].points, 1);
+  const scored = await call(db, '/admin/submissions?status=accepted&page=1&pageSize=10', { cookie: admin.cookie });
+  assert.equal(scored.data.pagination.total, 1);
+  const scoredId = scored.data.submissions[0].id;
+  const deniedAdjust = await call(db, `/admin/submissions/${scoredId}`, { method: 'PATCH', cookie: student.cookie, body: { points: 0 } });
+  assert.equal(deniedAdjust.response.status, 403);
+  const adjust = await call(db, `/admin/submissions/${scoredId}`, { method: 'PATCH', cookie: admin.cookie, body: { points: 0, note: 'Late review adjustment' } });
+  assert.equal(adjust.response.status, 200);
+  assert.equal(adjust.data.points, 0);
+
+  const changed = await call(db, `/admin/assignments/${assignmentId}`, { method: 'PATCH', cookie: admin.cookie, body: { questionId: 242 } });
+  assert.equal(changed.response.status, 200);
+  assert.equal(changed.data.assignment.invalidatedSubmissions, 1);
+  const emptyToday = await call(db, '/club/today', { cookie: student.cookie });
+  assert.equal(emptyToday.data.submittedCount, 0);
+  assert.equal(emptyToday.data.acceptedCount, 0);
+  const memberHistory = await call(db, '/submissions', { cookie: student.cookie });
+  assert.equal(memberHistory.data.submissions[0].status, 'invalidated');
+  assert.equal(memberHistory.data.submissions[0].assignment.questionId, 217);
+
+  const nextSha = 'b'.repeat(40);
+  commits.set(nextSha, commitFixture({ sha: nextSha, questionId: 242 }));
+  const resubmit = await call(db, '/submissions', { method: 'POST', cookie: student.cookie, body: {
+    assignmentId, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${nextSha}`,
+  } });
+  assert.equal(resubmit.response.status, 201);
+  assert.equal(resubmit.data.submission.points, 1);
+  assert.equal(db.collection('submissions').documents.length, 1);
+  assert.equal(db.collection('submissions').documents[0].supersededAttempts.length, 1);
+  const correctedToday = await call(db, '/club/today', { cookie: student.cookie });
+  assert.equal(correctedToday.data.submittedCount, 1);
+  assert.equal(correctedToday.data.acceptedCount, 1);
+
+  const activity = await call(db, '/admin/activity?page=1&pageSize=50', { cookie: admin.cookie });
+  const actions = activity.data.activity.map((entry) => entry.action);
+  assert.ok(actions.includes('assignment_published'));
+  assert.ok(actions.includes('submission_points_adjusted'));
+  assert.ok(actions.includes('assignment_changed'));
+  const logPage = await call(db, '/club/assignments?page=1&pageSize=1', { cookie: student.cookie });
+  assert.equal(logPage.data.pagination.total, 1);
+  assert.equal(logPage.data.assignments[0].questionId, 242);
+});
+
+test('commit submission rejects a different owner, wrong author, wrong day, and non-added or nested file', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const student = await seedUser(db, { name: 'Daily Solver', email: 'solver@abes.ac.in', username: 'student-gh' });
+  const assigned = await call(db, '/admin/assignments', { method: 'POST', cookie: admin.cookie, body: { dateKey: indiaDay(), questionId: 217 } });
+  const assignmentId = assigned.data.assignment.id;
+  const submit = async (url, submittedAssignmentId = assignmentId) => {
+    await db.collection('rateLimits').deleteMany({});
+    return call(db, '/submissions', { method: 'POST', cookie: student.cookie, body: { assignmentId: submittedAssignmentId, commitUrl: url } });
+  };
+  const hash = (char) => char.repeat(40);
+
+  const ownerSha = hash('c'); commits.set(ownerSha, commitFixture({ sha: ownerSha }));
+  assert.equal((await submit(`https://github.com/someone-else/repo/commit/${ownerSha}`)).response.status, 403);
+  const authorSha = hash('d'); commits.set(authorSha, { ...commitFixture({ sha: authorSha }), author: { login: 'other-user' } });
+  assert.equal((await submit(`https://github.com/student-gh/repo/commit/${authorSha}`)).response.status, 403);
+  const dateSha = hash('e'); commits.set(dateSha, commitFixture({ sha: dateSha, date: '2020-01-01' }));
+  assert.equal((await submit(`https://github.com/student-gh/repo/commit/${dateSha}`)).response.status, 400);
+  const pathSha = hash('f'); commits.set(pathSha, { ...commitFixture({ sha: pathSha }), files: [{ filename: '217/src/Solution.cpp', status: 'added' }] });
+  assert.equal((await submit(`https://github.com/student-gh/repo/commit/${pathSha}`)).response.status, 400);
+  const modifiedSha = hash('1'); commits.set(modifiedSha, { ...commitFixture({ sha: modifiedSha }), files: [{ filename: '217/Solution.cpp', status: 'modified' }] });
+  assert.equal((await submit(`https://github.com/student-gh/repo/commit/${modifiedSha}`)).response.status, 400);
+  const staleAssignment = await submit(`https://github.com/student-gh/repo/commit/${hash('2')}`, new ObjectId().toString());
+  assert.equal(staleAssignment.response.status, 409);
+});
+
+test('admin reset links store only a hash, expire, work once, and revoke sessions', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const member = await seedUser(db, { name: 'Reset Member', email: 'reset@abes.ac.in', username: 'reset-gh' });
+  const generated = await call(db, `/admin/members/${member.user._id}/password-reset`, { method: 'POST', cookie: admin.cookie, body: {} });
+  assert.equal(generated.response.status, 201);
+  const resetUrl = new URL(generated.data.resetUrl);
+  const token = resetUrl.searchParams.get('token');
+  const storedReset = db.collection('passwordResets').documents[0];
+  assert.ok(token);
+  assert.notEqual(storedReset.tokenHash, token);
+  assert.ok(Math.abs((storedReset.expiresAt.getTime() - storedReset.createdAt.getTime()) - 30 * 60 * 1000) < 5);
+  assert.equal(JSON.stringify(db.collection('adminActivity').documents).includes(token), false);
+
+  const changed = await call(db, '/auth/reset-password', { method: 'POST', body: { token, password: 'new-strong-pass-456' } });
+  assert.equal(changed.response.status, 200);
+  assert.equal(db.collection('sessions').documents.some((session) => String(session.userId) === String(member.user._id)), false);
+  const reused = await call(db, '/auth/reset-password', { method: 'POST', body: { token, password: 'another-strong-pass-789' } });
+  assert.equal(reused.response.status, 400);
+  const oldPassword = await call(db, '/auth/login', { method: 'POST', body: { email: 'reset@abes.ac.in', password: 'correct-horse-123' } });
+  assert.equal(oldPassword.response.status, 401);
+  const newPassword = await call(db, '/auth/login', { method: 'POST', body: { email: 'reset@abes.ac.in', password: 'new-strong-pass-456' } });
+  assert.equal(newPassword.response.status, 200);
+  const generatedAgain = await call(db, `/admin/members/${member.user._id}/password-reset`, { method: 'POST', cookie: admin.cookie, body: {} });
+  const expiredToken = new URL(generatedAgain.data.resetUrl).searchParams.get('token');
+  db.collection('passwordResets').documents[0].expiresAt = new Date(0);
+  const expired = await call(db, '/auth/reset-password', { method: 'POST', body: { token: expiredToken, password: 'expired-strong-pass-999' } });
+  assert.equal(expired.response.status, 400);
+});
+
+test('admin routes enforce roles and paginate the member roster and audit history', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const member = await seedUser(db, { name: 'Regular Member', email: 'regular@abes.ac.in', username: 'regular-gh' });
+  for (let index = 0; index < 24; index += 1) {
+    await db.collection('users').insertOne({ _id: new ObjectId(), name: `Roster ${String(index).padStart(2, '0')}`, department: 'Computer Science', email: `roster${index}@abes.ac.in`, githubUsername: `roster-${index}`, leetcodeUsername: `leetcode-${index}`, role: 'member', approvalStatus: index % 2 ? 'approved' : 'pending', verifiedAt: index % 2 ? new Date() : null, createdAt: new Date() });
+  }
+  await db.collection('adminActivity').insertOne({ actorName: 'Admin', actorRole: 'admin', action: 'test_entry', targetLabel: 'Test', createdAt: new Date() });
+  const page = await call(db, '/admin/members?page=2&pageSize=10&status=all', { cookie: admin.cookie });
+  assert.equal(page.response.status, 200);
+  assert.equal(page.data.members.length, 10);
+  assert.equal(page.data.pagination.page, 2);
+  assert.equal(page.data.pagination.total, 26);
+  const search = await call(db, '/admin/members?status=approved&q=roster-21&page=1&pageSize=10', { cookie: admin.cookie });
+  assert.equal(search.data.members.length, 1);
+  const activityPage = await call(db, '/admin/activity?page=1&pageSize=1', { cookie: admin.cookie });
+  assert.equal(activityPage.data.activity.length, 1);
+  assert.equal(activityPage.data.pagination.pageSize, 1);
+  const denied = await call(db, '/admin/activity', { cookie: member.cookie });
+  assert.equal(denied.response.status, 403);
+  const resetDenied = await call(db, `/admin/members/${member.user._id}/password-reset`, { method: 'POST', cookie: member.cookie, body: {} });
+  assert.equal(resetDenied.response.status, 403);
+});
+
+test('admins can review legacy pending submissions and pagination includes their full count', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const first = await seedUser(db, { name: 'First Solver', email: 'first@abes.ac.in', username: 'first-gh' });
+  const second = await seedUser(db, { name: 'Second Solver', email: 'second@abes.ac.in', username: 'second-gh' });
+  const assigned = await call(db, '/admin/assignments', { method: 'POST', cookie: admin.cookie, body: { dateKey: indiaDay(), questionId: 217 } });
+  const assignmentId = new ObjectId(assigned.data.assignment.id);
+  const firstSubmissionId = new ObjectId();
+  const secondSubmissionId = new ObjectId();
+  for (const [id, member] of [[firstSubmissionId, first], [secondSubmissionId, second]]) {
+    await db.collection('submissions').insertOne({
+      _id: id, assignmentId, userId: member.user._id, questionId: 217,
+      commitUrl: `https://github.com/${member.user.githubUsername}/repo/commit/${'7'.repeat(40)}`,
+      submittedAt: new Date(), status: 'pending', verifiedPusher: true,
+    });
+  }
+  const page = await call(db, '/admin/submissions?status=pending&page=1&pageSize=1', { cookie: admin.cookie });
+  assert.equal(page.response.status, 200);
+  assert.equal(page.data.submissions.length, 1);
+  assert.equal(page.data.pagination.total, 2);
+  const accepted = await call(db, `/admin/submissions/${firstSubmissionId}`, { method: 'PATCH', cookie: admin.cookie, body: { status: 'accepted', note: 'Verified' } });
+  assert.equal(accepted.response.status, 200);
+  assert.equal(db.collection('submissions').documents.find((item) => String(item._id) === String(firstSubmissionId)).points, 1);
+  const rejected = await call(db, `/admin/submissions/${secondSubmissionId}`, { method: 'PATCH', cookie: admin.cookie, body: { status: 'rejected', note: 'Invalid solution' } });
+  assert.equal(rejected.response.status, 200);
+  assert.ok(db.collection('adminActivity').documents.filter((item) => item.action === 'submission_reviewed').length >= 2);
+});
+
+test('admin account approval, role changes, and deletion revoke access and leave audit records', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const member = await seedUser(db, { name: 'Managed Member', email: 'managed@abes.ac.in', username: 'managed-gh' });
+  await db.collection('personalProgress').insertOne({ userId: member.user._id, questionId: 217, solvedAt: new Date() });
+
+  const selfDemote = await call(db, `/admin/members/${admin.user._id}`, { method: 'PATCH', cookie: admin.cookie, body: { role: 'member' } });
+  assert.equal(selfDemote.response.status, 400);
+  const promoteLead = await call(db, `/admin/members/${member.user._id}`, { method: 'PATCH', cookie: admin.cookie, body: { role: 'lead' } });
+  assert.equal(promoteLead.response.status, 200);
+  assert.equal(db.collection('users').documents.find((item) => String(item._id) === String(member.user._id)).role, 'lead');
+
+  const revoke = await call(db, `/admin/members/${member.user._id}`, { method: 'PATCH', cookie: admin.cookie, body: { approvalStatus: 'pending' } });
+  assert.equal(revoke.response.status, 200);
+  assert.equal(db.collection('sessions').documents.some((item) => String(item.userId) === String(member.user._id)), false);
+  assert.equal((await call(db, '/auth/me', { cookie: member.cookie })).data.user, null);
+  await call(db, `/admin/members/${member.user._id}`, { method: 'PATCH', cookie: admin.cookie, body: { approvalStatus: 'approved' } });
+  const removed = await call(db, `/admin/members/${member.user._id}`, { method: 'DELETE', cookie: admin.cookie });
+  assert.equal(removed.response.status, 200);
+  assert.equal(db.collection('users').documents.some((item) => String(item._id) === String(member.user._id)), false);
+  assert.equal(db.collection('personalProgress').documents.some((item) => String(item.userId) === String(member.user._id)), false);
+  assert.ok(db.collection('adminActivity').documents.some((item) => item.action === 'member_deleted'));
+});

@@ -32,6 +32,7 @@ export async function getDatabase() {
       db.collection('sessions').createIndex({ tokenHash: 1 }, { unique: true }),
       db.collection('sessions').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
       db.collection('passwordResets').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
+      db.collection('passwordResets').createIndex({ tokenHash: 1 }, { unique: true }),
       db.collection('personalProgress').createIndex({ userId: 1, questionId: 1 }, { unique: true }),
       db.collection('assignments').createIndex({ dateKey: 1 }, { unique: true }),
       db.collection('submissions').createIndex({ assignmentId: 1, userId: 1 }, { unique: true }),
@@ -39,6 +40,7 @@ export async function getDatabase() {
         unique: true,
         partialFilterExpression: { commitSha: { $type: 'string' } },
       }),
+      db.collection('adminActivity').createIndex({ createdAt: -1, _id: -1 }),
       db.collection('rateLimits').createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     ]);
   }

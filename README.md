@@ -29,58 +29,61 @@ Set the following in Vercel **Project Settings → Environment Variables** for e
 | `GITHUB_OAUTH_CLIENT_ID` | Client ID of a GitHub OAuth App used to link a member's GitHub account. |
 | `GITHUB_OAUTH_CLIENT_SECRET` | OAuth App secret. |
 | `GITHUB_OAUTH_CALLBACK_URL` | Exact callback URL, `https://YOUR_DOMAIN/api/auth/github/callback`. Add this URL to the OAuth App. |
-| `GITHUB_REPOSITORY` | Club repository in `owner/name` format. |
-| `GITHUB_TOKEN` | GitHub token with read access to the club repository, required when it is private and useful for API rate limits. |
-| `GITHUB_WEBHOOK_SECRET` | Secret used to authenticate GitHub push webhooks. Configure the same value in the repository webhook. |
+| `GITHUB_TOKEN` | Optional token for private repository reads and higher GitHub API limits. Public repositories can be checked without it. |
 | `SESSION_COOKIE_SECURE` | Optional; Vercel automatically marks session cookies secure over HTTPS. |
 
 Keep Vercel's production deployment on HTTPS. After adding or changing variables, redeploy so the functions receive them. The first API request creates the required MongoDB indexes.
 
 ## Accounts and roles
 
-- Members register with a name, department, year of study, `@abes.ac.in` email, password, and GitHub username. New accounts remain pending until an administrator approves them on `/dashboard`; approval can be removed there, and administrators can delete accounts.
+- Members register with a name, department, year of study, `@abes.ac.in` email, password, GitHub username, and LeetCode username. New accounts remain pending until an administrator approves them on `/dashboard`; approval can be removed there, and administrators can delete accounts.
 - Email addresses are checked for the `@abes.ac.in` format, but no verification email is sent. Administrators must confirm a member's identity through the club before granting access. The first account listed in `ADMIN_EMAILS` can be created as an approved administrator.
 - Passwords are hashed server-side. Sessions use opaque, `HttpOnly`, `SameSite=Lax` cookies; personal progress is scoped to the signed-in member.
+- Administrators can generate a password reset link from the member dashboard. Its random token is stored only as a hash, expires in 30 minutes, works once, and revokes the member's existing sessions after use. The administrator shares the link with the member.
 - A member links GitHub through the OAuth App before submitting a club solution. This confirms the account behind the GitHub username collected at signup.
-- The initial admin email is listed in `ADMIN_EMAILS`. Admins can promote members to lead or admin. Leads can publish Questions of the Day and review submissions.
+- The initial admin email is listed in `ADMIN_EMAILS`. Admins can promote members to lead or admin. Leads can publish and correct Questions of the Day; admins can adjust awarded points.
 - Full name and department are hidden on public standings by default. Members can opt in from their account panel; otherwise standings and accepted-submission lists show only their GitHub username. Leads/admins can see the member details needed for club administration.
 
 ## Personal progress and club scoring
 
 These are separate systems. Ticking a question in the library writes only to that member's private `personalProgress` records. It never creates a club submission, public participant entry, leaderboard point, streak, or punctuality percentage.
 
-Approved members can view the current Question of the Day, accepted participants, assignment history, and standings. Leads/admins can publish at most one assignment for each date in Asia/Kolkata time. A published date cannot be changed or assigned a second question. Leave holidays and breaks unassigned; those dates are excluded from the punctuality denominator and do not break an assignment streak.
+Approved members can view the current Question of the Day, accepted participants, assignment history, and standings. Leads/admins can publish at most one assignment for each date in Asia/Kolkata time. They can correct today's assignment; existing submissions are invalidated and their points removed so members can submit the corrected question. Leave holidays and breaks unassigned; those dates are excluded from the punctuality denominator and do not break an assignment streak.
 
-Every member has one club submission per assigned date. The server rejects submissions for another date or question, commits outside the assignment date in Asia/Kolkata, commits by a different linked GitHub author, and files outside the expected path. New submissions wait for lead review; only accepted submissions count toward points and punctuality.
+Members submit one direct commit link per assigned date. GitHub's commit API checks that the repository belongs to the member's linked GitHub account, both GitHub author and committer match, the commit and author dates are on the assignment day in Asia/Kolkata, and the commit adds a new file at `<LEETCODE_ID>/<solution-file>`. A valid submission is accepted and receives one point immediately. Administrators can adjust an accepted submission from 0 to 10 points; each adjustment appears in the admin activity log. Personal question checkmarks remain private and do not affect club points.
 
 ### GitHub commit workflow
 
 1. A lead publishes the question for the date.
 2. The member links their GitHub account in DSAvation.
-3. The member commits the solution to the club repository under:
+3. The member creates or uses a public GitHub repository they own.
+4. The member adds a new solution file directly under a folder named with the assigned LeetCode question number:
 
    ```text
-   submissions/YYYY-MM-DD/GITHUB_USERNAME/lc-LEETCODE_ID/solution.ext
+   LEETCODE_ID/solution.ext
    ```
 
-4. Push it to a branch named `submissions/GITHUB_USERNAME` on that same date. Configure the repository webhook below so the signed push event can confirm who pushed it.
-5. The member may paste the direct commit URL in DSAvation. The API checks the repository, commit author, commit date, and changed file path with GitHub. A lead reviews the pending submission before it earns points.
+5. Commit and push the new file during the assignment day, then paste the direct commit URL, such as `https://github.com/USERNAME/REPOSITORY/commit/FULL_SHA`.
+6. DSAvation verifies the commit through GitHub and awards the point automatically. The repository must be owned by the linked GitHub account. Private repositories require a server-side `GITHUB_TOKEN` with access to that repository.
 
-Configure one GitHub repository webhook:
-
-- Payload URL: `https://YOUR_DOMAIN/api/integrations/github/webhook`
-- Content type: `application/json`
-- Secret: the same value as `GITHUB_WEBHOOK_SECRET`
-- Events: **Just the push event**
-
-The webhook checks GitHub's signature, repository, branch pusher, commit author, commit timestamp, and solution path. When the webhook secret is configured, a commit-link-only submission cannot be accepted for points without a matching signed push event. GitHub webhook deliveries may be retried; duplicate member/date submissions are guarded by a unique database index.
+Assignment history, leaderboard, member list, submission list, and admin activity use server-side pagination. Admin and lead changes to assignments or submissions, member access and roles, reset-link generation, and elevated account actions are recorded for administrators to review.
 
 ## Data and privacy boundaries
 
-- MongoDB stores account profiles, password hashes, sessions, private progress, daily assignments, and club submissions. Account deletion removes the member's sessions, personal progress, and club submissions.
+- MongoDB stores account profiles, password hashes, hashed password-reset tokens, sessions, private progress, daily assignments, club submissions, and administrator activity records. Account deletion removes the member's sessions, reset tokens, personal progress, and club submissions.
 - Only the signed-in member can read or change their personal progress through the API. Personal progress is not part of the public leaderboard.
 - The curriculum and assignment details are available only to approved signed-in members. Public endpoints expose aggregate club standings; participant names follow the member's public-name preference. Email addresses and personal progress are not returned by public endpoints.
 - Administrators can remove member accounts from `/dashboard`; the account's sessions, personal checkmarks, and club submissions are deleted with it. Take regular database backups before onboarding a large club.
+
+## Tests
+
+Run the API and feature tests with:
+
+```powershell
+npm test
+```
+
+Tests use an in-memory fake database and stub GitHub API responses; they do not require MongoDB credentials or a live GitHub token.
 
 ## Curriculum
 

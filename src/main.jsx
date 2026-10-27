@@ -92,7 +92,7 @@ function QuestionRow({ question, solved, solvedAt, bookmarked, onSolve, onBookma
 }
 
 function App() {
-  const [view, setView] = useState(() => window.location.pathname === '/dashboard' ? 'dashboard' : 'general');
+  const [view, setView] = useState(() => window.location.pathname === '/dashboard' ? 'dashboard' : window.location.pathname === '/reset-password' ? 'reset-password' : 'general');
   const [account, setAccount] = useState(null);
   const [theme, setTheme] = useState(initialTheme);
   const [questions, setQuestions] = useState([]);
@@ -124,7 +124,21 @@ function App() {
   const [leaderboard, setLeaderboard] = useState([]);
   const [submissions, setSubmissions] = useState([]);
   const [pending, setPending] = useState([]);
+  const [pendingPagination, setPendingPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
   const [members, setMembers] = useState([]);
+  const [membersPagination, setMembersPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
+  const [memberCounts, setMemberCounts] = useState({ pending: 0, approved: 0 });
+  const [activity, setActivity] = useState([]);
+  const [activityPagination, setActivityPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
+  const [scoredSubmissions, setScoredSubmissions] = useState([]);
+  const [scoredPagination, setScoredPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
+  const [leaderboardPagination, setLeaderboardPagination] = useState({ page: 1, pageSize: 12, total: 0, totalPages: 1 });
+  const [historyPagination, setHistoryPagination] = useState({ page: 1, pageSize: 8, total: 0, totalPages: 1 });
+  const [resetLink, setResetLink] = useState(null);
+  const [resetToken, setResetToken] = useState(() => new URLSearchParams(window.location.search).get('token') || '');
+  const [resetBusy, setResetBusy] = useState(false);
+  const [resetError, setResetError] = useState('');
+  const [profileBusy, setProfileBusy] = useState(false);
   const [commitUrl, setCommitUrl] = useState('');
   const [submissionHelpOpen, setSubmissionHelpOpen] = useState(false);
   const [submissionBusy, setSubmissionBusy] = useState(false);
@@ -169,6 +183,7 @@ function App() {
   }, [progress]);
   const isLeader = account && ['lead', 'admin'].includes(account.role);
   const isAdmin = account?.role === 'admin';
+  const editingTodayAssignment = club.assignment?.dateKey === localDay();
   const assignedQuestion = club.assignment ? byId.get(Number(club.assignment.questionId)) : null;
   const pendingMembers = members.filter((member) => member.approvalStatus !== 'approved');
   const approvedMembers = members.filter((member) => member.approvalStatus === 'approved');
@@ -177,10 +192,16 @@ function App() {
 
   async function loadClub() {
     try {
-      const [today, assigned, board] = await Promise.all([api('/club/today'), api('/club/assignments'), api('/club/leaderboard')]);
+      const [today, assigned, board] = await Promise.all([
+        api('/club/today'),
+        api(`/club/assignments?page=${historyPagination.page}&pageSize=8`),
+        api(`/club/leaderboard?page=${leaderboardPagination.page}&pageSize=12`),
+      ]);
       setClub(today);
       setHistory(assigned.assignments || []);
+      setHistoryPagination(assigned.pagination || { page: 1, pageSize: 8, total: 0, totalPages: 1 });
       setLeaderboard(board.leaderboard || []);
+      setLeaderboardPagination(board.pagination || { page: 1, pageSize: 12, total: 0, totalPages: 1 });
       setApiNotice('');
     } catch (error) {
       setApiNotice(error.message.includes('MONGODB_URI') ? 'Community features need the DSAvation database configured.' : error.message);
@@ -196,18 +217,86 @@ function App() {
   async function loadMemberData(user = account) {
     if (!user) return;
     try {
-      const [personal, own] = await Promise.all([api('/progress'), api('/submissions')]);
+      const [personal, own] = await Promise.all([api('/progress'), api('/submissions?page=1&pageSize=10')]);
       setProgress(Object.fromEntries((personal.progress || []).map((item) => [item.questionId, item.solvedAt])));
       setSubmissions(own.submissions || []);
     } catch (error) { setNotice(error.message); }
     if (['lead', 'admin'].includes(user.role)) {
-      try { const result = await api('/admin/submissions?status=pending'); setPending(result.submissions || []); }
+      try { const result = await api(`/admin/submissions?status=pending&page=${pendingPagination.page}&pageSize=10`); setPending(result.submissions || []); setPendingPagination(result.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 }); }
       catch (error) { setPending([]); setNotice(error.message); }
-    } else setPending([]);
+    } else { setPending([]); setPendingPagination({ page: 1, pageSize: 10, total: 0, totalPages: 1 }); }
     if (user.role === 'admin') {
-      try { const result = await api('/admin/members'); setMembers(result.members || []); }
-      catch (error) { setMembers([]); }
-    } else setMembers([]);
+      try {
+        const query = new URLSearchParams({ page: String(membersPagination.page), pageSize: '20', status: memberFilter });
+        if (memberQuery.trim()) query.set('q', memberQuery.trim());
+        const [memberResult, scoredResult, activityResult] = await Promise.all([
+          api(`/admin/members?${query}`),
+          api('/admin/submissions?status=accepted&page=1&pageSize=10'),
+          api('/admin/activity?page=1&pageSize=10'),
+        ]);
+        setMembers(memberResult.members || []);
+        setMembersPagination(memberResult.pagination || { page: 1, pageSize: 20, total: 0, totalPages: 1 });
+        setMemberCounts(memberResult.counts || { pending: 0, approved: 0 });
+        setScoredSubmissions(scoredResult.submissions || []);
+        setScoredPagination(scoredResult.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
+        setActivity(activityResult.activity || []);
+        setActivityPagination(activityResult.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
+      } catch (error) { setMembers([]); setScoredSubmissions([]); setActivity([]); setNotice(error.message); }
+    } else { setMembers([]); setScoredSubmissions([]); setActivity([]); }
+  }
+
+  async function refreshMembers(page = 1, status = memberFilter, search = memberQuery) {
+    const params = new URLSearchParams({ page: String(page), pageSize: '20', status });
+    if (search.trim()) params.set('q', search.trim());
+    try {
+      const result = await api(`/admin/members?${params}`);
+      if (!(result.members || []).length && page > 1 && page > (result.pagination?.totalPages || 1)) {
+        return refreshMembers(result.pagination?.totalPages || 1, status, search);
+      }
+      setMembers(result.members || []);
+      setMembersPagination(result.pagination || { page: 1, pageSize: 20, total: 0, totalPages: 1 });
+      setMemberCounts(result.counts || { pending: 0, approved: 0 });
+    } catch (error) { setNotice(error.message); }
+  }
+
+  async function refreshActivity(page = 1) {
+    try {
+      const result = await api(`/admin/activity?page=${page}&pageSize=10`);
+      setActivity(result.activity || []);
+      setActivityPagination(result.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
+    } catch (error) { setNotice(error.message); }
+  }
+
+  async function refreshScoredSubmissions(page = 1) {
+    try {
+      const result = await api(`/admin/submissions?status=accepted&page=${page}&pageSize=10`);
+      setScoredSubmissions(result.submissions || []);
+      setScoredPagination(result.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
+    } catch (error) { setNotice(error.message); }
+  }
+
+  async function refreshPendingSubmissions(page = 1) {
+    try {
+      const result = await api(`/admin/submissions?status=pending&page=${page}&pageSize=10`);
+      setPending(result.submissions || []);
+      setPendingPagination(result.pagination || { page, pageSize: 10, total: 0, totalPages: 1 });
+    } catch (error) { setNotice(error.message); }
+  }
+
+  async function loadLeaderboardPage(page) {
+    try {
+      const result = await api(`/club/leaderboard?page=${page}&pageSize=12`);
+      setLeaderboard(result.leaderboard || []);
+      setLeaderboardPagination(result.pagination || { page, pageSize: 12, total: 0, totalPages: 1 });
+    } catch (error) { setNotice(error.message); }
+  }
+
+  async function loadHistoryPage(page) {
+    try {
+      const result = await api(`/club/assignments?page=${page}&pageSize=8`);
+      setHistory(result.assignments || []);
+      setHistoryPagination(result.pagination || { page, pageSize: 8, total: 0, totalPages: 1 });
+    } catch (error) { setNotice(error.message); }
   }
 
   useEffect(() => {
@@ -222,6 +311,12 @@ function App() {
   }, []);
 
   useEffect(() => {
+    if (window.location.pathname === '/reset-password' && window.location.search) {
+      window.history.replaceState({}, '', window.location.pathname);
+    }
+  }, []);
+
+  useEffect(() => {
     if (!authReady || window.location.pathname !== '/dashboard' || isAdmin) return;
     window.history.replaceState({}, '', '/');
     setView('general');
@@ -229,7 +324,7 @@ function App() {
   }, [authReady, isAdmin]);
 
   useEffect(() => {
-    const onPopState = () => setView(window.location.pathname === '/dashboard' ? 'dashboard' : 'general');
+    const onPopState = () => setView(window.location.pathname === '/dashboard' ? 'dashboard' : window.location.pathname === '/reset-password' ? 'reset-password' : 'general');
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
@@ -265,9 +360,7 @@ function App() {
     const path = nextView === 'dashboard' ? '/dashboard' : '/';
     if (window.location.pathname !== path) window.history.pushState({}, '', path);
     setView(nextView);
-    if (nextView === 'dashboard' && account?.role === 'admin') {
-      api('/admin/members').then((result) => setMembers(result.members || [])).catch((error) => setNotice(error.message));
-    }
+    if (nextView === 'dashboard' && account?.role === 'admin') refreshMembers(1, memberFilter, memberQuery);
   }
 
   useEffect(() => { localStorage.setItem('dsavation-bookmarks', JSON.stringify(bookmarks)); }, [bookmarks]);
@@ -302,7 +395,7 @@ function App() {
       if (authMode === 'signup') {
         const result = await api('/auth/register', { method: 'POST', body: {
           name: values.name, department: values.department, email: values.email,
-          studyYear: values.studyYear, password: values.password, githubUsername: values.githubUsername,
+          studyYear: values.studyYear, password: values.password, githubUsername: values.githubUsername, leetcodeUsername: values.leetcodeUsername,
           showPublic: values.showPublic === 'on',
         } });
         setAuthOpen(false);
@@ -328,9 +421,9 @@ function App() {
   async function submitClubSolution(event) {
     event.preventDefault(); setSubmissionBusy(true); setNotice('');
     try {
-      await api('/submissions', { method: 'POST', body: { assignmentId: club.assignment?.id, commitUrl } });
-      setCommitUrl(''); setSubmissionHelpOpen(false); setNotice('Commit received. A club lead will review it before it affects the leaderboard.');
-      await loadClub(); await loadMemberData();
+      const result = await api('/submissions', { method: 'POST', body: { assignmentId: club.assignment?.id, commitUrl } });
+      setCommitUrl(''); setSubmissionHelpOpen(false); setNotice(`GitHub verified your solution. ${result.submission?.points ?? 1} point${(result.submission?.points ?? 1) === 1 ? '' : 's'} added to the club leaderboard.`);
+      await loadClub(); await loadHistoryPage(1); await loadMemberData();
     } catch (error) { setNotice(error.message); }
     finally { setSubmissionBusy(false); }
   }
@@ -338,9 +431,15 @@ function App() {
   async function publishAssignment(event) {
     event.preventDefault(); setAssignmentBusy(true); setNotice('');
     try {
-      const result = await api('/admin/assignments', { method: 'POST', body: { dateKey: assignmentDate, questionId: Number(assignmentQuestion) } });
-      setNotice(`Question of the Day published for ${result.assignment.dateKey}.`);
-      await loadClub();
+      const isReplacingToday = club.assignment?.dateKey === localDay() && assignmentDate === localDay();
+      const result = isReplacingToday
+        ? await api(`/admin/assignments/${club.assignment.id}`, { method: 'PATCH', body: { questionId: Number(assignmentQuestion) } })
+        : await api('/admin/assignments', { method: 'POST', body: { dateKey: assignmentDate, questionId: Number(assignmentQuestion) } });
+      setNotice(isReplacingToday
+        ? `Today's question was changed. ${result.assignment.invalidatedSubmissions || 0} previous submission(s) were invalidated; members can submit the corrected question.`
+        : `Question of the Day published for ${result.assignment.dateKey}.`);
+      await loadClub(); await loadHistoryPage(1); await loadMemberData();
+      await refreshActivity(activityPagination.page);
     } catch (error) { setNotice(error.message); }
     finally { setAssignmentBusy(false); }
   }
@@ -349,7 +448,8 @@ function App() {
     setMemberBusy(item.id); setNotice('');
     try {
       await api(`/admin/submissions/${item.id}`, { method: 'PATCH', body: { status, note: '' } });
-      await loadClub(); await loadMemberData();
+      await loadClub(); await loadMemberData(); await refreshPendingSubmissions(1);
+      await refreshActivity(activityPagination.page);
       setNotice(status === 'accepted' ? 'Submission accepted and added to the club leaderboard.' : 'Submission declined; no points were awarded.');
     } catch (error) { setNotice(error.message); }
     finally { setMemberBusy(''); }
@@ -357,7 +457,7 @@ function App() {
 
   async function updateRole(member, role) {
     setMemberBusy(member.id);
-    try { await api(`/admin/members/${member.id}`, { method: 'PATCH', body: { role } }); setMembers((old) => old.map((item) => item.id === member.id ? { ...item, role } : item)); }
+    try { await api(`/admin/members/${member.id}`, { method: 'PATCH', body: { role } }); setMembers((old) => old.map((item) => item.id === member.id ? { ...item, role } : item)); await refreshActivity(activityPagination.page); }
     catch (error) { setNotice(error.message); }
     finally { setMemberBusy(''); }
   }
@@ -368,6 +468,7 @@ function App() {
       await api(`/admin/members/${member.id}`, { method: 'PATCH', body: { approvalStatus } });
       setMembers((old) => old.map((item) => item.id === member.id ? { ...item, approvalStatus } : item));
       setNotice(approvalStatus === 'approved' ? `${member.name} is approved and can sign in.` : `${member.name}'s access has been suspended.`);
+      await refreshMembers(membersPagination.page); await refreshActivity(activityPagination.page);
     } catch (error) { setNotice(error.message); }
     finally { setMemberBusy(''); }
   }
@@ -379,6 +480,7 @@ function App() {
       await api(`/admin/members/${member.id}`, { method: 'DELETE' });
       setMembers((old) => old.filter((item) => item.id !== member.id));
       setNotice(`${member.name}'s account and personal records were deleted.`);
+      await refreshMembers(membersPagination.page); await refreshActivity(activityPagination.page);
     } catch (error) { setNotice(error.message); }
     finally { setMemberBusy(''); }
   }
@@ -388,6 +490,57 @@ function App() {
     try { const result = await api('/auth/profile', { method: 'PATCH', body: { showPublic } }); setAccount(result.user); await loadClub(); }
     catch (error) { setNotice(error.message); }
     finally { setPublicPreferenceBusy(false); }
+  }
+
+  async function saveProfile(event) {
+    event.preventDefault(); setProfileBusy(true); setNotice('');
+    const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+    try {
+      const result = await api('/auth/profile', { method: 'PATCH', body: {
+        name: values.name, department: values.department, studyYear: values.studyYear,
+        githubUsername: values.githubUsername, leetcodeUsername: values.leetcodeUsername,
+      } });
+      setAccount(result.user);
+      setNotice(result.user.githubVerified ? 'Your account details were saved.' : 'Details saved. Re-link your GitHub account to verify the updated username.');
+    } catch (error) { setNotice(error.message); }
+    finally { setProfileBusy(false); }
+  }
+
+  async function generateResetLink(member) {
+    setMemberBusy(member.id);
+    try {
+      const result = await api(`/admin/members/${member.id}/password-reset`, { method: 'POST', body: {} });
+      setResetLink({ name: member.name, url: result.resetUrl, expiresAt: result.expiresAt });
+      await refreshActivity(activityPagination.page);
+    } catch (error) { setNotice(error.message); }
+    finally { setMemberBusy(''); }
+  }
+
+  async function adjustPoints(item, points) {
+    setMemberBusy(item.id);
+    try {
+      await api(`/admin/submissions/${item.id}`, { method: 'PATCH', body: { points: Number(points), note: 'Adjusted by an administrator.' } });
+      await loadClub(); await refreshScoredSubmissions(scoredPagination.page); await refreshActivity(activityPagination.page);
+      setNotice(`Points updated for ${item.member?.name || 'the member'}.`);
+    } catch (error) { setNotice(error.message); }
+    finally { setMemberBusy(''); }
+  }
+
+  async function completePasswordReset(event) {
+    event.preventDefault(); setResetBusy(true); setResetError('');
+    const values = Object.fromEntries(new FormData(event.currentTarget).entries());
+    if (values.password !== values.confirmPassword) { setResetError('The passwords do not match.'); setResetBusy(false); return; }
+    try {
+      await api('/auth/reset-password', { method: 'POST', body: { token: resetToken, password: values.password } });
+      setResetToken(''); window.history.replaceState({}, '', '/'); setView('general');
+      setNotice('Password changed. Sign in with your new password.'); setAuthMode('login'); setAuthOpen(true);
+    } catch (error) { setResetError(error.message); }
+    finally { setResetBusy(false); }
+  }
+
+  async function copyResetLink() {
+    try { await navigator.clipboard.writeText(resetLink.url); setNotice('One-time reset link copied. Share it with the member before it expires.'); }
+    catch { setNotice('Select the reset link and copy it manually.'); }
   }
 
   function changeFontSize(amount) {
@@ -402,9 +555,9 @@ function App() {
       <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true"/><span>DSAvation</span></a>
       <nav className="main-nav" aria-label="Main navigation">
         <button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><Icon name="book" size={15}/>General</button>
-        <button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={15}/>My progress</button>
+        <button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={15}/>Account</button>
         <button className={view === 'club' ? 'active' : ''} onClick={() => navigate('club')}><Icon name="users" size={15}/>Club challenge</button>
-        {isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={15}/>Dashboard{pendingMembers.length > 0 && <span className="nav-count">{pendingMembers.length}</span>}</button>}
+        {isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={15}/>Dashboard{memberCounts.pending > 0 && <span className="nav-count">{memberCounts.pending}</span>}</button>}
       </nav>
       <div className="account-actions">
         <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15}/><span>{theme === 'dark' ? 'Light' : 'Dark'}</span></button>
@@ -416,8 +569,10 @@ function App() {
     {notice && <div className="toast" role="status"><span>{notice}</span><button onClick={() => setNotice('')} aria-label="Dismiss message">×</button></div>}
     {apiNotice && <div className="system-banner"><Icon name="lock" size={15}/><span>{apiNotice}</span></div>}
 
+    {view === 'reset-password' && <main className="content-shell page-content reset-page"><section className="panel reset-password-panel"><div className="eyebrow"><span className="eyebrow-line"/>ACCOUNT RECOVERY</div><h1>Choose a new password<span>.</span></h1>{resetToken ? <><p>This one-time link expires after 30 minutes and can only be used once.</p><form className="auth-form" onSubmit={completePasswordReset}><label>NEW PASSWORD<input name="password" type="password" autoComplete="new-password" minLength="10" maxLength="128" required placeholder="At least 10 characters"/></label><label>CONFIRM NEW PASSWORD<input name="confirmPassword" type="password" autoComplete="new-password" minLength="10" maxLength="128" required placeholder="Enter it again"/></label>{resetError && <p className="form-error" role="alert">{resetError}</p>}<button className="button button-dark auth-submit" disabled={resetBusy}>{resetBusy ? 'Updating…' : 'Change password'} <Icon name="arrow" size={14}/></button></form></> : <><p>This reset link is missing or has already been used. Contact an administrator to generate a new one.</p><button className="button button-dark" onClick={() => { window.history.replaceState({}, '', '/'); setView('general'); setAuthMode('login'); setAuthOpen(true); }}>Return to sign in <Icon name="arrow" size={14}/></button></>}</section></main>}
+
     {view === 'general' && <main className="content-shell">
-      <section className="welcome-row"><div><div className="eyebrow"><span className="eyebrow-line"/>ABES TECHNICAL CLUB · DSA PRACTICE</div><h1>Build the instinct.<br/><em>One problem at a time.</em></h1><p className="hero-subtitle">A shared question library for focused practice, personal progress, and the club’s daily challenge.</p></div><div className="hero-index"><span>THE CURRICULUM</span><strong>220</strong><small>INTERVIEW QUESTIONS</small></div></section>
+      <section className="welcome-row"><div><div className="eyebrow"><span className="eyebrow-line"/>ABES TECHNOVATION CLUB WEBSITE</div><h1>Build the instinct.<br/><em>One problem at a time.</em></h1><p className="hero-subtitle">A shared question library for focused practice, personal progress, and the club’s daily challenge.</p></div><div className="hero-index"><span>THE CURRICULUM</span><strong>220</strong><small>INTERVIEW QUESTIONS</small></div></section>
 
       <section className="overview-grid" aria-label="Club and personal overview">
         <article className="overview-card today-card"><div className="card-kicker"><span className="live-dot"/>QUESTION OF THE DAY <span className="card-count">01</span></div>
@@ -434,30 +589,34 @@ function App() {
         <QuestionActionsGuide/>
         <div className="question-list">{visibleQuestions.length ? visibleQuestions.map((question) => <QuestionRow key={question.id} question={question} solved={Boolean(progress[question.id])} solvedAt={progress[question.id]} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>) : <div className="no-results"><span>⌕</span><strong>No questions match those filters.</strong><p>Try a different topic, level, or keyword.</p><button onClick={clearFilters}>Reset filters</button></div>}</div>
       </section>}
-      <footer className="site-footer"><span>DSAvation · ABES technical club</span><span>220 interview questions · curated from Striver and NeetCode</span></footer>
+      <footer className="site-footer"><span>DSAvation · ABES Technovation Club Website</span><span>220 interview questions · curated from Striver and NeetCode</span></footer>
     </main>}
 
     {view === 'progress' && <main className="content-shell page-content">
-      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>PRIVATE WORKSPACE</div><h1>My progress<span>.</span></h1><p>Only your manual checkmarks appear here. They do not affect club points or standings.</p></div><div className="metric-card"><strong>{solvedCount}</strong><span>QUESTIONS TRACKED</span></div></div>
-      {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Your progress is private to your account.</h2><p>Sign in to keep a dated record of questions you have solved.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <><div className="progress-summary"><article><span>COMPLETED</span><strong>{solvedCount}<small> / 220</small></strong></article><article><span>CURRICULUM COVERED</span><strong>{Math.round(solvedCount / 220 * 100)}<small>%</small></strong></article><article><span>DAILY PRACTICE</span><strong>{new Set(Object.values(progress).map((value) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))).size}<small> sessions</small></strong></article><article><span>PERSONAL STREAK</span><strong>{personalStreak.current}<small> days</small></strong><small className="streak-best">Best: {personalStreak.best} days · checkmarks only</small></article><article><span>SAVED FOR REVIEW</span><strong>{bookmarks.length}<small> questions</small></strong></article></div><div className="section-heading compact"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR COMPLETIONS</div><h2>{solvedCount ? 'Recently tracked' : 'A clean slate'}</h2></div><button className="button button-quiet" onClick={() => { navigate('general'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Browse questions <Icon name="arrow" size={14}/></button></div>{solvedCount ? <><QuestionActionsGuide/><div className="question-list">{Object.entries(progress).sort((a, b) => new Date(b[1]) - new Date(a[1])).map(([id, solvedAt]) => byId.get(Number(id)) && ({ question: byId.get(Number(id)), solvedAt })).filter(Boolean).map(({ question, solvedAt }) => <QuestionRow key={question.id} question={question} solved={true} solvedAt={solvedAt} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>)}</div></> : <div className="empty-panel"><span>01</span><h2>Your first question starts the record.</h2><p>Use the personal checkmark in the question library when you finish a problem. Club challenge submissions are tracked separately.</p><button className="button button-dark" onClick={() => navigate('general')}>Browse the library <Icon name="arrow" size={14}/></button></div>}</>}
+      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>PERSONAL ACCOUNT</div><h1>Account<span>.</span></h1><p>Update your member details and review your private DSA progress. Personal checkmarks never affect club points.</p></div><div className="metric-card"><strong>{solvedCount}</strong><span>QUESTIONS TRACKED</span></div></div>
+      {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Your account and progress are private.</h2><p>Sign in to update your member details and keep a dated record of solved questions.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <><section className="panel account-settings"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>MEMBER DETAILS</div><h2>Your profile</h2></div>{account.githubVerified ? <Pill tone="green">GitHub verified</Pill> : <Pill tone="amber">GitHub not verified</Pill>}</div><form className="account-form" key={account.id} onSubmit={saveProfile}><label>FULL NAME<input name="name" defaultValue={account.name} required minLength="2" maxLength="80" autoComplete="name"/></label><label>DEPARTMENT<input name="department" defaultValue={account.department} required minLength="2" maxLength="80"/></label><label>GITHUB USERNAME<input name="githubUsername" defaultValue={account.githubUsername} required pattern="[A-Za-z0-9-]{1,39}"/></label><label>LEETCODE USERNAME<input name="leetcodeUsername" defaultValue={account.leetcodeUsername} required pattern="[A-Za-z0-9_-]{1,40}"/></label><label>YEAR OF STUDY<select name="studyYear" defaultValue={account.studyYear} required><option value="first-year">First year</option><option value="second-year">Second year</option><option value="third-year">Third year</option><option value="fourth-year">Fourth year</option><option value="passed">Passed out</option></select></label><div className="account-form-actions"><button className="button button-dark" disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save account details'} <Icon name="arrow" size={14}/></button>{!account.githubVerified && <button className="button button-quiet" type="button" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/>Verify GitHub username</button>}</div></form></section><div className="progress-summary"><article><span>COMPLETED</span><strong>{solvedCount}<small> / 220</small></strong></article><article><span>CURRICULUM COVERED</span><strong>{Math.round(solvedCount / 220 * 100)}<small>%</small></strong></article><article><span>DAILY PRACTICE</span><strong>{new Set(Object.values(progress).map((value) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))).size}<small> sessions</small></strong></article><article><span>PERSONAL STREAK</span><strong>{personalStreak.current}<small> days</small></strong><small className="streak-best">Best: {personalStreak.best} days · checkmarks only</small></article><article><span>SAVED FOR REVIEW</span><strong>{bookmarks.length}<small> questions</small></strong></article></div><div className="section-heading compact"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR COMPLETIONS</div><h2>{solvedCount ? 'Recently tracked' : 'A clean slate'}</h2></div><button className="button button-quiet" onClick={() => { navigate('general'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Browse questions <Icon name="arrow" size={14}/></button></div>{solvedCount ? <><QuestionActionsGuide/><div className="question-list">{Object.entries(progress).sort((a, b) => new Date(b[1]) - new Date(a[1])).map(([id, solvedAt]) => byId.get(Number(id)) && ({ question: byId.get(Number(id)), solvedAt })).filter(Boolean).map(({ question, solvedAt }) => <QuestionRow key={question.id} question={question} solved={true} solvedAt={solvedAt} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>)}</div></> : <div className="empty-panel"><span>01</span><h2>Your first question starts the record.</h2><p>Use the personal checkmark in the question library when you finish a problem. Club challenge submissions are tracked separately.</p><button className="button button-dark" onClick={() => navigate('general')}>Browse the library <Icon name="arrow" size={14}/></button></div>}</>}
     </main>}
 
     {view === 'dashboard' && isAdmin && <main className="content-shell page-content dashboard-page">
-      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ADMINISTRATION</div><h1>Member dashboard<span>.</span></h1><p>Review new accounts, manage access, and keep the club roster current.</p></div><div className="metric-card"><strong>{pendingMembers.length}</strong><span>WAITING FOR APPROVAL</span></div></div>
+      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ADMINISTRATION</div><h1>Member dashboard<span>.</span></h1><p>Review access, adjust award points, generate reset links, and inspect the admin activity log.</p></div><div className="metric-card"><strong>{memberCounts.pending}</strong><span>WAITING FOR APPROVAL</span></div></div>
       <div className="approval-notice"><Icon name="lock" size={17}/><p>Email addresses are checked for the <strong>@abes.ac.in</strong> format, but no verification email is sent. Confirm a member’s identity through the club before approving access.</p></div>
       <section className="panel dashboard-members-panel">
-        <div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ACCOUNT ACCESS</div><h2>Club accounts <span className="count-badge">{members.length}</span></h2></div><button className="button button-quiet refresh-members" onClick={() => api('/admin/members').then((result) => setMembers(result.members || [])).catch((error) => setNotice(error.message))}>Refresh</button></div>
-        <div className="member-dashboard-toolbar"><div className="member-filter-tabs" role="tablist" aria-label="Filter member accounts">{[['pending', `Pending · ${pendingMembers.length}`], ['approved', `Approved · ${approvedMembers.length}`], ['all', `All · ${members.length}`]].map(([key, label]) => <button key={key} role="tab" aria-selected={memberFilter === key} className={memberFilter === key ? 'selected' : ''} onClick={() => setMemberFilter(key)}>{label}</button>)}</div><label className="member-search"><Icon name="search" size={15}/><input value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} placeholder="Search name, email, department"/></label></div>
+        <div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ACCOUNT ACCESS</div><h2>Club accounts <span className="count-badge">{membersPagination.total}</span></h2></div><button className="button button-quiet refresh-members" onClick={() => refreshMembers(membersPagination.page)}>Refresh</button></div>
+        <div className="member-dashboard-toolbar"><div className="member-filter-tabs" role="tablist" aria-label="Filter member accounts">{[['pending', `Pending · ${memberCounts.pending}`], ['approved', `Approved · ${memberCounts.approved}`], ['all', `All · ${membersPagination.total}`]].map(([key, label]) => <button key={key} role="tab" aria-selected={memberFilter === key} className={memberFilter === key ? 'selected' : ''} onClick={() => { setMemberFilter(key); refreshMembers(1, key, memberQuery); }}>{label}</button>)}</div><label className="member-search"><Icon name="search" size={15}/><input value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') refreshMembers(1, memberFilter, event.currentTarget.value); }} placeholder="Search name, email, department"/></label><button className="button button-quiet" onClick={() => refreshMembers(1, memberFilter, memberQuery)}>Search</button></div>
         {displayedMembers.length ? <div className="dashboard-member-list">{displayedMembers.map((member) => <article className="dashboard-member-row" key={member.id}>
           <span className="avatar">{initials(member.name)}</span>
-          <div className="dashboard-member-identity"><div className="member-name-line"><strong>{member.name}</strong><Pill tone={member.approvalStatus === 'approved' ? 'green' : 'amber'}>{member.approvalStatus === 'approved' ? 'Approved' : 'Pending'}</Pill></div><span>{member.email}</span><small>{member.department} · {studyYearLabel(member.studyYear)} · @{member.githubUsername || 'No GitHub username'}</small><small>Joined {member.createdAt ? new Date(member.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'date unavailable'}</small></div>
+          <div className="dashboard-member-identity"><div className="member-name-line"><strong>{member.name}</strong><Pill tone={member.approvalStatus === 'approved' ? 'green' : 'amber'}>{member.approvalStatus === 'approved' ? 'Approved' : 'Pending'}</Pill></div><span>{member.email}</span><small>{member.department} · {studyYearLabel(member.studyYear)} · GitHub @{member.githubUsername || '—'} · LeetCode @{member.leetcodeUsername || '—'}</small><small>Joined {member.createdAt ? new Date(member.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'date unavailable'}</small></div>
           <div className="dashboard-member-actions">
             <select aria-label={`Role for ${member.name}`} value={member.role} disabled={memberBusy === member.id || member.id === account.id || member.approvalStatus !== 'approved'} onChange={(event) => updateRole(member, event.target.value)}><option value="member">Member</option><option value="lead">Club lead</option><option value="admin">Admin</option></select>
+            <button className="button button-quiet" disabled={memberBusy === member.id} onClick={() => generateResetLink(member)}>Generate reset link</button>
             {member.approvalStatus === 'approved' ? <button className="button button-quiet" disabled={memberBusy === member.id || member.id === account.id} onClick={() => setMemberApproval(member, 'pending')}>De-approve</button> : <button className="button button-green" disabled={memberBusy === member.id} onClick={() => setMemberApproval(member, 'approved')}>{memberBusy === member.id ? 'Saving…' : 'Approve account'} <Icon name="check" size={14}/></button>}
             <button className="button button-danger" disabled={memberBusy === member.id || member.id === account.id} onClick={() => deleteMember(member)}>Delete</button>
           </div>
         </article>)}</div> : <div className="dashboard-empty"><span>{memberFilter === 'pending' && !memberQuery ? '✓' : '⌕'}</span><h2>{memberFilter === 'pending' && !memberQuery ? 'No accounts are waiting.' : 'No accounts match this filter.'}</h2><p>{memberFilter === 'pending' && !memberQuery ? 'New signups will appear here for review.' : 'Try another name, email, or status filter.'}</p></div>}
+        {membersPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={membersPagination.page <= 1} onClick={() => refreshMembers(membersPagination.page - 1)}>Previous</button><span>Page {membersPagination.page} of {membersPagination.totalPages} · {membersPagination.total} accounts</span><button className="button button-quiet" disabled={membersPagination.page >= membersPagination.totalPages} onClick={() => refreshMembers(membersPagination.page + 1)}>Next</button></div>}
       </section>
+      <section className="panel dashboard-activity-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>SCORING CONTROLS</div><h2>Accepted submissions</h2></div></div><p className="leaderboard-note">New verified submissions receive one point automatically. Set a lower value to deduct points; every adjustment is added to the activity log.</p>{scoredSubmissions.length ? <div className="review-list">{scoredSubmissions.map((item) => <article className="review-item score-adjustment-row" key={item.id}><div><strong>{item.member?.name || 'Member'} <span>· {item.assignment?.dateKey} · LC {item.assignment?.questionId}</span></strong><p>{item.solutionPath || item.commitUrl}</p><a href={item.commitUrl} target="_blank" rel="noreferrer">Open verified commit <Icon name="external" size={13}/></a></div><label className="points-control">POINTS<select aria-label={`Points for ${item.member?.name || 'member'}`} value={item.points ?? 1} disabled={memberBusy === item.id} onChange={(event) => adjustPoints(item, event.target.value)}>{Array.from({ length: 11 }, (_, value) => <option value={value} key={value}>{value} point{value === 1 ? '' : 's'}</option>)}</select></label></article>)}</div> : <div className="soft-empty">No verified submissions have been scored yet.</div>}{scoredPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={scoredPagination.page <= 1} onClick={() => refreshScoredSubmissions(scoredPagination.page - 1)}>Previous</button><span>Page {scoredPagination.page} of {scoredPagination.totalPages}</span><button className="button button-quiet" disabled={scoredPagination.page >= scoredPagination.totalPages} onClick={() => refreshScoredSubmissions(scoredPagination.page + 1)}>Next</button></div>}</section>
+      <section className="panel dashboard-activity-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ADMIN AUDIT</div><h2>Admin activity <span className="count-badge">{activityPagination.total}</span></h2></div><button className="button button-quiet" onClick={() => refreshActivity(activityPagination.page)}>Refresh</button></div>{activity.length ? <div className="admin-activity-list">{activity.map((entry) => <article className="admin-activity-row" key={entry.id}><div><strong>{entry.actorName} <small>{entry.actorRole}</small></strong><span>{entry.action.replaceAll('_', ' ')} · {entry.targetLabel || 'account action'}</span>{Object.keys(entry.details || {}).length > 0 && <code>{JSON.stringify(entry.details)}</code>}</div><time dateTime={new Date(entry.createdAt).toISOString()}>{new Date(entry.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</time></article>)}</div> : <div className="soft-empty">Admin actions will appear here as they happen.</div>}{activityPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={activityPagination.page <= 1} onClick={() => refreshActivity(activityPagination.page - 1)}>Previous</button><span>Page {activityPagination.page} of {activityPagination.totalPages}</span><button className="button button-quiet" disabled={activityPagination.page >= activityPagination.totalPages} onClick={() => refreshActivity(activityPagination.page + 1)}>Next</button></div>}</section>
       <footer className="site-footer"><span>DSAvation · account administration</span><span>De-approved accounts lose access immediately</span></footer>
     </main>}
 
@@ -466,37 +625,39 @@ function App() {
       {account ? <div className="club-grid">
         <div className="club-main-column">
           <section className="panel qotd-panel"><div className="panel-header"><div><div className="eyebrow"><span className="eyebrow-line"/>TODAY'S ASSIGNMENT</div><h2>{assignedQuestion ? assignedQuestion.title : 'No assignment today'}</h2></div>{assignedQuestion && <Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill>}</div>
-            {assignedQuestion ? <><div className="assignment-meta"><span>{club.assignment.dateKey}</span><span>{assignedQuestion.topic}</span><span>LeetCode #{assignedQuestion.id}</span><span>{assignedQuestion.pattern}</span></div><p className="assignment-prompt">Club credit is for this published assignment only. The API checks the active date, your linked GitHub identity, the configured club repository, and the question path in your commit.</p><div className="assignment-counts"><div><strong>{club.submittedCount}</strong><span>SUBMITTED</span></div><div><strong>{club.acceptedCount}</strong><span>ACCEPTED</span></div><a href={`https://leetcode.com/problems/${assignedQuestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`} target="_blank" rel="noreferrer">Open problem <Icon name="external" size={14}/></a></div>
-              {!account ? <div className="inline-callout"><Icon name="lock" size={16}/><span>Sign in with an approved ABES account to submit a club solution.</span><button onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div> : !account.githubVerified ? <div className="inline-callout"><Icon name="github" size={16}/><span>Link the GitHub username you entered during signup before submitting.</span><button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button></div> : submissions.some((item) => item.assignment?.dateKey === club.assignment.dateKey) ? <div className="inline-callout submitted"><Icon name="check" size={16}/><span>Your submission for today is {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey)?.status}.</span></div> : <form className="submission-form" onSubmit={submitClubSolution}><div className="submission-form-heading"><label htmlFor="commit-url">GITHUB COMMIT URL</label><button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}><Icon name="info" size={15}/></button></div>{submissionHelpOpen && <div className="submission-help" id="submission-help"><strong>Before you submit</strong><ol><li>Commit today’s published question under <code>submissions/{club.assignment.dateKey}/{account.githubUsername.toLowerCase()}/lc-{assignedQuestion.id}/</code>.</li><li>Push to <code>submissions/{account.githubUsername.toLowerCase()}</code>. Your linked GitHub account must author the commit and push the branch.</li><li>Open that commit on GitHub and copy its page URL. It should look like <code>https://github.com/OWNER/REPO/commit/FULL_SHA</code>.</li></ol><p>The commit date must be today in India time. Only one submission is allowed per member today.</p></div>}<div className="submission-input-row"><input id="commit-url" type="url" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder="https://github.com/OWNER/REPO/commit/…"/><button className="button button-dark" disabled={submissionBusy}>{submissionBusy ? 'Checking…' : 'Submit for review'} <Icon name="arrow" size={14}/></button></div><small>One attempt per member today. Your solution file must be under <code>submissions/{club.assignment.dateKey}/{account.githubUsername.toLowerCase()}/lc-{assignedQuestion.id}/</code>.</small></form>}</> : <div className="no-assignment-note"><p>A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from punctuality calculations.</p></div>}
+            {assignedQuestion ? <><div className="assignment-meta"><span>{club.assignment.dateKey}</span><span>{assignedQuestion.topic}</span><span>LeetCode #{assignedQuestion.id}</span><span>{assignedQuestion.pattern}</span></div><p className="assignment-prompt">Use a public repository you own. Add a new solution file at <code>{assignedQuestion.id}/YOUR_SOLUTION_FILE</code> during this assignment day. GitHub verifies your linked identity, file path, and commit date; a valid submission earns a point automatically.</p><div className="assignment-counts"><div><strong>{club.submittedCount}</strong><span>SUBMITTED</span></div><div><strong>{club.acceptedCount}</strong><span>ACCEPTED</span></div><a href={`https://leetcode.com/problems/${assignedQuestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`} target="_blank" rel="noreferrer">Open problem <Icon name="external" size={14}/></a></div>
+              {!account ? <div className="inline-callout"><Icon name="lock" size={16}/><span>Sign in with an approved ABES account to submit a club solution.</span><button onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div> : !account.githubVerified ? <div className="inline-callout"><Icon name="github" size={16}/><span>Link the GitHub username you entered during signup before submitting.</span><button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button></div> : submissions.some((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated') ? <div className="inline-callout submitted"><Icon name="check" size={16}/><span>Your submission for today is {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.status} · {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.points ?? 0} point(s).</span></div> : <form className="submission-form" onSubmit={submitClubSolution}><div className="submission-form-heading"><label htmlFor="commit-url">GITHUB COMMIT URL</label><button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}><Icon name="info" size={15}/></button></div>{submissionHelpOpen && <div className="submission-help" id="submission-help"><strong>Before you submit</strong><ol><li>Create or use a public repository that you own under <code>@{account.githubUsername}</code>.</li><li>Add a new solution file directly inside folder <code>{assignedQuestion.id}/</code>, for example <code>{assignedQuestion.id}/Solution.cpp</code>.</li><li>Commit and push it during today’s assignment date. Both GitHub author and committer must match your linked account.</li><li>Open the commit in GitHub and paste its URL, for example <code>https://github.com/{account.githubUsername}/YOUR-REPO/commit/FULL_SHA</code>.</li></ol><p>Only the first valid submission for today earns a point. Admins can adjust points if needed.</p></div>}<div className="submission-input-row"><input id="commit-url" type="url" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder={`https://github.com/${account.githubUsername}/REPO/commit/FULL_SHA`}/><button className="button button-dark" disabled={submissionBusy}>{submissionBusy ? 'Verifying…' : 'Verify and submit'} <Icon name="arrow" size={14}/></button></div><small>One new file only: <code>{assignedQuestion.id}/filename.ext</code>. The linked GitHub account must own the repository.</small></form>}</> : <div className="no-assignment-note"><p>A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from punctuality calculations.</p></div>}
           </section>
 
           {account && <section className="panel profile-panel"><div className="profile-head"><span className="avatar large">{initials(account.name)}</span><div><h3>{account.name}</h3><p>{account.department} <span>·</span> @{account.githubUsername || 'GitHub not linked'}</p></div><Pill tone={account.role === 'member' ? 'neutral' : 'green'}>{account.role}</Pill></div><label className="privacy-toggle"><input type="checkbox" checked={account.showPublic} disabled={publicPreferenceBusy} onChange={(event) => updatePublicPreference(event.target.checked)}/><span>Show my full name and department publicly; otherwise use only my GitHub username.</span></label></section>}
 
-          {isLeader && <section className="panel leader-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>LEAD TOOLS</div><h2>Publish a Question of the Day</h2></div><Pill tone="green">{account.role}</Pill></div><form className="publish-form" onSubmit={publishAssignment}><label><span>ASSIGNMENT DATE <i>Asia/Kolkata</i></span><input type="date" value={assignmentDate} min={localDay()} onChange={(event) => setAssignmentDate(event.target.value)} required/></label><label className="wide"><span>QUESTION</span><select value={assignmentQuestion} onChange={(event) => setAssignmentQuestion(event.target.value)} required><option value="">Choose from the 220 question curriculum</option>{questions.map((question) => <option key={question.id} value={question.id}>Day {String(question.day).padStart(3, '0')} · LC {question.id} · {question.title}</option>)}</select></label><button className="button button-green" disabled={assignmentBusy || !assignmentQuestion || history.some((item) => item.dateKey === assignmentDate)}>{assignmentBusy ? 'Publishing…' : 'Publish assignment'} <Icon name="arrow" size={14}/></button></form><p className="helper-copy">{history.some((item) => item.dateKey === assignmentDate) ? 'A question is already published for this date.' : 'Publish at most one question per date. Leave holidays and breaks unassigned.'}</p></section>}
+          {isLeader && <section className="panel leader-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>LEAD TOOLS</div><h2>{editingTodayAssignment ? 'Change today’s question' : 'Publish a Question of the Day'}</h2></div><Pill tone="green">{account.role}</Pill></div><form className="publish-form" onSubmit={publishAssignment}><label><span>ASSIGNMENT DATE <i>Asia/Kolkata</i></span><input type="date" value={assignmentDate} min={localDay()} onChange={(event) => setAssignmentDate(event.target.value)} required/></label><label className="wide"><span>QUESTION</span><select value={assignmentQuestion} onChange={(event) => setAssignmentQuestion(event.target.value)} required><option value="">Choose from the 220 question curriculum</option>{questions.map((question) => <option key={question.id} value={question.id}>Day {String(question.day).padStart(3, '0')} · LC {question.id} · {question.title}</option>)}</select></label><button className="button button-green" disabled={assignmentBusy || !assignmentQuestion || (editingTodayAssignment && assignmentDate === localDay() && Number(assignmentQuestion) === Number(club.assignment.questionId)) || (!editingTodayAssignment && history.some((item) => item.dateKey === assignmentDate))}>{assignmentBusy ? 'Saving…' : editingTodayAssignment && assignmentDate === localDay() ? 'Replace today’s question' : 'Publish assignment'} <Icon name="arrow" size={14}/></button></form><p className="helper-copy">{editingTodayAssignment && assignmentDate === localDay() ? 'Changing today’s question invalidates existing submissions, removes their points, and lets members submit the corrected question.' : history.some((item) => item.dateKey === assignmentDate) ? 'A question is already published for this date.' : 'Publish at most one question per date. Leave holidays and breaks unassigned.'}</p></section>}
 
-          {isLeader && <section className="panel review-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>MODERATION</div><h2>Submissions to review <span className="count-badge">{pending.length}</span></h2></div></div>{pending.length ? <div className="review-list">{pending.map((item) => <article className="review-item" key={item.id}><div><strong>{item.member?.name || 'Member'} <span>· {item.member?.department}</span></strong><p>{item.assignment?.dateKey} · LC {item.assignment?.questionId} · {item.assignment?.question}</p><div className="review-evidence">{item.verifiedPusher ? <Pill tone="green">PUSH VERIFIED</Pill> : <Pill tone="amber">COMMIT LINK ONLY</Pill>}<a href={item.commitUrl} target="_blank" rel="noreferrer">Review commit <Icon name="external" size={13}/></a></div></div><div className="review-actions"><button className="button button-quiet" disabled={memberBusy === item.id} onClick={() => review(item, 'rejected')}>Decline</button><button className="button button-green" disabled={memberBusy === item.id} onClick={() => review(item, 'accepted')}>Accept <Icon name="check" size={14}/></button></div></article>)}</div> : <div className="soft-empty">No submissions are waiting for review.</div>}</section>}
+          {isLeader && <section className="panel review-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>MODERATION</div><h2>Submissions to review <span className="count-badge">{pendingPagination.total}</span></h2></div></div>{pending.length ? <div className="review-list">{pending.map((item) => <article className="review-item" key={item.id}><div><strong>{item.member?.name || 'Member'} <span>· {item.member?.department}</span></strong><p>{item.assignment?.dateKey} · LC {item.assignment?.questionId} · {item.assignment?.question}</p><div className="review-evidence">{item.verifiedPusher ? <Pill tone="green">PUSH VERIFIED</Pill> : <Pill tone="amber">COMMIT LINK ONLY</Pill>}<a href={item.commitUrl} target="_blank" rel="noreferrer">Review commit <Icon name="external" size={13}/></a></div></div><div className="review-actions"><button className="button button-quiet" disabled={memberBusy === item.id} onClick={() => review(item, 'rejected')}>Decline</button><button className="button button-green" disabled={memberBusy === item.id} onClick={() => review(item, 'accepted')}>Accept <Icon name="check" size={14}/></button></div></article>)}</div> : <div className="soft-empty">No submissions are waiting for review.</div>}{pendingPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={pendingPagination.page <= 1} onClick={() => refreshPendingSubmissions(pendingPagination.page - 1)}>Previous</button><span>Page {pendingPagination.page} of {pendingPagination.totalPages}</span><button className="button button-quiet" disabled={pendingPagination.page >= pendingPagination.totalPages} onClick={() => refreshPendingSubmissions(pendingPagination.page + 1)}>Next</button></div>}</section>}
 
         </div>
 
-        <aside className="club-side-column"><section className="panel leaderboard-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>CLUB STANDINGS</div><h2><Icon name="trophy" size={18}/> Leaderboard</h2></div><span className="live-tag">LIVE</span></div><p className="leaderboard-note">One point for each accepted Question of the Day. Holidays with no assignment do not count.</p>{leaderboard.length ? <div className="leaderboard-list">{leaderboard.slice(0, 12).map((person, index) => <div className="leaderboard-row" key={person.githubUsername}><span className={`rank ${index < 3 ? `rank-${index + 1}` : ''}`}>{String(index + 1).padStart(2, '0')}</span><span className="avatar">{initials(person.name)}</span><div className="leader-person"><strong>{person.name}</strong><span>{person.department} · {person.punctuality}% punctuality</span></div><strong className="leader-score">{person.points}<small> pts</small></strong></div>)}</div> : <div className="soft-empty">No reviewed club submissions yet. Be first to get on the board.</div>}</section>
-          <section className="panel history-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ASSIGNMENT LOG</div><h2>Published days</h2></div><span className="micro-count">{history.length}</span></div>{history.length ? <div className="history-list">{history.slice(0, 8).map((item) => { const question = byId.get(Number(item.questionId)); return <div className="history-row" key={item.id}><span className="history-date">{item.dateKey.slice(5)}</span><span>{question?.title || `LeetCode #${item.questionId}`}</span></div>; })}</div> : <div className="soft-empty">No questions have been assigned yet.</div>}</section>
+        <aside className="club-side-column"><section className="panel leaderboard-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>CLUB STANDINGS</div><h2><Icon name="trophy" size={18}/> Leaderboard</h2></div><span className="live-tag">LIVE</span></div><p className="leaderboard-note">Verified submissions earn one point by default. Admin point adjustments are recorded in the activity log.</p>{leaderboard.length ? <><div className="leaderboard-list">{leaderboard.map((person, index) => { const rank = (leaderboardPagination.page - 1) * leaderboardPagination.pageSize + index + 1; return <div className="leaderboard-row" key={person.githubUsername}><span className={`rank ${rank <= 3 ? `rank-${rank}` : ''}`}>{String(rank).padStart(2, '0')}</span><span className="avatar">{initials(person.name)}</span><div className="leader-person"><strong>{person.name}</strong><span>{person.department} · {person.punctuality}% punctuality</span></div><strong className="leader-score">{person.points}<small> pts</small></strong></div>; })}</div><div className="pagination-controls" aria-label="Leaderboard pages"><button className="button button-quiet" disabled={leaderboardPagination.page <= 1} onClick={() => loadLeaderboardPage(leaderboardPagination.page - 1)}>Previous</button><span>Page {leaderboardPagination.page} of {leaderboardPagination.totalPages} · {leaderboardPagination.total} members</span><button className="button button-quiet" disabled={leaderboardPagination.page >= leaderboardPagination.totalPages} onClick={() => loadLeaderboardPage(leaderboardPagination.page + 1)}>Next</button></div></> : <div className="soft-empty">No scored club submissions yet. Be first to get on the board.</div>}</section>
+          <section className="panel history-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ASSIGNMENT LOG</div><h2>Published days</h2></div><span className="micro-count">{historyPagination.total}</span></div>{history.length ? <><div className="history-list">{history.map((item) => { const question = byId.get(Number(item.questionId)); return <div className="history-row" key={item.id}><span className="history-date">{item.dateKey.slice(5)}</span><span>{question?.title || `LeetCode #${item.questionId}`}</span></div>; })}</div><div className="pagination-controls" aria-label="Assignment log pages"><button className="button button-quiet" disabled={historyPagination.page <= 1} onClick={() => loadHistoryPage(historyPagination.page - 1)}>Previous</button><span>Page {historyPagination.page} of {historyPagination.totalPages}</span><button className="button button-quiet" disabled={historyPagination.page >= historyPagination.totalPages} onClick={() => loadHistoryPage(historyPagination.page + 1)}>Next</button></div></> : <div className="soft-empty">No questions have been assigned yet.</div>}</section>
           {submissions.length > 0 && <section className="panel my-submissions"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR CLUB SUBMISSIONS</div><h2>Review history</h2></div></div>{submissions.slice(0, 5).map((item) => <div className="my-submission" key={item.id}><span>{item.assignment?.dateKey} · LC {item.assignment?.questionId}</span><Pill tone={item.status === 'accepted' ? 'green' : item.status === 'rejected' ? 'red' : 'amber'}>{item.status}</Pill></div>)}</section>}
         </aside>
       </div> : <div className="library-locked panel"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Sign in to view club questions and activity.</h2><p>Approved club members can view the current assignment, history, and standings.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div>}
-      <footer className="site-footer"><span>DSAvation · ABES technical club</span><span>Club score comes from reviewed submissions only</span></footer>
+      <footer className="site-footer"><span>DSAvation · ABES Technovation Club Website</span><span>Verified commit links earn points automatically</span></footer>
     </main>}
+
+    {resetLink && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResetLink(null); }}><section className="auth-modal reset-link-modal" role="dialog" aria-modal="true" aria-labelledby="reset-link-title"><button className="modal-close" onClick={() => setResetLink(null)} aria-label="Close">×</button><div className="eyebrow"><span className="eyebrow-line"/>ONE-TIME PASSWORD RESET</div><h2 id="reset-link-title">Reset link for {resetLink.name}<span>.</span></h2><p className="auth-lede">This link expires at {new Date(resetLink.expiresAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} India time and works once. Share it directly with the member. The server stores only a hash.</p><label className="reset-link-field">RESET URL<input value={resetLink.url} readOnly onFocus={(event) => event.target.select()}/></label><button className="button button-dark auth-submit" onClick={copyResetLink}>Copy one-time link <Icon name="arrow" size={14}/></button></section></div>}
 
     {authOpen && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setAuthOpen(false); }}><section className="auth-modal" role="dialog" aria-modal="true" aria-labelledby="auth-title"><button className="modal-close" onClick={() => setAuthOpen(false)} aria-label="Close">×</button><div className="eyebrow"><span className="eyebrow-line"/>DSAVATION MEMBER ACCESS</div><h2 id="auth-title">{authMode === 'signup' ? 'Create your account' : 'Welcome back'}<span>.</span></h2><p className="auth-lede">{authMode === 'signup' ? 'Use your college email to request access to the private tracker and club challenge. An administrator must approve your account.' : 'Sign in to save private progress and submit to the club challenge.'}</p>
         <form onSubmit={submitAuth} className="auth-form">
-          {authMode === 'signup' && <><label>FULL NAME<input name="name" autoComplete="name" required minLength="2" maxLength="80" placeholder="Your name"/></label><label>DEPARTMENT<input name="department" required maxLength="80" placeholder="e.g. Computer Science"/></label><label>YEAR OF STUDY<select name="studyYear" required defaultValue=""><option value="" disabled>Select your current year</option><option value="first-year">First year</option><option value="second-year">Second year</option><option value="third-year">Third year</option><option value="fourth-year">Fourth year</option><option value="passed">Passed out</option></select></label><label>ABES EMAIL<input name="email" type="email" autoComplete="email" required pattern=".+@abes\.ac\.in" title="Use your @abes.ac.in email" placeholder="you@abes.ac.in"/></label><label>GITHUB USERNAME<input name="githubUsername" required pattern="[A-Za-z0-9-]{1,39}" placeholder="your-github-handle"/></label><label>PASSWORD<input name="password" type="password" autoComplete="new-password" minLength="10" maxLength="128" required placeholder="At least 10 characters"/></label><label className="check-label"><input type="checkbox" name="showPublic"/><span>Show my full name and department publicly for accepted club submissions. If unchecked, the public board uses my GitHub username.</span></label></>}
+          {authMode === 'signup' && <><label>FULL NAME<input name="name" autoComplete="name" required minLength="2" maxLength="80" placeholder="Your name"/></label><label>DEPARTMENT<input name="department" required maxLength="80" placeholder="e.g. Computer Science"/></label><label>YEAR OF STUDY<select name="studyYear" required defaultValue=""><option value="" disabled>Select your current year</option><option value="first-year">First year</option><option value="second-year">Second year</option><option value="third-year">Third year</option><option value="fourth-year">Fourth year</option><option value="passed">Passed out</option></select></label><label>ABES EMAIL<input name="email" type="email" autoComplete="email" required pattern=".+@abes\.ac\.in" title="Use your @abes.ac.in email" placeholder="you@abes.ac.in"/></label><label>GITHUB USERNAME<input name="githubUsername" required pattern="[A-Za-z0-9-]{1,39}" placeholder="your-github-handle"/></label><label>LEETCODE USERNAME<input name="leetcodeUsername" required pattern="[A-Za-z0-9_-]{1,40}" placeholder="your-leetcode-id"/></label><label>PASSWORD<input name="password" type="password" autoComplete="new-password" minLength="10" maxLength="128" required placeholder="At least 10 characters"/></label><label className="check-label"><input type="checkbox" name="showPublic"/><span>Show my full name and department publicly for accepted club submissions. If unchecked, the public board uses my GitHub username.</span></label></>}
           {authMode === 'login' && <><label>ABES EMAIL<input name="email" type="email" autoComplete="email" required pattern=".+@abes\.ac\.in" placeholder="you@abes.ac.in"/></label><label>PASSWORD<input name="password" type="password" autoComplete="current-password" required placeholder="Your password"/></label></>}
           {authError && <p className="form-error" role="alert">{authError}</p>}
           <button className="button button-dark auth-submit" disabled={authBusy}>{authBusy ? 'Please wait…' : authMode === 'signup' ? 'Request account' : 'Sign in'} <Icon name="arrow" size={14}/></button>
         </form>
-        <div className="auth-switch">{authMode === 'signup' ? 'Already a member?' : 'New to DSAvation?'} <button onClick={() => { setAuthMode(authMode === 'signup' ? 'login' : 'signup'); setAuthError(''); }}>{authMode === 'signup' ? 'Sign in' : 'Create account'}</button></div>
+        <div className="auth-switch">{authMode === 'signup' ? 'Already a member?' : 'New to DSAvation?'} <button onClick={() => { setAuthMode(authMode === 'signup' ? 'login' : 'signup'); setAuthError(''); }}>{authMode === 'signup' ? 'Sign in' : 'Create account'}</button>{authMode === 'login' && <><span> · </span><button onClick={() => setAuthError('Ask an administrator to generate a one-time password reset link for your account.')}>Forgot password?</button></>}</div>
         <p className="auth-privacy"><Icon name="lock" size={13}/> Personal checkmarks are private and never count toward the club scoreboard.</p>
       </section></div>}
-    <div className={`mobile-bottom-nav ${isAdmin ? 'admin-nav' : ''}`}><button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><Icon name="book" size={17}/>General</button><button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={17}/>Progress</button><button className={view === 'club' ? 'active' : ''} onClick={() => navigate('club')}><Icon name="users" size={17}/>Club</button>{isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={17}/>Admin</button>}</div>
+    <div className={`mobile-bottom-nav ${isAdmin ? 'admin-nav' : ''}`}><button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><Icon name="book" size={17}/>General</button><button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={17}/>Account</button><button className={view === 'club' ? 'active' : ''} onClick={() => navigate('club')}><Icon name="users" size={17}/>Club</button>{isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={17}/>Admin</button>}</div>
   </div>;
 }
 
