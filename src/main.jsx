@@ -126,7 +126,7 @@ function QuestionActionsGuide() {
 
 function QuestionRow({ question, solved, solvedAt, bookmarked, onSolve, onBookmark }) {
   const [expanded, setExpanded] = useState(false);
-  return <article className={`question-card ${solved ? 'is-solved' : ''} ${expanded ? 'is-expanded' : ''}`}>
+  return <article className={`question-card fish-card ${solved ? 'is-solved' : ''} ${expanded ? 'is-expanded' : ''}`}>
     <div className="question-main">
       <span className="day-number">{String(question.day).padStart(3, '0')}</span>
       <div className="question-copy">

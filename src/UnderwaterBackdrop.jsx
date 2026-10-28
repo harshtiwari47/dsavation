@@ -3,22 +3,68 @@ import React from 'react';
 /**
  * Underwater Atmosphere Backdrop
  * Features:
- * - Serene oceanic gradient depth
+ * - Cohesive oceanic depth with soft ambient caustics
+ * - School of agile oceanic fish swimming with carangiform caudal tail flutter
  * - Majestic swimming blue whale with gentle tail and flipper undulation
  * - Translucent bioluminescent jellyfish with rhythmic bell contractions
- * - Ambient rising micro-bubbles and sunray caustics filtering from the surface
+ * - Soft, feathered micro-bubbles and surface sunray caustics
  * - 100% GPU-accelerated and strictly non-interactive (pointer-events: none)
  */
+
+function SchoolFish({ className, delay, size = 48 }) {
+  return (
+    <div className={`school-fish ${className}`} style={{ animationDelay: delay, width: `${size}px` }}>
+      <svg viewBox="0 0 100 42" fill="none" className="school-fish-svg" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="fishGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+            <stop offset="0%" stopColor="var(--fish-head, rgba(56, 189, 248, 0.75))" />
+            <stop offset="55%" stopColor="var(--fish-body, rgba(14, 165, 233, 0.58))" />
+            <stop offset="100%" stopColor="var(--fish-tail, rgba(3, 105, 161, 0.42))" />
+          </linearGradient>
+        </defs>
+        {/* Streamlined Hydrodynamic Body */}
+        <path
+          className="fish-torso"
+          d="M 6,21 C 18,10 45,9 68,16 C 76,18 84,19 88,21 C 84,23 76,24 68,26 C 45,33 18,32 6,21 Z"
+          fill="url(#fishGrad)"
+        />
+        {/* Caudal Tail Fin (Carangiform Propulsive Flutter) */}
+        <path
+          className="fish-caudal"
+          d="M 86,21 C 91,12 96,6 99,5 C 96,14 95,18 96,21 C 95,24 96,28 99,37 C 96,36 91,30 86,21 Z"
+          fill="url(#fishGrad)"
+        />
+        {/* Dorsal Fin */}
+        <path d="M 42,10 C 52,5 62,6 64,13 Z" fill="url(#fishGrad)" opacity="0.85" />
+        {/* Pectoral Fin */}
+        <path d="M 30,22 C 38,27 42,32 40,33 C 38,34 32,30 28,24 Z" fill="url(#fishGrad)" opacity="0.9" />
+        {/* Specular Eye */}
+        <circle cx="16" cy="18" r="1.8" fill="rgba(255, 255, 255, 0.95)" />
+        <circle cx="16" cy="18" r="0.9" fill="#021422" />
+      </svg>
+    </div>
+  );
+}
+
 export function UnderwaterBackdrop() {
   return (
     <div className="underwater-backdrop" aria-hidden="true">
       {/* Surface Sunlight Caustic Rays */}
       <div className="underwater-sunrays" />
 
-      {/* Deep Ocean Ambient Light Orbs */}
+      {/* Deep Ocean Soft Ambient Depth Layers (Diffused, zero hard circles) */}
       <div className="underwater-orb orb-abyss-1" />
       <div className="underwater-orb orb-abyss-2" />
       <div className="underwater-orb orb-abyss-3" />
+
+      {/* School of Agile Oceanic Fishes (Carangiform Swarm Motion) */}
+      <div className="fish-school">
+        <SchoolFish className="fish-1" delay="0s" size={56} />
+        <SchoolFish className="fish-2" delay="0.5s" size={46} />
+        <SchoolFish className="fish-3" delay="1.1s" size={50} />
+        <SchoolFish className="fish-4" delay="1.6s" size={42} />
+        <SchoolFish className="fish-5" delay="2.2s" size={48} />
+      </div>
 
       {/* Majestic Blue Whale */}
       <div className="underwater-whale">
@@ -313,7 +359,7 @@ export function UnderwaterBackdrop() {
         </svg>
       </div>
 
-      {/* Floating Micro-bubbles */}
+      {/* Floating Micro-bubbles (Soft specular reflections, zero hard borders) */}
       <div className="underwater-bubble bubble-1" />
       <div className="underwater-bubble bubble-2" />
       <div className="underwater-bubble bubble-3" />
