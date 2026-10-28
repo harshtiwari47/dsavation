@@ -1,367 +1,76 @@
 /* ==========================================================================
-   Modular Atmosphere Architecture: Volumetric Lighting & Multi-Tier Snow
+   Modular Atmosphere Architecture: Thunder Lightning & Crystalline Snow
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   1. Background Ambient Lighting Layer (z-index: 0)
+   1. Thunder & Lightning Atmospheric System (z-index: 2, pointer-events: none)
    -------------------------------------------------------------------------- */
-.atmosphere-lighting-back {
+.thunder-atmosphere {
   position: fixed;
   inset: 0;
-  z-index: 0;
-  pointer-events: none;
-  overflow: hidden;
-  user-select: none;
-  will-change: opacity, filter;
-  animation: atmospheric-light-cycle 32s ease-in-out infinite;
-}
-
-/* Radiant Celestial Sun Source at the Top Canopy */
-.lighting-sun-crown {
-  position: absolute;
-  top: -80px;
-  left: 30%;
-  width: 560px;
-  height: 560px;
-  transform: translateX(-50%);
-  pointer-events: none;
-}
-
-/* Brilliant Sun Core */
-.lighting-sun-crown .sun-core {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 150px;
-  height: 150px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    #ffffff 0%,
-    rgba(255, 255, 255, 0.95) 30%,
-    rgba(186, 230, 253, 0.8) 60%,
-    rgba(56, 189, 248, 0.3) 80%,
-    transparent 100%
-  );
-  box-shadow: 
-    0 0 50px 25px rgba(255, 255, 255, 0.95),
-    0 0 110px 55px rgba(56, 189, 248, 0.65),
-    0 0 190px 90px rgba(14, 165, 233, 0.4);
-  animation: sun-core-pulse 7s ease-in-out infinite alternate;
-}
-
-/* Pulsing Sun Corona Halo */
-.lighting-sun-crown .sun-corona {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 440px;
-  height: 440px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: radial-gradient(
-    circle,
-    rgba(255, 255, 255, 0.7) 0%,
-    rgba(56, 189, 248, 0.45) 40%,
-    rgba(14, 165, 233, 0.22) 65%,
-    transparent 85%
-  );
-  filter: blur(18px);
-  animation: sun-corona-pulse 10s ease-in-out infinite alternate;
-}
-
-/* Rotating Sun Radiance Rays */
-.lighting-sun-crown .sun-radiance {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  width: 650px;
-  height: 650px;
-  transform: translate(-50%, -50%);
-  border-radius: 50%;
-  background: conic-gradient(
-    from 0deg,
-    rgba(255, 255, 255, 0.55) 0deg,
-    transparent 15deg,
-    rgba(56, 189, 248, 0.42) 30deg,
-    transparent 45deg,
-    rgba(255, 255, 255, 0.6) 60deg,
-    transparent 75deg,
-    rgba(186, 230, 253, 0.45) 90deg,
-    transparent 105deg,
-    rgba(255, 255, 255, 0.55) 120deg,
-    transparent 135deg,
-    rgba(56, 189, 248, 0.42) 150deg,
-    transparent 165deg,
-    rgba(255, 255, 255, 0.6) 180deg,
-    transparent 195deg,
-    rgba(186, 230, 253, 0.45) 210deg,
-    transparent 225deg,
-    rgba(255, 255, 255, 0.55) 240deg,
-    transparent 255deg,
-    rgba(56, 189, 248, 0.42) 270deg,
-    transparent 285deg,
-    rgba(255, 255, 255, 0.6) 300deg,
-    transparent 315deg,
-    rgba(186, 230, 253, 0.45) 330deg,
-    transparent 345deg,
-    rgba(255, 255, 255, 0.55) 360deg
-  );
-  filter: blur(6px);
-  animation: sun-radiance-spin 55s linear infinite;
-  opacity: 0.8;
-}
-
-/* Aurora Wave Curtains */
-.lighting-aurora {
-  position: absolute;
-  top: 0;
-  left: -20%;
-  width: 140%;
-  height: 52vh;
-  pointer-events: none;
-  filter: blur(14px);
-  will-change: transform, opacity;
-}
-
-.lighting-aurora.curtain-1 {
-  background: repeating-linear-gradient(
-    -65deg,
-    transparent 0%,
-    transparent 7%,
-    rgba(255, 255, 255, 0.35) 12%,
-    rgba(56, 189, 248, 0.42) 17%,
-    rgba(45, 212, 191, 0.35) 22%,
-    transparent 28%,
-    transparent 36%
-  );
-  opacity: 0.78;
-  animation: aurora-wave-1 24s ease-in-out infinite alternate;
-}
-
-.lighting-aurora.curtain-2 {
-  background: repeating-linear-gradient(
-    -55deg,
-    transparent 0%,
-    transparent 9%,
-    rgba(14, 165, 233, 0.32) 14%,
-    rgba(255, 255, 255, 0.4) 19%,
-    rgba(56, 189, 248, 0.36) 25%,
-    transparent 30%,
-    transparent 40%
-  );
-  opacity: 0.72;
-  animation: aurora-wave-2 28s ease-in-out infinite alternate -8s;
-}
-
-/* Ambient Color Glow Orbs */
-.lighting-glow-orb {
-  position: absolute;
-  border-radius: 50%;
-  filter: blur(85px);
-  pointer-events: none;
-  will-change: transform, opacity;
-}
-
-.lighting-glow-orb.orb-cyan {
-  width: min(600px, 75vw);
-  height: min(600px, 75vw);
-  top: -8%;
-  left: 15%;
-  background: radial-gradient(circle, rgba(14, 165, 233, 0.35) 0%, rgba(56, 189, 248, 0.18) 45%, transparent 72%);
-  animation: orb-drift-1 22s ease-in-out infinite alternate;
-}
-
-.lighting-glow-orb.orb-teal {
-  width: min(650px, 80vw);
-  height: min(650px, 80vw);
-  top: 35%;
-  right: -8%;
-  background: radial-gradient(circle, rgba(13, 148, 136, 0.28) 0%, rgba(45, 212, 191, 0.15) 50%, transparent 75%);
-  animation: orb-drift-2 26s ease-in-out infinite alternate;
-}
-
-.lighting-glow-orb.orb-sapphire {
-  width: min(550px, 70vw);
-  height: min(550px, 70vw);
-  bottom: 5%;
-  left: 2%;
-  background: radial-gradient(circle, rgba(2, 132, 199, 0.3) 0%, rgba(14, 165, 233, 0.12) 50%, transparent 75%);
-  animation: orb-drift-3 20s ease-in-out infinite alternate;
-}
-
-/* --------------------------------------------------------------------------
-   2. Foreground Volumetric Lighting Layer (z-index: 4, pointer-events: none)
-   Directly projects visible streaming sunbeams and cursor spotlight across the UI
-   -------------------------------------------------------------------------- */
-.atmosphere-lighting-fore {
-  position: fixed;
-  inset: 0;
-  z-index: 4;
+  z-index: 2;
   pointer-events: none;
   overflow: hidden;
   user-select: none;
 }
 
-/* Streaming God Rays (Distinct Visible Light Shafts) */
-.lighting-god-rays {
-  position: absolute;
+/* Ambient Thunder Sky Flash Sheet */
+.thunder-flash-sheet {
+  position: fixed;
   inset: 0;
   pointer-events: none;
-  overflow: hidden;
-}
-
-.god-ray {
-  position: absolute;
-  top: -30%;
-  transform-origin: top left;
-  pointer-events: none;
-  will-change: transform, opacity;
-  opacity: 0.85;
-}
-
-/* Ray 1: Left Stream */
-.god-ray.ray-1 {
-  left: 6%;
-  width: 190px;
-  height: 155vh;
-  background: linear-gradient(
-    115deg,
-    transparent 0%,
-    rgba(56, 189, 248, 0.32) 20%,
-    rgba(255, 255, 255, 0.5) 45%,
-    rgba(14, 165, 233, 0.28) 70%,
-    transparent 100%
-  );
-  filter: blur(8px);
-  transform: rotate(26deg);
-  animation: ray-sweep-1 18s ease-in-out infinite alternate;
-}
-
-/* Ray 2: Center-Left Broad Shaft */
-.god-ray.ray-2 {
-  left: 24%;
-  width: 270px;
-  height: 160vh;
-  background: linear-gradient(
-    118deg,
-    transparent 0%,
-    rgba(56, 189, 248, 0.38) 18%,
-    rgba(255, 255, 255, 0.6) 45%,
-    rgba(186, 230, 253, 0.45) 68%,
-    rgba(14, 165, 233, 0.22) 85%,
-    transparent 100%
-  );
-  filter: blur(10px);
-  transform: rotate(30deg);
-  animation: ray-sweep-2 22s ease-in-out infinite alternate -4s;
-}
-
-/* Ray 3: Center-Right Sunbeam */
-.god-ray.ray-3 {
-  left: 46%;
-  width: 230px;
-  height: 155vh;
-  background: linear-gradient(
-    122deg,
-    transparent 0%,
-    rgba(14, 165, 233, 0.32) 20%,
-    rgba(255, 255, 255, 0.52) 48%,
-    rgba(56, 189, 248, 0.35) 72%,
-    transparent 100%
-  );
-  filter: blur(9px);
-  transform: rotate(34deg);
-  animation: ray-sweep-3 20s ease-in-out infinite alternate -8s;
-}
-
-/* Ray 4: Right Stream */
-.god-ray.ray-4 {
-  left: 68%;
-  width: 210px;
-  height: 150vh;
-  background: linear-gradient(
-    125deg,
-    transparent 0%,
-    rgba(45, 212, 191, 0.3) 18%,
-    rgba(255, 255, 255, 0.48) 46%,
-    rgba(56, 189, 248, 0.28) 72%,
-    transparent 100%
-  );
-  filter: blur(8px);
-  transform: rotate(37deg);
-  animation: ray-sweep-4 24s ease-in-out infinite alternate -12s;
-}
-
-/* Ray 5: Far Right Ambient Beam */
-.god-ray.ray-5 {
-  left: 86%;
-  width: 180px;
-  height: 145vh;
-  background: linear-gradient(
-    128deg,
-    transparent 0%,
-    rgba(56, 189, 248, 0.25) 20%,
-    rgba(255, 255, 255, 0.45) 45%,
-    rgba(186, 230, 253, 0.3) 70%,
-    transparent 100%
-  );
-  filter: blur(10px);
-  transform: rotate(40deg);
-  animation: ray-sweep-5 21s ease-in-out infinite alternate -6s;
-}
-
-/* Caustic Sunlight Shimmer Wave */
-.caustic-shimmer-wave {
-  position: absolute;
-  top: -5%;
-  left: -40%;
-  width: 180%;
-  height: 55vh;
-  background: linear-gradient(
-    108deg,
-    transparent 25%,
-    rgba(56, 189, 248, 0.32) 46%,
-    rgba(255, 255, 255, 0.5) 49%,
-    rgba(14, 165, 233, 0.3) 53%,
-    transparent 72%
-  );
-  transform: rotate(-10deg);
-  pointer-events: none;
-  animation: caustic-shimmer-sweep 16s ease-in-out infinite;
-}
-
-/* Interactive Cursor Spotlight / Ambient Follow Glow */
-.lighting-spotlight {
-  position: absolute;
-  width: 440px;
-  height: 440px;
-  margin-left: -220px;
-  margin-top: -220px;
-  border-radius: 50%;
-  pointer-events: none;
-  filter: blur(40px);
-  will-change: transform, opacity;
+  opacity: 0;
   background: radial-gradient(
-    circle,
-    rgba(56, 189, 248, 0.32) 0%,
-    rgba(14, 165, 233, 0.22) 35%,
-    rgba(186, 230, 253, 0.12) 60%,
+    ellipse 90% 60% at 50% -5%,
+    rgba(255, 255, 255, 0.88) 0%,
+    rgba(224, 242, 254, 0.45) 45%,
     transparent 80%
   );
-  opacity: 0.85;
-  transition: opacity 0.5s ease;
+  transition: opacity 0.3s ease-out;
 }
 
-.lighting-spotlight.is-drifting {
-  top: 25%;
-  left: 35%;
-  animation: ambient-spotlight-float 16s ease-in-out infinite alternate;
+/* Multi-stage electrical discharge flash (strike -> micro-dip -> return stroke) */
+.thunder-flash-sheet.is-flashing {
+  animation: thunder-sheet-sequence 0.48s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
+}
+
+/* Lightning Bolt Positioning & Animation Container */
+.lightning-bolt-container {
+  position: absolute;
+  top: 0;
+  pointer-events: none;
+  transform-origin: top center;
+  animation: bolt-strike-flicker 0.48s ease-out forwards;
+}
+
+/* SVG Lightning Bolt Paths */
+.lightning-bolt-svg {
+  display: block;
+  overflow: visible;
+  pointer-events: none;
+}
+
+/* Outer Ionized Corona Glow */
+.bolt-corona {
+  stroke: rgba(56, 189, 248, 0.65);
+  filter: blur(4px);
+  opacity: 0.85;
+}
+
+/* Radiant Mid-Layer Electrical Arc */
+.bolt-mid {
+  stroke: rgba(186, 230, 253, 0.95);
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.9)) drop-shadow(0 0 16px rgba(14, 165, 233, 0.5));
+}
+
+/* Intense Pure White High-Voltage Core */
+.bolt-core {
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 4px #ffffff) drop-shadow(0 0 10px rgba(56, 189, 248, 0.95));
 }
 
 /* --------------------------------------------------------------------------
-   3. Multi-Tier Drifting Crystalline Snow System
+   2. Multi-Tier Drifting Crystalline Snow System
    -------------------------------------------------------------------------- */
 .atmosphere-snow-back {
   position: fixed;
@@ -375,13 +84,13 @@
 .atmosphere-snow-fore {
   position: fixed;
   inset: 0;
-  z-index: 5;
+  z-index: 3;
   pointer-events: none;
   overflow: hidden;
   user-select: none;
 }
 
-/* Particle wrapper handles physical drift & wind sway */
+/* Snow particle wrapper handles drift trajectory and sinusoidal sway */
 .snow-particle {
   position: absolute;
   top: -30px;
@@ -392,7 +101,7 @@
   animation-iteration-count: infinite;
 }
 
-/* Crystal element handles ice rendering & sparkle */
+/* Snow crystal element handles ice rendering & twinkle */
 .snowflake-crystal {
   display: block;
   width: 100%;
@@ -400,34 +109,35 @@
   border-radius: 50%;
   pointer-events: none;
   will-change: transform, opacity;
-  animation: snow-twinkle-spin 4s ease-in-out infinite alternate;
+  animation: snow-twinkle-spin 4.5s ease-in-out infinite alternate;
 }
 
-/* Light Mode Crystalline Snow Styling (High Contrast Ice Core & Shadow) */
+/* Light Mode Crystalline Snow (Clean, Crisp, Light White with Soft Rim) */
 .tier-0 .snowflake-crystal {
-  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #bae6fd 65%, #38bdf8 100%);
-  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.35);
-  opacity: 0.65;
+  background: rgba(255, 255, 255, 0.85);
+  box-shadow: 0 1px 2px rgba(12, 74, 110, 0.15);
+  opacity: 0.6;
 }
 
 .tier-1 .snowflake-crystal {
-  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #e0f2fe 45%, #7dd3fc 85%, #0284c7 100%);
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #f0f9ff 65%, #e0f2fe 100%);
   border: 1px solid rgba(255, 255, 255, 0.95);
   box-shadow: 
-    0 1px 5px rgba(2, 132, 199, 0.45),
-    0 0 2px rgba(12, 74, 110, 0.3);
-  opacity: 0.88;
+    0 1px 4px rgba(12, 74, 110, 0.18),
+    0 0 2px rgba(56, 189, 248, 0.25);
+  opacity: 0.85;
 }
 
 .tier-2 .snowflake-crystal {
-  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #e0f2fe 35%, #38bdf8 80%, #0369a1 100%);
-  border: 1.5px solid rgba(255, 255, 255, 0.98);
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #e0f2fe 55%, #bae6fd 100%);
+  border: 1.5px solid #ffffff;
   box-shadow: 
-    0 2px 8px rgba(2, 132, 199, 0.5),
-    0 0 4px rgba(255, 255, 255, 0.8);
-  opacity: 0.92;
+    0 2px 6px rgba(12, 74, 110, 0.2),
+    0 0 3px rgba(56, 189, 248, 0.35);
+  opacity: 0.9;
 }
 
+/* Hexagonal Snowflake Crystal SVG icon variant */
 .tier-2.is-crystal .snowflake-crystal {
   background: none !important;
   border: none !important;
@@ -435,165 +145,69 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  filter: drop-shadow(0 2px 4px rgba(2, 132, 199, 0.55));
+  filter: drop-shadow(0 1px 3px rgba(12, 74, 110, 0.22));
 }
 .tier-2.is-crystal .snowflake-crystal svg {
   width: 100%;
   height: 100%;
-  fill: #ffffff;
-  stroke: #0284c7;
-  stroke-width: 0.6px;
+  fill: rgba(255, 255, 255, 0.92);
+  stroke: #38bdf8;
+  stroke-width: 0.7px;
 }
 
 /* --------------------------------------------------------------------------
-   4. Dark Mode Illumination & Bioluminescence
+   3. Dark Mode Thunder & Snow Luminescence
    -------------------------------------------------------------------------- */
-:root[data-theme="dark"] .lighting-sun-crown .sun-core {
+:root[data-theme="dark"] .thunder-flash-sheet {
   background: radial-gradient(
-    circle,
-    #ffffff 0%,
-    rgba(56, 189, 248, 0.9) 35%,
-    rgba(14, 165, 233, 0.6) 65%,
-    transparent 85%
-  );
-  box-shadow: 
-    0 0 60px 25px rgba(56, 189, 248, 0.85),
-    0 0 120px 50px rgba(14, 165, 233, 0.55),
-    0 0 200px 80px rgba(99, 102, 241, 0.4);
-}
-
-:root[data-theme="dark"] .lighting-sun-crown .sun-corona {
-  background: radial-gradient(
-    circle,
-    rgba(56, 189, 248, 0.7) 0%,
-    rgba(14, 165, 233, 0.45) 45%,
-    rgba(99, 102, 241, 0.25) 70%,
-    transparent 85%
-  );
-}
-
-:root[data-theme="dark"] .lighting-sun-crown .sun-radiance {
-  background: conic-gradient(
-    from 0deg,
-    rgba(56, 189, 248, 0.5) 0deg,
-    transparent 15deg,
-    rgba(99, 102, 241, 0.4) 30deg,
-    transparent 45deg,
-    rgba(56, 189, 248, 0.55) 60deg,
-    transparent 75deg,
-    rgba(45, 212, 191, 0.45) 90deg,
-    transparent 105deg,
-    rgba(56, 189, 248, 0.5) 120deg,
-    transparent 135deg,
-    rgba(99, 102, 241, 0.4) 150deg,
-    transparent 165deg,
-    rgba(56, 189, 248, 0.55) 180deg,
-    transparent 195deg,
-    rgba(45, 212, 191, 0.45) 210deg,
-    transparent 225deg,
-    rgba(56, 189, 248, 0.5) 240deg,
-    transparent 255deg,
-    rgba(99, 102, 241, 0.4) 270deg,
-    transparent 285deg,
-    rgba(56, 189, 248, 0.55) 300deg,
-    transparent 315deg,
-    rgba(45, 212, 191, 0.45) 330deg,
-    transparent 345deg,
-    rgba(56, 189, 248, 0.5) 360deg
-  );
-}
-
-:root[data-theme="dark"] .god-ray {
-  mix-blend-mode: screen;
-}
-
-:root[data-theme="dark"] .god-ray.ray-1 {
-  background: linear-gradient(
-    115deg,
-    transparent 0%,
-    rgba(56, 189, 248, 0.55) 25%,
-    rgba(14, 165, 233, 0.35) 55%,
-    transparent 100%
-  );
-}
-
-:root[data-theme="dark"] .god-ray.ray-2 {
-  background: linear-gradient(
-    118deg,
-    transparent 0%,
-    rgba(56, 189, 248, 0.65) 20%,
-    rgba(99, 102, 241, 0.45) 50%,
-    transparent 100%
-  );
-}
-
-:root[data-theme="dark"] .god-ray.ray-3 {
-  background: linear-gradient(
-    122deg,
-    transparent 0%,
-    rgba(45, 212, 191, 0.55) 25%,
-    rgba(56, 189, 248, 0.35) 55%,
-    transparent 100%
-  );
-}
-
-:root[data-theme="dark"] .god-ray.ray-4 {
-  background: linear-gradient(
-    125deg,
-    transparent 0%,
-    rgba(99, 102, 241, 0.5) 20%,
-    rgba(56, 189, 248, 0.35) 50%,
-    transparent 100%
-  );
-}
-
-:root[data-theme="dark"] .god-ray.ray-5 {
-  background: linear-gradient(
-    128deg,
-    transparent 0%,
-    rgba(56, 189, 248, 0.45) 25%,
-    rgba(14, 165, 233, 0.25) 55%,
-    transparent 100%
-  );
-}
-
-:root[data-theme="dark"] .lighting-spotlight {
-  mix-blend-mode: screen;
-  background: radial-gradient(
-    circle,
-    rgba(56, 189, 248, 0.45) 0%,
-    rgba(14, 165, 233, 0.25) 40%,
-    rgba(99, 102, 241, 0.12) 65%,
+    ellipse 90% 60% at 50% -5%,
+    rgba(56, 189, 248, 0.42) 0%,
+    rgba(99, 102, 241, 0.22) 45%,
     transparent 80%
   );
 }
 
+:root[data-theme="dark"] .bolt-corona {
+  stroke: rgba(99, 102, 241, 0.8);
+  filter: blur(5px);
+}
+
+:root[data-theme="dark"] .bolt-mid {
+  stroke: rgba(56, 189, 248, 0.95);
+  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 1)) drop-shadow(0 0 22px rgba(14, 165, 233, 0.7));
+}
+
+:root[data-theme="dark"] .bolt-core {
+  stroke: #ffffff;
+  filter: drop-shadow(0 0 6px #ffffff) drop-shadow(0 0 14px rgba(56, 189, 248, 1));
+}
+
 :root[data-theme="dark"] .tier-0 .snowflake-crystal {
   background: #ffffff;
-  box-shadow: 0 0 5px 1px rgba(56, 189, 248, 0.85);
-  opacity: 0.8;
+  box-shadow: 0 0 5px 1px rgba(56, 189, 248, 0.75);
+  opacity: 0.75;
 }
 
 :root[data-theme="dark"] .tier-1 .snowflake-crystal {
   background: radial-gradient(circle at 30% 30%, #ffffff 0%, #bae6fd 55%, #38bdf8 100%);
   border: 1px solid rgba(255, 255, 255, 0.95);
   box-shadow: 
-    0 0 8px 2px rgba(56, 189, 248, 0.9),
-    0 0 16px 4px rgba(14, 165, 233, 0.5);
-  opacity: 0.95;
+    0 0 8px 2px rgba(56, 189, 248, 0.85),
+    0 0 14px 3px rgba(14, 165, 233, 0.45);
+  opacity: 0.9;
 }
 
 :root[data-theme="dark"] .tier-2 .snowflake-crystal {
   background: radial-gradient(circle at 30% 30%, #ffffff 0%, #7dd3fc 45%, #0284c7 100%);
   border: 1.5px solid #ffffff;
   box-shadow: 
-    0 0 12px 3px rgba(56, 189, 248, 0.95),
-    0 0 24px 6px rgba(14, 165, 233, 0.6);
-  opacity: 1;
+    0 0 12px 3px rgba(56, 189, 248, 0.9),
+    0 0 22px 5px rgba(14, 165, 233, 0.55);
+  opacity: 0.95;
 }
 
 :root[data-theme="dark"] .tier-2.is-crystal .snowflake-crystal {
-  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.95)) drop-shadow(0 0 16px rgba(14, 165, 233, 0.6));
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.9)) drop-shadow(0 0 14px rgba(14, 165, 233, 0.5));
 }
 :root[data-theme="dark"] .tier-2.is-crystal .snowflake-crystal svg {
   fill: #ffffff;
@@ -601,88 +215,34 @@
 }
 
 /* --------------------------------------------------------------------------
-   5. Keyframe Animations (Smooth Transitions & Physics)
+   4. Animation Keyframes (Realistic Electrical Discharges & Snow Physics)
    -------------------------------------------------------------------------- */
 
-/* Sun Core Pulse */
-@keyframes sun-core-pulse {
-  0% { transform: translate(-50%, -50%) scale(1); opacity: 0.9; }
-  100% { transform: translate(-50%, -50%) scale(1.12); opacity: 1; }
+/* Thunder Sky Sheet Flash Sequence (0.48s multi-stroke) */
+@keyframes thunder-sheet-sequence {
+  0% { opacity: 0; }
+  8% { opacity: 0.85; }
+  18% { opacity: 0.2; }
+  32% { opacity: 0.95; }
+  45% { opacity: 0.4; }
+  60% { opacity: 0.7; }
+  80% { opacity: 0.2; }
+  100% { opacity: 0; }
 }
 
-/* Sun Corona Pulse */
-@keyframes sun-corona-pulse {
-  0% { transform: translate(-50%, -50%) scale(0.95); opacity: 0.7; }
-  100% { transform: translate(-50%, -50%) scale(1.15); opacity: 0.95; }
+/* Lightning Bolt Strike & Flicker Sequence */
+@keyframes bolt-strike-flicker {
+  0% { opacity: 0; transform: scale(0.98); }
+  10% { opacity: 1; transform: scale(1); }
+  22% { opacity: 0.3; }
+  34% { opacity: 1; transform: scale(1.01); }
+  50% { opacity: 0.45; }
+  68% { opacity: 0.85; }
+  82% { opacity: 0.25; }
+  100% { opacity: 0; transform: scale(1); }
 }
 
-/* Sun Radiance Rays Spin */
-@keyframes sun-radiance-spin {
-  from { transform: translate(-50%, -50%) rotate(0deg); }
-  to { transform: translate(-50%, -50%) rotate(360deg); }
-}
-
-/* Volumetric God Ray Sweeping Motion */
-@keyframes ray-sweep-1 {
-  0% { transform: rotate(26deg) translate3d(0, 0, 0); opacity: 0.75; }
-  50% { transform: rotate(29deg) translate3d(20px, 12px, 0); opacity: 0.95; }
-  100% { transform: rotate(24deg) translate3d(-15px, 20px, 0); opacity: 0.7; }
-}
-
-@keyframes ray-sweep-2 {
-  0% { transform: rotate(30deg) translate3d(0, 0, 0); opacity: 0.85; }
-  50% { transform: rotate(33deg) translate3d(24px, 15px, 0); opacity: 1; }
-  100% { transform: rotate(28deg) translate3d(-18px, 18px, 0); opacity: 0.8; }
-}
-
-@keyframes ray-sweep-3 {
-  0% { transform: rotate(34deg) translate3d(0, 0, 0); opacity: 0.8; }
-  50% { transform: rotate(37deg) translate3d(18px, 14px, 0); opacity: 0.95; }
-  100% { transform: rotate(32deg) translate3d(-20px, 22px, 0); opacity: 0.75; }
-}
-
-@keyframes ray-sweep-4 {
-  0% { transform: rotate(37deg) translate3d(0, 0, 0); opacity: 0.7; }
-  50% { transform: rotate(40deg) translate3d(22px, 16px, 0); opacity: 0.9; }
-  100% { transform: rotate(35deg) translate3d(-16px, 18px, 0); opacity: 0.65; }
-}
-
-@keyframes ray-sweep-5 {
-  0% { transform: rotate(40deg) translate3d(0, 0, 0); opacity: 0.65; }
-  50% { transform: rotate(43deg) translate3d(18px, 12px, 0); opacity: 0.85; }
-  100% { transform: rotate(38deg) translate3d(-14px, 16px, 0); opacity: 0.6; }
-}
-
-/* Caustic Shimmer Sweep across the screen */
-@keyframes caustic-shimmer-sweep {
-  0% { transform: rotate(-10deg) translate3d(-40%, -10%, 0); opacity: 0.35; }
-  50% { transform: rotate(-8deg) translate3d(20%, 15%, 0); opacity: 0.85; }
-  100% { transform: rotate(-10deg) translate3d(80%, 30%, 0); opacity: 0.25; }
-}
-
-/* Ambient Spotlight Float when mouse is idle */
-@keyframes ambient-spotlight-float {
-  0% { transform: translate3d(0, 0, 0) scale(1); }
-  33% { transform: translate3d(120px, 60px, 0) scale(1.15); }
-  66% { transform: translate3d(-90px, 110px, 0) scale(0.95); }
-  100% { transform: translate3d(40px, -40px, 0) scale(1.08); }
-}
-
-/* Smooth Atmospheric Environmental Cycle:
-   Glacial Daybreak -> Boreal Aurora -> Oceanic Twilight */
-@keyframes atmospheric-light-cycle {
-  0%, 100% {
-    filter: brightness(1) saturate(1) hue-rotate(0deg);
-  }
-  33% {
-    filter: brightness(1.12) saturate(1.22) hue-rotate(20deg);
-  }
-  66% {
-    filter: brightness(0.95) saturate(1.12) hue-rotate(-18deg);
-  }
-}
-
-/* Snowfall with Sinusoidal Wind Sway */
+/* Falling snow drift trajectory with organic sinusoidal wind sway */
 @keyframes snow-fall-drift {
   0% {
     transform: translate3d(0, -30px, 0);
@@ -704,103 +264,43 @@
 /* Snowflake sparkle, scale oscillation, and subtle crystalline spin */
 @keyframes snow-twinkle-spin {
   0% {
-    transform: rotate(0deg) scale(0.92);
+    transform: rotate(0deg) scale(0.94);
     opacity: 0.75;
   }
   50% {
-    transform: rotate(180deg) scale(1.12);
-    opacity: 1;
+    transform: rotate(180deg) scale(1.08);
+    opacity: 0.95;
   }
   100% {
-    transform: rotate(360deg) scale(0.92);
+    transform: rotate(360deg) scale(0.94);
     opacity: 0.78;
   }
 }
 
-/* Aurora Wave Animations */
-@keyframes aurora-wave-1 {
-  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0.65; }
-  50% { transform: translate3d(35px, 18px, 0) rotate(1.5deg); opacity: 0.85; }
-  100% { transform: translate3d(-25px, 30px, 0) rotate(-1deg); opacity: 0.6; }
-}
-
-@keyframes aurora-wave-2 {
-  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0.6; }
-  50% { transform: translate3d(-30px, 20px, 0) rotate(-1.5deg); opacity: 0.8; }
-  100% { transform: translate3d(38px, 12px, 0) rotate(1.5deg); opacity: 0.65; }
-}
-
-/* Ambient Glow Orb Drifting */
-@keyframes orb-drift-1 {
-  0% { transform: translate3d(0, 0, 0) scale(1); }
-  100% { transform: translate3d(40px, -25px, 0) scale(1.08); }
-}
-
-@keyframes orb-drift-2 {
-  0% { transform: translate3d(0, 0, 0) scale(1); }
-  100% { transform: translate3d(-45px, 35px, 0) scale(1.06); }
-}
-
-@keyframes orb-drift-3 {
-  0% { transform: translate3d(0, 0, 0) scale(1); }
-  100% { transform: translate3d(35px, 20px, 0) scale(0.95); }
-}
-
 /* --------------------------------------------------------------------------
-   6. Responsive Device Scaling (Mobile / Tablet / Desktop)
+   5. Responsive Device Scaling (Mobile / Tablet / Desktop)
    -------------------------------------------------------------------------- */
-@media (max-width: 1080px) {
-  .lighting-sun-crown {
-    width: 440px;
-    height: 440px;
-    top: -70px;
-  }
-  .god-ray.ray-5 {
-    display: none;
-  }
-}
-
 @media (max-width: 800px) {
-  .lighting-sun-crown {
-    width: 360px;
-    height: 360px;
-    top: -60px;
-    left: 40%;
+  .lightning-bolt-container {
+    transform: scale(0.85);
   }
-  .god-ray.ray-1 { width: 140px; }
-  .god-ray.ray-2 { width: 190px; }
-  .god-ray.ray-3 { width: 160px; }
-  .god-ray.ray-4 { display: none; }
-  .lighting-spotlight { width: 320px; height: 320px; margin-left: -160px; margin-top: -160px; }
 }
 
 @media (max-width: 520px) {
-  .lighting-sun-crown {
-    width: 280px;
-    height: 280px;
-    top: -50px;
-    left: 50%;
+  .lightning-bolt-container {
+    transform: scale(0.7);
   }
-  .lighting-sun-crown .sun-core { width: 100px; height: 100px; }
-  .lighting-sun-crown .sun-corona { width: 260px; height: 260px; }
-  .god-ray.ray-1 { width: 120px; left: 0%; }
-  .god-ray.ray-2 { width: 150px; left: 30%; }
-  .god-ray.ray-3 { display: none; }
-  .lighting-spotlight { width: 260px; height: 260px; margin-left: -130px; margin-top: -130px; }
 }
 
 /* Accessibility: Respect Reduced Motion Preferences */
 @media (prefers-reduced-motion: reduce) {
-  .god-ray,
-  .lighting-sun-crown .sun-core,
-  .lighting-sun-crown .sun-corona,
-  .lighting-sun-crown .sun-radiance,
-  .lighting-aurora,
-  .lighting-glow-orb,
-  .caustic-shimmer-wave,
-  .lighting-spotlight.is-drifting,
-  .atmosphere-lighting-back {
+  .thunder-flash-sheet.is-flashing {
     animation: none !important;
+    opacity: 0 !important;
+  }
+  .lightning-bolt-container {
+    animation: none !important;
+    display: none !important;
   }
   .snow-particle {
     animation-duration: 40s !important;

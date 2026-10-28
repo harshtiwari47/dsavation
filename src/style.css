@@ -2,17 +2,17 @@
   font-family: 'DM Sans', sans-serif;
   font-size: 120%;
   color: #0c1b26;
-  background: #f8fcfe;
+  background: #fbfdff;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --paper: #f8fcfe;
+  --paper: #fbfdff;
   --surface: #ffffff;
-  --surface-muted: #f4fafe;
+  --surface-muted: #f6f9fc;
   --ink: #0c1b26;
-  --body: #3a5260;
-  --muted: #607d8e;
-  --line: #e3eff5;
-  --line-dark: #d5e5ee;
+  --body: #37474f;
+  --muted: #607d8b;
+  --line: #e6edf3;
+  --line-dark: #d8e2ea;
 
   /* Oceanic Core Palette - Seamless Coastal Cyan, Sea Sapphire & Aquatic Teal */
   --ocean: #0284c7;
@@ -44,14 +44,13 @@ body {
   min-width: 280px;
   min-height: 100vh;
   background: 
-    radial-gradient(ellipse 80% 50% at 50% -5%, rgba(224, 242, 254, 0.45) 0%, transparent 70%),
     linear-gradient(
       180deg,
-      #f8fcfe 0%,
-      #f3f9fb 25%,
-      #edf6fa 50%,
-      #e8f2f8 75%,
-      #e2edf4 100%
+      #ffffff 0%,
+      #fafdff 25%,
+      #f5f8fc 55%,
+      #eff4fa 85%,
+      #e9f0f7 100%
     );
   background-attachment: fixed;
   color: var(--ink);
@@ -1169,18 +1168,6 @@ h1, h2, h3, p { margin-top: 0; }
   }
 }
 @media (max-width: 600px) {
-  .lighting-glow {
-    filter: blur(80px);
-    opacity: 0.22;
-  }
-  .light-beam {
-    filter: blur(24px);
-    opacity: 0.75;
-  }
-  .aurora-curtain {
-    height: 38vh;
-    filter: blur(18px);
-  }
   .liquid-glass {
     border-radius: 12px;
     backdrop-filter: blur(16px) saturate(160%);
