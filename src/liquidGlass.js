@@ -91,8 +91,29 @@ export function initLiquidGlass() {
     card.removeEventListener('pointerdown', handlePointerDown);
   }
 
+  function handleRippleHostDown(e) {
+    const el = e.currentTarget;
+    const rect = el.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    spawnBlueRipple(el, x, y);
+  }
+
+  function bindRippleHost(el) {
+    if (!el || activeCards.has(el)) return;
+    activeCards.add(el);
+    el.classList.add('water-ripple-host');
+    el.addEventListener('pointerdown', handleRippleHostDown, { passive: true });
+  }
+
+  function unbindRippleHost(el) {
+    if (!el || !activeCards.has(el)) return;
+    activeCards.delete(el);
+    el.removeEventListener('pointerdown', handleRippleHostDown);
+  }
+
   function scanAndBind() {
-    const selectors = [
+    const cardSelectors = [
       '.overview-card',
       '.panel',
       '.metric-card',
@@ -102,8 +123,14 @@ export function initLiquidGlass() {
       '.login-prompt',
       '.library-locked'
     ];
-    const elements = document.querySelectorAll(selectors.join(', '));
-    elements.forEach(bindCard);
+    document.querySelectorAll(cardSelectors.join(', ')).forEach(bindCard);
+
+    const rippleSelectors = [
+      '.question-card',
+      '.button-dark',
+      '.button-primary'
+    ];
+    document.querySelectorAll(rippleSelectors.join(', ')).forEach(bindRippleHost);
   }
 
   scanAndBind();
@@ -118,6 +145,9 @@ export function initLiquidGlass() {
   return () => {
     observer.disconnect();
     if (rafId) cancelAnimationFrame(rafId);
-    activeCards.forEach(unbindCard);
+    activeCards.forEach((el) => {
+      unbindCard(el);
+      unbindRippleHost(el);
+    });
   };
 }
