@@ -79,41 +79,379 @@ function MemberAvatar({ person, style, seed, className = '', label = '' }) {
 }
 
 function ProgressHeatmap({ progress }) {
-  const { cells, months, activeDays, activeQuestions } = useMemo(() => {
+  const [viewMode, setViewMode] = useState('month'); // 'month' or 'year'
+  const [selectedMonthKey, setSelectedMonthKey] = useState('all');
+
+  const {
+    monthsData,
+    annualCells,
+    annualMonths,
+    activeDays,
+    activeQuestions,
+    currentStreak,
+    longestStreak,
+  } = useMemo(() => {
     const counts = new Map();
-    for (const solvedAt of Object.values(progress)) {
-      const dateKey = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(solvedAt));
+    for (const solvedAt of Object.values(progress || {})) {
+      const dateKey = new Intl.DateTimeFormat('sv-SE', {
+        timeZone: 'Asia/Kolkata',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+      }).format(new Date(solvedAt));
       counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
     }
+
     const today = localDay();
+    const todayDate = new Date(`${today}T00:00:00.000Z`);
+    const currentYear = todayDate.getUTCFullYear();
+    const currentMonth = todayDate.getUTCMonth();
+
+    // 1. Calculate 12 Months Breakdown
+    const mList = [];
+    for (let i = 11; i >= 0; i--) {
+      const mDate = new Date(Date.UTC(currentYear, currentMonth - i, 1));
+      const year = mDate.getUTCFullYear();
+      const monthIndex = mDate.getUTCMonth();
+      const monthKey = `${year}-${String(monthIndex + 1).padStart(2, '0')}`;
+      const monthName = mDate.toLocaleDateString('en-US', { month: 'long', timeZone: 'UTC' });
+      const shortMonth = mDate.toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' });
+      const numDays = new Date(Date.UTC(year, monthIndex + 1, 0)).getUTCDate();
+      const firstDayOfWeek = new Date(Date.UTC(year, monthIndex, 1)).getUTCDay(); // 0=Sun, 1=Mon, ..., 6=Sat
+
+      const days = [];
+      let totalSolved = 0;
+      let monthActiveDays = 0;
+
+      for (let day = 1; day <= numDays; day++) {
+        const dateKey = `${monthKey}-${String(day).padStart(2, '0')}`;
+        const inRange = dateKey <= today;
+        const count = inRange ? (counts.get(dateKey) || 0) : 0;
+        if (count > 0) {
+          totalSolved += count;
+          monthActiveDays += 1;
+        }
+        const level = count === 0 ? 0 : count === 1 ? 1 : count === 2 ? 2 : count <= 4 ? 3 : 4;
+        days.push({
+          date: dateKey,
+          day,
+          dayOfWeek: (firstDayOfWeek + day - 1) % 7,
+          count,
+          level,
+          inRange,
+        });
+      }
+
+      mList.push({
+        monthKey,
+        monthName,
+        shortMonth,
+        year,
+        firstDayOfWeek,
+        numDays,
+        days,
+        totalSolved,
+        activeDays: monthActiveDays,
+      });
+    }
+
+    // 2. Calculate Streaks
+    let curStreak = 0;
+    let checkDate = today;
+    if (!counts.has(checkDate) || counts.get(checkDate) === 0) {
+      checkDate = shiftDay(today, -1);
+    }
+    while (counts.has(checkDate) && counts.get(checkDate) > 0) {
+      curStreak++;
+      checkDate = shiftDay(checkDate, -1);
+    }
+
+    let maxStreak = 0;
+    let tempStreak = 0;
+    for (let i = 365; i >= 0; i--) {
+      const d = shiftDay(today, -i);
+      if ((counts.get(d) || 0) > 0) {
+        tempStreak++;
+        if (tempStreak > maxStreak) maxStreak = tempStreak;
+      } else {
+        tempStreak = 0;
+      }
+    }
+
+    // 3. Calculate 52-Week Annual Flow
     const rangeStart = shiftDay(today, -364);
     const dateOffset = new Date(`${rangeStart}T00:00:00.000Z`).getUTCDay();
     const gridStart = shiftDay(rangeStart, -dateOffset);
-    const days = Array.from({ length: 371 }, (_, index) => {
+    const aDays = Array.from({ length: 371 }, (_, index) => {
       const date = shiftDay(gridStart, index);
       const inRange = date >= rangeStart && date <= today;
       const count = inRange ? counts.get(date) || 0 : 0;
       const level = count === 0 ? 0 : count === 1 ? 1 : count === 2 ? 2 : count <= 4 ? 3 : 4;
       return { date, count, level, inRange, week: Math.floor(index / 7) };
     });
+
     const monthLabels = [];
-    let previousMonth = '';
-    for (const cell of days) {
+    let prevMonth = '';
+    for (const cell of aDays) {
       if (!cell.inRange) continue;
       const month = cell.date.slice(0, 7);
-      if (month !== previousMonth) {
-        monthLabels.push({ month: new Date(`${cell.date}T00:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }), week: cell.week });
-        previousMonth = month;
+      if (month !== prevMonth) {
+        monthLabels.push({
+          month: new Date(`${cell.date}T00:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }),
+          week: cell.week,
+        });
+        prevMonth = month;
       }
     }
-    const visibleCounts = days.filter((cell) => cell.inRange && cell.count > 0).map((cell) => cell.count);
-    return { cells: days, months: monthLabels, activeDays: visibleCounts.length, activeQuestions: visibleCounts.reduce((sum, count) => sum + count, 0) };
+
+    const visibleCounts = aDays.filter((cell) => cell.inRange && cell.count > 0).map((cell) => cell.count);
+
+    return {
+      monthsData: mList,
+      annualCells: aDays,
+      annualMonths: monthLabels,
+      activeDays: visibleCounts.length,
+      activeQuestions: visibleCounts.reduce((sum, count) => sum + count, 0),
+      currentStreak: curStreak,
+      longestStreak: maxStreak,
+    };
   }, [progress]);
-  return <section className="panel heatmap-panel" aria-labelledby="progress-heatmap-title">
-    <div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR PRACTICE HISTORY</div><h2 id="progress-heatmap-title">Question activity</h2></div><div className="heatmap-totals"><strong>{activeQuestions}</strong><span>questions · {activeDays} active days</span></div></div>
-    <p className="heatmap-caption">Each square counts questions you marked solved that day. This record is private to your account and is separate from club points.</p>
-    <div className="heatmap-scroll"><div className="heatmap-months" aria-hidden="true">{months.map(({ month, week }, index) => <span key={`${month}-${index}`} style={{ gridColumn: `${week + 1} / span 4` }}>{month}</span>)}</div><div className="heatmap-grid" role="group" aria-label="Personal question completions over the past year">{cells.map(({ date, count, level, inRange }) => <span key={date} className={`heatmap-cell level-${level} ${inRange ? '' : 'outside-range'}`} role="img" aria-label={`${count} ${count === 1 ? 'question' : 'questions'} marked solved on ${date}`} title={`${count} ${count === 1 ? 'question' : 'questions'} · ${date}`}/>)}</div><div className="heatmap-legend"><span>Less</span>{[0, 1, 2, 3, 4].map((level) => <i key={level} className={`heatmap-cell level-${level}`}/>)}<span>More</span></div></div>
-  </section>;
+
+  const focusedMonth = useMemo(() => {
+    if (selectedMonthKey === 'all') return null;
+    return monthsData.find((m) => m.monthKey === selectedMonthKey) || monthsData[monthsData.length - 1];
+  }, [selectedMonthKey, monthsData]);
+
+  const focusedMonthIndex = useMemo(() => {
+    if (!focusedMonth) return -1;
+    return monthsData.findIndex((m) => m.monthKey === focusedMonth.monthKey);
+  }, [focusedMonth, monthsData]);
+
+  return (
+    <section className="panel heatmap-panel" aria-labelledby="progress-heatmap-title">
+      <div className="panel-heading heatmap-header">
+        <div>
+          <div className="eyebrow"><span className="eyebrow-line" />YOUR PRACTICE HISTORY</div>
+          <h2 id="progress-heatmap-title">Question activity</h2>
+        </div>
+
+        {/* View Mode Toggle */}
+        <div className="heatmap-mode-toggle" role="tablist" aria-label="Heatmap view mode">
+          <button
+            type="button"
+            className={`toggle-tab ${viewMode === 'month' ? 'active' : ''}`}
+            onClick={() => setViewMode('month')}
+            role="tab"
+            aria-selected={viewMode === 'month'}
+          >
+            <Icon name="calendar" size={13} /> Month wise
+          </button>
+          <button
+            type="button"
+            className={`toggle-tab ${viewMode === 'year' ? 'active' : ''}`}
+            onClick={() => setViewMode('year')}
+            role="tab"
+            aria-selected={viewMode === 'year'}
+          >
+            <Icon name="book" size={13} /> Full year
+          </button>
+        </div>
+      </div>
+
+      {/* Practice Metrics Strip */}
+      <div className="heatmap-stats-strip">
+        <div className="heatmap-stat-item">
+          <strong>{activeQuestions}</strong>
+          <span>Questions Solved</span>
+        </div>
+        <div className="heatmap-stat-item">
+          <strong>{activeDays}</strong>
+          <span>Active Days</span>
+        </div>
+        <div className="heatmap-stat-item">
+          <strong>{currentStreak} <small>days</small></strong>
+          <span>Current Streak</span>
+        </div>
+        <div className="heatmap-stat-item">
+          <strong>{longestStreak} <small>days</small></strong>
+          <span>Longest Streak</span>
+        </div>
+      </div>
+
+      <p className="heatmap-caption">
+        Each square counts questions marked solved that day. This record is private to your account and separate from club points.
+      </p>
+
+      {/* VIEW MODE 1: MONTH-WISE HEATMAP */}
+      {viewMode === 'month' && (
+        <div className="heatmap-month-container">
+          {/* Quick Month Selector Tabs */}
+          <div className="heatmap-month-selector" role="tablist" aria-label="Select month">
+            <button
+              type="button"
+              className={`month-tab ${selectedMonthKey === 'all' ? 'active' : ''}`}
+              onClick={() => setSelectedMonthKey('all')}
+            >
+              All 12 Months
+            </button>
+            {monthsData.map((m) => (
+              <button
+                key={m.monthKey}
+                type="button"
+                className={`month-tab ${selectedMonthKey === m.monthKey ? 'active' : ''}`}
+                onClick={() => setSelectedMonthKey(m.monthKey)}
+              >
+                <span>{m.shortMonth}</span>
+                {m.totalSolved > 0 && <span className="month-tab-badge">{m.totalSolved}</span>}
+              </button>
+            ))}
+          </div>
+
+          {/* All 12 Months Cards Grid */}
+          {selectedMonthKey === 'all' && (
+            <div className="heatmap-months-grid">
+              {monthsData.map((m) => (
+                <div
+                  key={m.monthKey}
+                  className="month-card"
+                  onClick={() => setSelectedMonthKey(m.monthKey)}
+                  role="button"
+                  tabIndex={0}
+                  onKeyDown={(e) => e.key === 'Enter' && setSelectedMonthKey(m.monthKey)}
+                >
+                  <div className="month-card-header">
+                    <strong>{m.monthName} {m.year}</strong>
+                    <span className="month-card-solved">{m.totalSolved} solved</span>
+                  </div>
+                  <div className="month-weekdays-row" aria-hidden="true">
+                    <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
+                  </div>
+                  <div className="month-card-cells">
+                    {Array.from({ length: m.firstDayOfWeek }).map((_, i) => (
+                      <span key={`pad-${i}`} className="heatmap-cell pad-cell" />
+                    ))}
+                    {m.days.map((day) => (
+                      <span
+                        key={day.date}
+                        className={`heatmap-cell level-${day.level} ${day.inRange ? '' : 'outside-range'}`}
+                        title={`${day.count} ${day.count === 1 ? 'question' : 'questions'} · ${day.date}`}
+                        role="img"
+                        aria-label={`${day.count} questions on ${day.date}`}
+                      />
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Focused Single Month Detailed View */}
+          {selectedMonthKey !== 'all' && focusedMonth && (
+            <div className="month-detail-card">
+              <div className="month-detail-top">
+                <button
+                  type="button"
+                  className="button button-quiet back-all-btn"
+                  onClick={() => setSelectedMonthKey('all')}
+                >
+                  ← Back to all 12 months
+                </button>
+                <div className="month-nav-controls">
+                  <button
+                    type="button"
+                    className="month-nav-btn"
+                    disabled={focusedMonthIndex <= 0}
+                    onClick={() => setSelectedMonthKey(monthsData[focusedMonthIndex - 1].monthKey)}
+                    aria-label="Previous month"
+                  >
+                    ‹
+                  </button>
+                  <h3>{focusedMonth.monthName} {focusedMonth.year}</h3>
+                  <button
+                    type="button"
+                    className="month-nav-btn"
+                    disabled={focusedMonthIndex >= monthsData.length - 1}
+                    onClick={() => setSelectedMonthKey(monthsData[focusedMonthIndex + 1].monthKey)}
+                    aria-label="Next month"
+                  >
+                    ›
+                  </button>
+                </div>
+                <div className="month-detail-totals">
+                  <span><strong>{focusedMonth.totalSolved}</strong> solved</span>
+                  <span><strong>{focusedMonth.activeDays}</strong> active days</span>
+                </div>
+              </div>
+
+              <div className="month-detail-calendar">
+                <div className="month-detail-weekdays">
+                  <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+                </div>
+                <div className="month-detail-grid">
+                  {Array.from({ length: focusedMonth.firstDayOfWeek }).map((_, i) => (
+                    <div key={`detail-pad-${i}`} className="month-detail-cell empty" />
+                  ))}
+                  {focusedMonth.days.map((day) => (
+                    <div
+                      key={day.date}
+                      className={`month-detail-cell level-${day.level} ${day.inRange ? '' : 'outside-range'} ${day.count > 0 ? 'has-activity' : ''}`}
+                      title={`${day.count} ${day.count === 1 ? 'question' : 'questions'} on ${day.date}`}
+                    >
+                      <span className="day-number">{day.day}</span>
+                      {day.count > 0 && <span className="day-count-badge">{day.count}</span>}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* VIEW MODE 2: FULL YEAR CONTINUOUS HEATMAP */}
+      {viewMode === 'year' && (
+        <div className="heatmap-scroll">
+          <div className="heatmap-year-wrapper">
+            {/* Weekday indicators */}
+            <div className="heatmap-weekdays-col" aria-hidden="true">
+              <span style={{ gridRow: 2 }}>Mon</span>
+              <span style={{ gridRow: 4 }}>Wed</span>
+              <span style={{ gridRow: 6 }}>Fri</span>
+            </div>
+            <div className="heatmap-year-content">
+              <div className="heatmap-months" aria-hidden="true">
+                {annualMonths.map(({ month, week }, index) => (
+                  <span key={`${month}-${index}`} style={{ gridColumn: `${week + 1} / span 4` }}>
+                    {month}
+                  </span>
+                ))}
+              </div>
+              <div className="heatmap-grid" role="group" aria-label="Personal question completions over the past year">
+                {annualCells.map(({ date, count, level, inRange }) => (
+                  <span
+                    key={date}
+                    className={`heatmap-cell level-${level} ${inRange ? '' : 'outside-range'}`}
+                    role="img"
+                    aria-label={`${count} ${count === 1 ? 'question' : 'questions'} marked solved on ${date}`}
+                    title={`${count} ${count === 1 ? 'question' : 'questions'} · ${date}`}
+                  />
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Heatmap Legend */}
+      <div className="heatmap-legend">
+        <span>Less</span>
+        {[0, 1, 2, 3, 4].map((level) => (
+          <i key={level} className={`heatmap-cell level-${level}`} title={`Level ${level}`} />
+        ))}
+        <span>More</span>
+      </div>
+    </section>
+  );
 }
 
 function QuestionActionsGuide() {
