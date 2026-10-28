@@ -1,67 +1,64 @@
 import React, { useMemo } from 'react';
 
 /**
- * Geometric Snowflake Crystal SVG for prominent foreground ice stars
+ * Delicate Geometric Snowflake Crystal SVG
  */
 function SnowflakeIcon() {
   return (
-    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round">
       <path d="M12 2v20M2 12h20M4.93 4.93l14.14 14.14M4.93 19.07l14.14-14.14M12 5l-2-2m4 0l-2 2M12 19l-2 2m4 0l-2-2M5 12l-2-2m0 4l2-2M19 12l2-2m0 4l-2-2" />
     </svg>
   );
 }
 
 /**
- * SnowEffect: High-Contrast Crystalline Multi-Tier Snow System
+ * SnowEffect: Tranquil Crystalline Snow & Bubble Drift System
  * 
  * Features:
- * - 3 distinct particle tiers:
- *   * Tier 0: Background micro-ice dust (depth volume)
- *   * Tier 1: Midground crisp ice spheres with specular reflection
- *   * Tier 2: Foreground geometric ice crystals & diamond snowflakes
- * - Split-depth rendering:
- *   * Background snow (z-index 0)
- *   * Foreground floating snow (z-index 5, strictly pointer-events: none)
- * - Negative delays ensure snow is fully populated across the screen immediately
- * - Decoupled CSS motion architecture (drift on wrapper, sparkle/spin on inner crystal)
- *   completely eliminates transform override collisions
+ * - Calibrated frequency: reduced particle count (28 particles) & slower, gentler drift (20s - 38s)
+ * - Layer distribution:
+ *   * Over 80% (23 particles) move strictly BEHIND the cards (z-index: 0)
+ *   * Only ~18% (5 particles) float delicately ABOVE the cards (z-index: 3)
+ * - Negative delays ensure balanced immediate distribution without sudden bursts
+ * - Strictly non-interactive (pointer-events: none) and GPU-accelerated
  */
 export function SnowEffect() {
   const { backgroundFlakes, foregroundFlakes } = useMemo(() => {
     const bg = [];
     const fg = [];
-    const totalCount = 44;
+    const totalCount = 28;
 
     for (let i = 0; i < totalCount; i++) {
-      // Deterministic pseudo-random generation
-      const tier = i % 3; // 0: micro-dust, 1: midground, 2: foreground
-      const isForeground = tier >= 1; // Tier 1 and 2 in foreground for crisp visibility
-      const isCrystalSvg = tier === 2 && i % 2 === 0;
+      // Allocate only 1 in 6 particles to the foreground (5 total), remaining 23 to background
+      const isForeground = i % 6 === 0;
+      const tier = isForeground ? 2 : (i % 2); // Tier 0 or 1 for background, Tier 2 for foreground
+      const isCrystalSvg = isForeground && (i === 0 || i === 12);
 
-      const left = ((i * 3.14159 * 23) % 97.5).toFixed(1);
-      const delay = -((i * 1.618 * 5.5) % 24).toFixed(1);
+      const left = ((i * 3.4159 * 23) % 96.5).toFixed(1);
+      const delay = -((i * 1.718 * 6.2) % 30).toFixed(1);
       
       let size, duration, sway;
-      if (tier === 0) {
-        // Micro-dust (background layer)
+      if (isForeground) {
+        // Few foreground particles: soft, gentle, slow drift (24s - 34s)
+        size = isCrystalSvg ? 12 : 7 + (i % 3);
+        duration = (24 + (i % 5) * 2.2).toFixed(1);
+        sway = ((i % 2 === 0 ? 1 : -1) * (24 + (i % 16))).toFixed(0);
+      } else if (tier === 0) {
+        // Micro background dust/bubbles (26s - 38s)
         size = 3 + (i % 2);
-        duration = (18 + (i % 6) * 1.5).toFixed(1);
-        sway = ((i % 2 === 0 ? 1 : -1) * (18 + (i % 12))).toFixed(0);
-      } else if (tier === 1) {
-        // Midground crisp flakes (foreground layer)
-        size = 5 + (i % 3);
-        duration = (12 + (i % 5) * 1.2).toFixed(1);
-        sway = ((i % 2 === 0 ? 1 : -1) * (30 + (i % 20))).toFixed(0);
+        duration = (26 + (i % 6) * 2.4).toFixed(1);
+        sway = ((i % 2 === 0 ? 1 : -1) * (16 + (i % 12))).toFixed(0);
       } else {
-        // Foreground crystals (large, prominent)
-        size = isCrystalSvg ? 14 + (i % 4) : 8 + (i % 4);
-        duration = (8.5 + (i % 4) * 1.1).toFixed(1);
-        sway = ((i % 2 === 0 ? 1 : -1) * (42 + (i % 24))).toFixed(0);
+        // Midground background bubbles/flakes (20s - 30s)
+        size = 4 + (i % 3);
+        duration = (20 + (i % 5) * 2.0).toFixed(1);
+        sway = ((i % 2 === 0 ? 1 : -1) * (22 + (i % 14))).toFixed(0);
       }
 
       const flake = {
         id: i,
         tier,
+        isForeground,
         isCrystalSvg,
         style: {
           left: `${left}%`,
@@ -85,7 +82,7 @@ export function SnowEffect() {
 
   return (
     <>
-      {/* Background Snow Layer (z-index 0) */}
+      {/* Background Snow / Bubble Layer (Over 80% behind the cards: z-index 0) */}
       <div className="atmosphere-snow-back" aria-hidden="true">
         {backgroundFlakes.map((flake) => (
           <div
@@ -98,7 +95,7 @@ export function SnowEffect() {
         ))}
       </div>
 
-      {/* Foreground Snow Layer (z-index 5, strictly pointer-events: none) */}
+      {/* Foreground Snow / Bubble Layer (Few particles above cards: z-index 3, pointer-events: none) */}
       <div className="atmosphere-snow-fore" aria-hidden="true">
         {foregroundFlakes.map((flake) => (
           <div
