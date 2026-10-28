@@ -302,6 +302,23 @@ svg { flex: none; }
 .welcome-row { display: flex; align-items: center; justify-content: space-between; gap: 35px; padding: 4px 2px 27px; }
 .eyebrow { display: flex; align-items: center; gap: 8px; color: #597874; font: 500 0.5625rem var(--mono); letter-spacing: 1px; }
 .eyebrow-line { width: 19px; height: 1px; background: var(--orange); }
+.eyebrow-logo {
+  height: 26px;
+  width: auto;
+  max-width: 28px;
+  object-fit: contain;
+  flex-shrink: 0;
+  display: inline-block;
+  vertical-align: middle;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1));
+  transition: transform 160ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.eyebrow-logo:hover {
+  transform: scale(1.12);
+}
+:root[data-theme="dark"] .eyebrow-logo {
+  filter: drop-shadow(0 1px 4px rgba(0, 0, 0, 0.5)) drop-shadow(0 0 6px rgba(56, 189, 248, 0.2));
+}
 h1, h2, h3, p { margin-top: 0; }
 .welcome-row h1, .page-heading h1 { margin: 15px 0 8px; color: #26342b; font: 600 clamp(2.125rem, 4vw, 3.0625rem)/1.06 var(--display); letter-spacing: -2.2px; }
 .welcome-row h1 em { color: var(--green); font-style: normal; }
