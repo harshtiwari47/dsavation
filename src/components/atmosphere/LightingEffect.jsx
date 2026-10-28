@@ -61,6 +61,8 @@ export function LightingEffect() {
 
   const triggerThunder = useCallback(() => {
     if (!isMountedRef.current) return;
+    // Suppress lightning calculation completely on mobile devices (<= 800px)
+    if (typeof window !== 'undefined' && window.innerWidth <= 800) return;
 
     // Pick random bolt variant and screen position (10% to 75% horizontal offset)
     const boltIndex = Math.floor(Math.random() * LIGHTNING_BOLTS.length);
@@ -84,18 +86,24 @@ export function LightingEffect() {
   useEffect(() => {
     isMountedRef.current = true;
 
-    // Natural randomized schedule: thunder strikes every 8 to 14 seconds
+    const isMobileOrNarrow = () => typeof window !== 'undefined' && window.innerWidth <= 800;
+
+    // Natural randomized schedule: thunder strikes every 8 to 14 seconds (desktop/tablet only)
     const scheduleNextThunder = () => {
       const delay = 8000 + Math.random() * 6000;
       timeoutRef.current = setTimeout(() => {
-        triggerThunder();
+        if (!isMobileOrNarrow()) {
+          triggerThunder();
+        }
         scheduleNextThunder();
       }, delay);
     };
 
-    // First initial lightning strike shortly after load (3.5s)
+    // First initial lightning strike shortly after load (3.5s) if not mobile
     timeoutRef.current = setTimeout(() => {
-      triggerThunder();
+      if (!isMobileOrNarrow()) {
+        triggerThunder();
+      }
       scheduleNextThunder();
     }, 3500);
 

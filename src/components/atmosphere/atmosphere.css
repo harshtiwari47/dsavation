@@ -284,14 +284,20 @@
    5. Responsive Device Scaling (Mobile / Tablet / Desktop)
    -------------------------------------------------------------------------- */
 @media (max-width: 800px) {
-  .lightning-bolt-container {
-    transform: scale(0.85);
-  }
-}
-
-@media (max-width: 520px) {
-  .lightning-bolt-container {
-    transform: scale(0.7);
+  /* Turn off all behind & atmospheric background animations on mobile view */
+  .thunder-atmosphere,
+  .thunder-flash-sheet,
+  .lightning-bolt-container,
+  .lightning-bolt-svg,
+  .atmosphere-snow-back,
+  .atmosphere-snow-fore,
+  .snow-particle,
+  .snowflake-crystal {
+    display: none !important;
+    animation: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
   }
 }
 

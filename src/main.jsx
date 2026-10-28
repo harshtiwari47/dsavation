@@ -80,7 +80,7 @@ function MemberAvatar({ person, style, seed, className = '', label = '' }) {
 
 function ProgressHeatmap({ progress }) {
   const [viewMode, setViewMode] = useState('month'); // 'month' or 'year'
-  const [selectedMonthKey, setSelectedMonthKey] = useState('all');
+  const [selectedMonthKey, setSelectedMonthKey] = useState(null);
 
   const {
     monthsData,
@@ -217,15 +217,32 @@ function ProgressHeatmap({ progress }) {
     };
   }, [progress]);
 
-  const focusedMonth = useMemo(() => {
-    if (selectedMonthKey === 'all') return null;
-    return monthsData.find((m) => m.monthKey === selectedMonthKey) || monthsData[monthsData.length - 1];
+  // Active month: defaults to the latest month
+  const activeMonth = useMemo(() => {
+    if (selectedMonthKey) {
+      const found = monthsData.find((m) => m.monthKey === selectedMonthKey);
+      if (found) return found;
+    }
+    return monthsData[monthsData.length - 1] || null;
   }, [selectedMonthKey, monthsData]);
 
-  const focusedMonthIndex = useMemo(() => {
-    if (!focusedMonth) return -1;
-    return monthsData.findIndex((m) => m.monthKey === focusedMonth.monthKey);
-  }, [focusedMonth, monthsData]);
+  const activeMonthIndex = useMemo(() => {
+    if (!activeMonth) return 0;
+    const idx = monthsData.findIndex((m) => m.monthKey === activeMonth.monthKey);
+    return idx >= 0 ? idx : monthsData.length - 1;
+  }, [activeMonth, monthsData]);
+
+  const handlePrevMonth = () => {
+    if (activeMonthIndex > 0) {
+      setSelectedMonthKey(monthsData[activeMonthIndex - 1].monthKey);
+    }
+  };
+
+  const handleNextMonth = () => {
+    if (activeMonthIndex < monthsData.length - 1) {
+      setSelectedMonthKey(monthsData[activeMonthIndex + 1].monthKey);
+    }
+  };
 
   return (
     <section className="panel heatmap-panel" aria-labelledby="progress-heatmap-title">
@@ -282,24 +299,19 @@ function ProgressHeatmap({ progress }) {
         Each square counts questions marked solved that day. This record is private to your account and separate from club points.
       </p>
 
-      {/* VIEW MODE 1: MONTH-WISE HEATMAP */}
-      {viewMode === 'month' && (
+      {/* VIEW MODE 1: MONTH-WISE HEATMAP WITH NAVIGATION BUTTONS */}
+      {viewMode === 'month' && activeMonth && (
         <div className="heatmap-month-container">
           {/* Quick Month Selector Tabs */}
           <div className="heatmap-month-selector" role="tablist" aria-label="Select month">
-            <button
-              type="button"
-              className={`month-tab ${selectedMonthKey === 'all' ? 'active' : ''}`}
-              onClick={() => setSelectedMonthKey('all')}
-            >
-              All 12 Months
-            </button>
             {monthsData.map((m) => (
               <button
                 key={m.monthKey}
                 type="button"
-                className={`month-tab ${selectedMonthKey === m.monthKey ? 'active' : ''}`}
+                className={`month-tab ${activeMonth.monthKey === m.monthKey ? 'active' : ''}`}
                 onClick={() => setSelectedMonthKey(m.monthKey)}
+                role="tab"
+                aria-selected={activeMonth.monthKey === m.monthKey}
               >
                 <span>{m.shortMonth}</span>
                 {m.totalSolved > 0 && <span className="month-tab-badge">{m.totalSolved}</span>}
@@ -307,104 +319,59 @@ function ProgressHeatmap({ progress }) {
             ))}
           </div>
 
-          {/* All 12 Months Cards Grid */}
-          {selectedMonthKey === 'all' && (
-            <div className="heatmap-months-grid">
-              {monthsData.map((m) => (
-                <div
-                  key={m.monthKey}
-                  className="month-card"
-                  onClick={() => setSelectedMonthKey(m.monthKey)}
-                  role="button"
-                  tabIndex={0}
-                  onKeyDown={(e) => e.key === 'Enter' && setSelectedMonthKey(m.monthKey)}
-                >
-                  <div className="month-card-header">
-                    <strong>{m.monthName} {m.year}</strong>
-                    <span className="month-card-solved">{m.totalSolved} solved</span>
-                  </div>
-                  <div className="month-weekdays-row" aria-hidden="true">
-                    <span>S</span><span>M</span><span>T</span><span>W</span><span>T</span><span>F</span><span>S</span>
-                  </div>
-                  <div className="month-card-cells">
-                    {Array.from({ length: m.firstDayOfWeek }).map((_, i) => (
-                      <span key={`pad-${i}`} className="heatmap-cell pad-cell" />
-                    ))}
-                    {m.days.map((day) => (
-                      <span
-                        key={day.date}
-                        className={`heatmap-cell level-${day.level} ${day.inRange ? '' : 'outside-range'}`}
-                        title={`${day.count} ${day.count === 1 ? 'question' : 'questions'} · ${day.date}`}
-                        role="img"
-                        aria-label={`${day.count} questions on ${day.date}`}
-                      />
-                    ))}
-                  </div>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {/* Focused Single Month Detailed View */}
-          {selectedMonthKey !== 'all' && focusedMonth && (
-            <div className="month-detail-card">
-              <div className="month-detail-top">
+          {/* Single Month Card with Previous / Next Navigation Buttons */}
+          <div className="month-detail-card">
+            <div className="month-detail-top">
+              <div className="month-nav-controls">
                 <button
                   type="button"
-                  className="button button-quiet back-all-btn"
-                  onClick={() => setSelectedMonthKey('all')}
+                  className="month-nav-btn"
+                  disabled={activeMonthIndex <= 0}
+                  onClick={handlePrevMonth}
+                  aria-label="Previous month"
+                  title="Previous month"
                 >
-                  ← Back to all 12 months
+                  ‹
                 </button>
-                <div className="month-nav-controls">
-                  <button
-                    type="button"
-                    className="month-nav-btn"
-                    disabled={focusedMonthIndex <= 0}
-                    onClick={() => setSelectedMonthKey(monthsData[focusedMonthIndex - 1].monthKey)}
-                    aria-label="Previous month"
-                  >
-                    ‹
-                  </button>
-                  <h3>{focusedMonth.monthName} {focusedMonth.year}</h3>
-                  <button
-                    type="button"
-                    className="month-nav-btn"
-                    disabled={focusedMonthIndex >= monthsData.length - 1}
-                    onClick={() => setSelectedMonthKey(monthsData[focusedMonthIndex + 1].monthKey)}
-                    aria-label="Next month"
-                  >
-                    ›
-                  </button>
-                </div>
-                <div className="month-detail-totals">
-                  <span><strong>{focusedMonth.totalSolved}</strong> solved</span>
-                  <span><strong>{focusedMonth.activeDays}</strong> active days</span>
-                </div>
+                <h3>{activeMonth.monthName} {activeMonth.year}</h3>
+                <button
+                  type="button"
+                  className="month-nav-btn"
+                  disabled={activeMonthIndex >= monthsData.length - 1}
+                  onClick={handleNextMonth}
+                  aria-label="Next month"
+                  title="Next month"
+                >
+                  ›
+                </button>
               </div>
-
-              <div className="month-detail-calendar">
-                <div className="month-detail-weekdays">
-                  <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
-                </div>
-                <div className="month-detail-grid">
-                  {Array.from({ length: focusedMonth.firstDayOfWeek }).map((_, i) => (
-                    <div key={`detail-pad-${i}`} className="month-detail-cell empty" />
-                  ))}
-                  {focusedMonth.days.map((day) => (
-                    <div
-                      key={day.date}
-                      className={`month-detail-cell level-${day.level} ${day.inRange ? '' : 'outside-range'} ${day.count > 0 ? 'has-activity' : ''}`}
-                      title={`${day.count} ${day.count === 1 ? 'question' : 'questions'} on ${day.date}`}
-                    >
-                      <span className="day-number">{day.day}</span>
-                      {day.count > 0 && <span className="day-count-badge">{day.count}</span>}
-                    </div>
-                  ))}
-                </div>
+              <div className="month-detail-totals">
+                <span><strong>{activeMonth.totalSolved}</strong> solved</span>
+                <span><strong>{activeMonth.activeDays}</strong> active days</span>
               </div>
             </div>
-          )}
+
+            <div className="month-detail-calendar">
+              <div className="month-detail-weekdays">
+                <span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span>
+              </div>
+              <div className="month-detail-grid">
+                {Array.from({ length: activeMonth.firstDayOfWeek }).map((_, i) => (
+                  <div key={`detail-pad-${i}`} className="month-detail-cell empty" />
+                ))}
+                {activeMonth.days.map((day) => (
+                  <div
+                    key={day.date}
+                    className={`month-detail-cell level-${day.level} ${day.inRange ? '' : 'outside-range'} ${day.count > 0 ? 'has-activity' : ''}`}
+                    title={`${day.count} ${day.count === 1 ? 'question' : 'questions'} on ${day.date}`}
+                  >
+                    <span className="day-number">{day.day}</span>
+                    {day.count > 0 && <span className="day-count-badge">{day.count}</span>}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
