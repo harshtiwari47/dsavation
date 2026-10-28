@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
 import { AVATAR_STYLES, createAvatarDataUri, createAvatarSeeds } from './avatar.js';
+import { initLiquidGlass } from './liquidGlass.js';
 import './style.css';
 
 function normalizeQuestions(rows = []) {
@@ -420,6 +421,11 @@ function App() {
   }
 
   useEffect(() => {
+    const cleanup = initLiquidGlass();
+    return cleanup;
+  }, []);
+
+  useEffect(() => {
     api('/auth/me').then(({ user }) => setAccount(user)).catch((error) => {
       setApiNotice(error.message.includes('MONGODB_URI') ? 'Connect MongoDB to enable member accounts and club activity.' : 'Member services are temporarily unavailable.');
     }).finally(() => setAuthReady(true));
@@ -686,6 +692,11 @@ function App() {
   const clearFilters = () => { setQuery(''); setTopic('All topics'); setDifficulty('Any level'); setStructure('Any data structure'); setPattern('Any pattern'); };
 
   return <div className="app-frame">
+    <div className="liquid-ambient-backdrop" aria-hidden="true">
+      <div className="liquid-orb orb-1" />
+      <div className="liquid-orb orb-2" />
+      <div className="liquid-orb orb-3" />
+    </div>
     {appLoading && <div className="global-loading" role="progressbar" aria-label="Loading DSAvation" aria-valuetext="Loading"><span /></div>}
     <header className="topbar">
       <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true"/><span>DSAvation</span></a>
