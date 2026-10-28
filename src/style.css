@@ -25,9 +25,10 @@
   --amber: #a47733;
   --amber-soft: #f8f0df;
   --display: 'Space Grotesk', sans-serif;
-  --mono: 'DM Mono', monospace;
+  --mono: 'JetBrains Mono', 'SF Mono', 'Fira Code', Menlo, Consolas, monospace;
   --ease-out: cubic-bezier(.23, 1, .32, 1);
-  font-smooth: always;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 * { box-sizing: border-box; }
@@ -161,191 +162,195 @@ h1, h2, h3, p { margin-top: 0; }
 .hero-index small { padding-bottom: 4px; color: var(--green); font: 500 0.5rem var(--mono); letter-spacing: .7px; }
 
 /* ==========================================================================
-   DYNAMIC LIQUID GLASS SYSTEM & VISCOUS JIGGLE PHYSICS
+   SMOOTH WATER FLOW LIQUID GLASS DESIGN SYSTEM
+   Zero 3D perspective / rotation to ensure 100% razor-sharp, crisp text.
+   Continuous silky water stream and smooth cursor water refraction.
    ========================================================================== */
 
-.liquid-glass {
-  --liquid-x: 50%;
-  --liquid-y: 50%;
-  --liquid-tilt-x: 0deg;
-  --liquid-tilt-y: 0deg;
+.liquid-glass,
+.water-glass-card {
+  --water-x: 50%;
+  --water-y: 50%;
 
   position: relative;
   isolation: isolate;
+  overflow: hidden;
   background: linear-gradient(
-    135deg,
-    rgba(255, 255, 255, 0.78) 0%,
-    rgba(252, 254, 250, 0.6) 100%
+    140deg,
+    rgba(255, 255, 255, 0.85) 0%,
+    rgba(252, 254, 250, 0.72) 100%
   );
-  backdrop-filter: blur(22px) saturate(180%) contrast(102%);
-  -webkit-backdrop-filter: blur(22px) saturate(180%) contrast(102%);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(255, 255, 255, 0.85);
-  border-radius: 14px;
+  border-radius: 12px;
   box-shadow: 
-    0 12px 34px -8px rgba(30, 50, 38, 0.07),
-    0 3px 10px -2px rgba(30, 50, 38, 0.03),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1.5px 2.5px 0 rgba(30, 106, 80, 0.05);
-  transform: perspective(1000px) rotateX(var(--liquid-tilt-x)) rotateY(var(--liquid-tilt-y)) translateZ(0);
+    0 8px 24px -4px rgba(32, 45, 36, 0.05),
+    0 2px 6px -1px rgba(32, 45, 36, 0.03),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 2px 0 rgba(30, 106, 80, 0.04);
+  /* 100% stationary 2D layer - no transforms or rotations that blur text */
+  transform: none !important;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
   transition: 
-    transform 0.45s cubic-bezier(0.18, 0.9, 0.28, 1),
-    box-shadow 0.45s cubic-bezier(0.18, 0.9, 0.28, 1),
-    border-color 0.3s ease,
-    background 0.3s ease;
-  will-change: transform;
+    border-color 0.35s ease,
+    box-shadow 0.35s ease,
+    background 0.35s ease;
 }
 
-/* Liquid Specular Spotlight (Tracks mouse pointer smoothly) */
-.liquid-glass::before {
+/* Ensure all card child elements sit cleanly above the water flow layers */
+.liquid-glass > *,
+.water-glass-card > * {
+  position: relative;
+  z-index: 2;
+}
+
+/* Layer 1: Continuous Smooth Water Stream Flowing Across Glass */
+.liquid-glass::before,
+.water-glass-card::before {
+  content: '';
+  position: absolute;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  pointer-events: none;
+  z-index: 0;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    transparent 40%,
+    rgba(255, 255, 255, 0.22) 46%,
+    rgba(255, 255, 255, 0.5) 50%,
+    rgba(255, 255, 255, 0.22) 54%,
+    transparent 60%,
+    transparent 100%
+  );
+  background-size: 200% 200%;
+  animation: smooth-water-flow 11s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  opacity: 0.6;
+  transition: opacity 0.4s ease;
+}
+
+/* Layer 2: Gentle Water Disturbance & Surface Caustics following Pointer */
+.liquid-glass::after,
+.water-glass-card::after {
   content: '';
   position: absolute;
   inset: 0;
   border-radius: inherit;
   pointer-events: none;
   z-index: 1;
-  opacity: 0;
   background: radial-gradient(
-    circle 260px at var(--liquid-x) var(--liquid-y),
-    rgba(255, 255, 255, 0.7) 0%,
-    rgba(255, 255, 255, 0.2) 42%,
+    circle 240px at var(--water-x, 50%) var(--water-y, 50%),
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(65, 138, 104, 0.08) 45%,
     transparent 75%
   );
+  opacity: 0;
   transition: opacity 0.35s ease;
 }
 
-/* Liquid Caustic Fluid Membrane */
-.liquid-glass::after {
-  content: '';
-  position: absolute;
-  inset: -1px;
-  border-radius: inherit;
-  pointer-events: none;
-  z-index: 0;
-  opacity: 0.35;
-  background: radial-gradient(
-    ellipse 75% 55% at 50% -20%,
-    rgba(30, 106, 80, 0.14),
-    transparent 70%
-  );
-  mix-blend-mode: soft-light;
-  transition: opacity 0.4s ease;
+/* On hover: Water flow brightens gently without moving/rotating card */
+.liquid-glass:hover,
+.liquid-glass.water-active,
+.water-glass-card:hover,
+.water-glass-card.water-active {
+  border-color: rgba(30, 106, 80, 0.32);
+  box-shadow: 
+    0 12px 32px -6px rgba(30, 106, 80, 0.12),
+    0 4px 12px -2px rgba(32, 45, 36, 0.05),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 1),
+    inset 0 -1px 2px 0 rgba(30, 106, 80, 0.08);
 }
 
-.liquid-glass.liquid-hovered::before {
+.liquid-glass:hover::before,
+.liquid-glass.water-active::before,
+.water-glass-card:hover::before,
+.water-glass-card.water-active::before {
+  opacity: 0.85;
+}
+
+.liquid-glass:hover::after,
+.liquid-glass.water-active::after,
+.water-glass-card:hover::after,
+.water-glass-card.water-active::after {
   opacity: 1;
 }
 
-.liquid-glass.liquid-hovered::after {
-  opacity: 0.75;
-}
-
-.liquid-glass.liquid-hovered {
-  border-color: rgba(30, 106, 80, 0.38);
-  box-shadow: 
-    0 22px 52px -10px rgba(30, 106, 80, 0.16),
-    0 8px 22px -4px rgba(30, 50, 38, 0.08),
-    inset 0 2px 2.5px 0 rgba(255, 255, 255, 1),
-    inset 0 -2px 3.5px 0 rgba(30, 106, 80, 0.1);
-}
-
-/* Viscous Gelatin Squash-and-Stretch Jiggle Keyframes */
-@keyframes liquid-jiggle {
+/* Smooth Water Stream Drift Keyframes */
+@keyframes smooth-water-flow {
   0% {
-    transform: perspective(1000px) scale3d(1, 1, 1) rotateX(var(--liquid-tilt-x)) rotateY(var(--liquid-tilt-y));
+    transform: translate3d(-20%, -20%, 0) rotate(0deg);
   }
-  15% {
-    transform: perspective(1000px) scale3d(1.044, 0.938, 1.02) rotateX(calc(var(--liquid-tilt-x) * 1.3)) rotateY(calc(var(--liquid-tilt-y) * 1.3)) skewX(-1.5deg) skewY(0.7deg);
-  }
-  30% {
-    transform: perspective(1000px) scale3d(0.96, 1.048, 0.97) rotateX(calc(var(--liquid-tilt-x) * 0.8)) rotateY(calc(var(--liquid-tilt-y) * 0.8)) skewX(1.2deg) skewY(-0.6deg);
-  }
-  48% {
-    transform: perspective(1000px) scale3d(1.022, 0.982, 1.01) skewX(-0.55deg) skewY(0.25deg);
-  }
-  65% {
-    transform: perspective(1000px) scale3d(0.988, 1.012, 0.995) skewX(0.25deg) skewY(-0.12deg);
-  }
-  82% {
-    transform: perspective(1000px) scale3d(1.006, 0.996, 1.002) skewX(-0.1deg);
+  50% {
+    transform: translate3d(10%, 10%, 0) rotate(1.5deg);
   }
   100% {
-    transform: perspective(1000px) scale3d(1, 1, 1) rotateX(var(--liquid-tilt-x)) rotateY(var(--liquid-tilt-y));
-  }
-}
-
-.liquid-glass.liquid-jiggling {
-  animation: liquid-jiggle 0.72s cubic-bezier(0.25, 1.3, 0.35, 1) forwards;
-}
-
-/* Tactile Liquid Squash on click or touch-down */
-.liquid-glass.liquid-squish {
-  transform: perspective(1000px) scale3d(0.962, 0.942, 0.98) !important;
-  box-shadow: 
-    0 6px 16px -4px rgba(30, 106, 80, 0.12),
-    inset 0 2px 4px 0 rgba(0, 0, 0, 0.05) !important;
-  transition: transform 0.12s cubic-bezier(0.2, 0.8, 0.4, 1), box-shadow 0.12s ease !important;
-}
-
-/* Expanding Liquid Shockwave Ripple */
-.liquid-glass-ripple {
-  position: absolute;
-  top: var(--liquid-y, 50%);
-  left: var(--liquid-x, 50%);
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 2;
-  transform: translate(-50%, -50%) scale(0);
-  background: radial-gradient(circle, rgba(255, 255, 255, 0.65) 0%, rgba(30, 106, 80, 0.18) 50%, transparent 75%);
-  animation: liquid-ripple-expand 0.85s cubic-bezier(0.1, 0.8, 0.3, 1) forwards;
-}
-
-@keyframes liquid-ripple-expand {
-  0% {
-    transform: translate(-50%, -50%) scale(0);
-    opacity: 0.85;
-  }
-  100% {
-    transform: translate(-50%, -50%) scale(38);
-    opacity: 0;
+    transform: translate3d(-20%, -20%, 0) rotate(0deg);
   }
 }
 
 .overview-grid { display: grid; grid-template-columns: 1.5fr .95fr 1fr; gap: 14px; margin-bottom: 45px; }
 .overview-card { min-width: 0; min-height: 170px; padding: 20px 21px; position: relative; overflow: hidden; }
-.today-card.liquid-glass {
+
+/* Today's Card - Emerald Fresh Water Glow */
+.today-card.liquid-glass,
+.today-card.water-glass-card {
   background: linear-gradient(
-    135deg,
-    rgba(237, 246, 237, 0.88) 0%,
-    rgba(224, 239, 223, 0.72) 100%
+    140deg,
+    rgba(238, 246, 238, 0.92) 0%,
+    rgba(226, 240, 226, 0.8) 100%
   );
-  border-color: rgba(76, 153, 109, 0.38);
+  border-color: rgba(76, 153, 109, 0.35);
   box-shadow: 
-    0 14px 36px -8px rgba(30, 106, 80, 0.14),
-    0 4px 12px -2px rgba(30, 106, 80, 0.05),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1.5px 3px 0 rgba(30, 106, 80, 0.1);
+    0 10px 28px -6px rgba(30, 106, 80, 0.1),
+    0 3px 8px -2px rgba(30, 106, 80, 0.04),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.95),
+    inset 0 -1px 2px 0 rgba(30, 106, 80, 0.08);
 }
-.today-card.liquid-glass.liquid-hovered {
-  border-color: rgba(30, 106, 80, 0.55);
+
+.today-card.liquid-glass::before,
+.today-card.water-glass-card::before {
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    transparent 38%,
+    rgba(255, 255, 255, 0.3) 44%,
+    rgba(167, 213, 167, 0.45) 50%,
+    rgba(255, 255, 255, 0.3) 56%,
+    transparent 62%,
+    transparent 100%
+  );
+}
+
+.today-card.liquid-glass:hover,
+.today-card.water-glass-card:hover {
+  border-color: rgba(30, 106, 80, 0.5);
   box-shadow: 
-    0 24px 55px -10px rgba(30, 106, 80, 0.22),
-    0 0 25px -4px rgba(76, 153, 109, 0.2),
-    inset 0 2px 3px 0 rgba(255, 255, 255, 1),
-    inset 0 -2px 4px 0 rgba(30, 106, 80, 0.16);
+    0 16px 40px -8px rgba(30, 106, 80, 0.18),
+    0 0 20px -4px rgba(76, 153, 109, 0.16),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 1);
 }
-.personal-card.liquid-glass {
-  border-color: rgba(30, 106, 80, 0.24);
+
+.personal-card.liquid-glass,
+.personal-card.water-glass-card {
+  border-color: rgba(30, 106, 80, 0.22);
 }
-.community-card.liquid-glass {
-  border-color: rgba(199, 120, 77, 0.26);
+
+.community-card.liquid-glass,
+.community-card.water-glass-card {
+  border-color: rgba(199, 120, 77, 0.24);
 }
-.community-card.liquid-glass::after {
+
+.community-card.liquid-glass::after,
+.community-card.water-glass-card::after {
   background: radial-gradient(
-    ellipse 75% 55% at 50% -20%,
-    rgba(199, 120, 77, 0.16),
-    transparent 70%
+    circle 240px at var(--water-x, 50%) var(--water-y, 50%),
+    rgba(255, 255, 255, 0.5) 0%,
+    rgba(199, 120, 77, 0.1) 45%,
+    transparent 75%
   );
 }
 .card-kicker { display: flex; align-items: center; gap: 7px; color: #899388; font: 500 0.5rem var(--mono); letter-spacing: .8px; }
@@ -837,13 +842,9 @@ h1, h2, h3, p { margin-top: 0; }
   .topbar { padding-inline: 9px; }
 }
 @media (hover: none) {
-  .liquid-glass {
-    --liquid-tilt-x: 0deg !important;
-    --liquid-tilt-y: 0deg !important;
+  .liquid-glass,
+  .water-glass-card {
     transform: none !important;
-  }
-  .liquid-glass.liquid-jiggling {
-    animation: liquid-jiggle 0.65s cubic-bezier(0.25, 1.3, 0.35, 1) forwards;
   }
 }
 @media (max-width: 600px) {
@@ -922,71 +923,78 @@ h1, h2, h3, p { margin-top: 0; }
   background: radial-gradient(circle, rgba(147, 185, 208, 0.18) 0%, rgba(38, 60, 46, 0.1) 70%, transparent 100%);
 }
 
-:root[data-theme="dark"] .liquid-glass {
+:root[data-theme="dark"] .liquid-glass,
+:root[data-theme="dark"] .water-glass-card {
   background: linear-gradient(
-    135deg,
-    rgba(27, 36, 30, 0.76) 0%,
-    rgba(18, 25, 20, 0.62) 100%
+    140deg,
+    rgba(27, 36, 30, 0.82) 0%,
+    rgba(19, 26, 21, 0.72) 100%
   );
-  border: 1px solid rgba(131, 198, 155, 0.2);
+  border: 1px solid rgba(131, 198, 155, 0.18);
   box-shadow: 
-    0 16px 42px -10px rgba(0, 0, 0, 0.6),
-    0 4px 14px -2px rgba(0, 0, 0, 0.4),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.14),
-    inset 0 -1.5px 2.5px 0 rgba(131, 198, 155, 0.08);
+    0 12px 32px -8px rgba(0, 0, 0, 0.55),
+    0 3px 10px -2px rgba(0, 0, 0, 0.35),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.12),
+    inset 0 -1px 2px 0 rgba(131, 198, 155, 0.06);
 }
 
-:root[data-theme="dark"] .liquid-glass::before {
+:root[data-theme="dark"] .liquid-glass::before,
+:root[data-theme="dark"] .water-glass-card::before {
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    transparent 38%,
+    rgba(131, 198, 155, 0.12) 46%,
+    rgba(255, 255, 255, 0.22) 50%,
+    rgba(131, 198, 155, 0.12) 54%,
+    transparent 62%,
+    transparent 100%
+  );
+  opacity: 0.55;
+}
+
+:root[data-theme="dark"] .liquid-glass::after,
+:root[data-theme="dark"] .water-glass-card::after {
   background: radial-gradient(
-    circle 260px at var(--liquid-x) var(--liquid-y),
-    rgba(131, 198, 155, 0.28) 0%,
-    rgba(255, 255, 255, 0.08) 45%,
+    circle 240px at var(--water-x, 50%) var(--water-y, 50%),
+    rgba(131, 198, 155, 0.25) 0%,
+    rgba(38, 115, 80, 0.08) 45%,
     transparent 75%
   );
 }
 
-:root[data-theme="dark"] .liquid-glass::after {
-  background: radial-gradient(
-    ellipse 75% 55% at 50% -20%,
-    rgba(131, 198, 155, 0.2),
-    transparent 70%
-  );
-}
-
-:root[data-theme="dark"] .liquid-glass.liquid-hovered {
-  border-color: rgba(131, 198, 155, 0.45);
+:root[data-theme="dark"] .liquid-glass:hover,
+:root[data-theme="dark"] .liquid-glass.water-active,
+:root[data-theme="dark"] .water-glass-card:hover,
+:root[data-theme="dark"] .water-glass-card.water-active {
+  border-color: rgba(131, 198, 155, 0.42);
   box-shadow: 
-    0 24px 55px -10px rgba(0, 0, 0, 0.75),
-    0 0 25px -4px rgba(131, 198, 155, 0.22),
-    inset 0 2px 3px 0 rgba(255, 255, 255, 0.25),
-    inset 0 -2px 4px 0 rgba(131, 198, 155, 0.16);
+    0 18px 45px -8px rgba(0, 0, 0, 0.72),
+    0 0 20px -3px rgba(131, 198, 155, 0.18),
+    inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.22);
 }
 
-:root[data-theme="dark"] .today-card.liquid-glass {
+:root[data-theme="dark"] .today-card.liquid-glass,
+:root[data-theme="dark"] .today-card.water-glass-card {
   background: linear-gradient(
-    135deg,
-    rgba(32, 49, 37, 0.85) 0%,
-    rgba(22, 34, 26, 0.7) 100%
+    140deg,
+    rgba(32, 49, 37, 0.88) 0%,
+    rgba(22, 34, 26, 0.78) 100%
   );
-  border-color: rgba(131, 198, 155, 0.38);
+  border-color: rgba(131, 198, 155, 0.35);
   box-shadow: 
-    0 18px 45px -10px rgba(0, 0, 0, 0.65),
-    0 0 25px -5px rgba(76, 153, 109, 0.25),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.2),
-    inset 0 -1.5px 2.5px 0 rgba(131, 198, 155, 0.12);
+    0 14px 36px -8px rgba(0, 0, 0, 0.65),
+    0 0 20px -4px rgba(76, 153, 109, 0.22),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.18);
 }
 
-:root[data-theme="dark"] .today-card.liquid-glass.liquid-hovered {
-  border-color: rgba(161, 219, 179, 0.6);
+:root[data-theme="dark"] .today-card.liquid-glass:hover,
+:root[data-theme="dark"] .today-card.water-glass-card:hover {
+  border-color: rgba(161, 219, 179, 0.55);
   box-shadow: 
-    0 24px 60px -10px rgba(0, 0, 0, 0.8),
-    0 0 35px -3px rgba(131, 198, 155, 0.35),
-    inset 0 2px 3px 0 rgba(255, 255, 255, 0.3),
-    inset 0 -2px 4px 0 rgba(131, 198, 155, 0.2);
-}
-
-:root[data-theme="dark"] .liquid-glass-ripple {
-  background: radial-gradient(circle, rgba(131, 198, 155, 0.45) 0%, rgba(38, 115, 80, 0.2) 50%, transparent 75%);
+    0 20px 50px -8px rgba(0, 0, 0, 0.75),
+    0 0 28px -2px rgba(131, 198, 155, 0.28),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.25);
 }
 :root[data-theme="dark"] .mobile-bottom-nav { border-color: var(--line); background: rgba(27,36,30,.96); }
 :root[data-theme="dark"] .mobile-bottom-nav button { color: #9dab9f; }
