@@ -32,7 +32,23 @@
 }
 
 * { box-sizing: border-box; }
-body { margin: 0; min-width: 280px; min-height: 100vh; background: var(--paper); }
+body {
+  margin: 0;
+  min-width: 280px;
+  min-height: 100vh;
+  background: 
+    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(186, 230, 253, 0.45) 0%, transparent 80%),
+    linear-gradient(
+      180deg,
+      #f0f8fb 0%,
+      #e5f3f8 22%,
+      #dbeef5 50%,
+      #d0e8f1 76%,
+      #c6e1ed 100%
+    );
+  background-attachment: fixed;
+  color: var(--ink);
+}
 button, input, select { font: inherit; }
 button { color: inherit; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible { outline: 2px solid #418a68; outline-offset: 3px; }
@@ -42,48 +58,109 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 svg { flex: none; }
 .app-frame { min-height: 100vh; position: relative; overflow-x: hidden; }
 
-/* Ambient Liquid Backdrop (Subtle luminous orbs refracted through glass) */
-.liquid-ambient-backdrop {
+/* ==========================================================================
+   Underwater Atmosphere Backdrop (Oceanic Depth, Whale & Bioluminescent Jellyfish)
+   ========================================================================== */
+.underwater-backdrop {
   position: fixed;
   inset: 0;
   pointer-events: none;
   z-index: 0;
   overflow: hidden;
+  user-select: none;
 }
 
-.liquid-orb {
+/* Surface Sunlight Caustic Rays */
+.underwater-sunrays {
+  position: absolute;
+  top: -12%;
+  left: -25%;
+  width: 150%;
+  height: 60vh;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    -68deg,
+    transparent 0%,
+    transparent 7%,
+    rgba(255, 255, 255, 0.05) 10%,
+    rgba(56, 189, 248, 0.09) 13%,
+    rgba(255, 255, 255, 0.05) 16%,
+    transparent 19%,
+    transparent 28%
+  );
+  filter: blur(14px);
+  animation: sunrays-drift 24s ease-in-out infinite alternate;
+  opacity: 0.85;
+}
+
+:root[data-theme="dark"] .underwater-sunrays {
+  background: repeating-linear-gradient(
+    -68deg,
+    transparent 0%,
+    transparent 7%,
+    rgba(56, 189, 248, 0.04) 10%,
+    rgba(14, 165, 233, 0.08) 13%,
+    rgba(56, 189, 248, 0.04) 16%,
+    transparent 19%,
+    transparent 28%
+  );
+  filter: blur(18px);
+  opacity: 0.65;
+}
+
+@keyframes sunrays-drift {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
+  50% { transform: translate3d(40px, 15px, 0) rotate(1.5deg); }
+  100% { transform: translate3d(-30px, 25px, 0) rotate(-1deg); }
+}
+
+/* Deep Ocean Ambient Light Orbs */
+.underwater-orb {
   position: absolute;
   border-radius: 50%;
-  filter: blur(80px);
-  opacity: 0.38;
+  filter: blur(85px);
+  opacity: 0.42;
   will-change: transform;
 }
 
-.liquid-orb.orb-1 {
-  width: min(540px, 60vw);
-  height: min(540px, 60vw);
-  top: -8%;
-  left: 15%;
-  background: radial-gradient(circle, rgba(30, 106, 80, 0.25) 0%, rgba(65, 138, 104, 0.08) 65%, transparent 100%);
-  animation: liquid-orb-drift-1 22s ease-in-out infinite alternate;
+.underwater-orb.orb-abyss-1 {
+  width: min(560px, 60vw);
+  height: min(560px, 60vw);
+  top: 5%;
+  left: 20%;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.28) 0%, rgba(30, 106, 80, 0.08) 65%, transparent 100%);
+  animation: liquid-orb-drift-1 24s ease-in-out infinite alternate;
 }
 
-.liquid-orb.orb-2 {
-  width: min(600px, 65vw);
-  height: min(600px, 65vw);
-  top: 35%;
-  right: -5%;
-  background: radial-gradient(circle, rgba(199, 120, 77, 0.18) 0%, rgba(164, 119, 51, 0.06) 60%, transparent 100%);
-  animation: liquid-orb-drift-2 26s ease-in-out infinite alternate;
+.underwater-orb.orb-abyss-2 {
+  width: min(640px, 68vw);
+  height: min(640px, 68vw);
+  top: 42%;
+  right: -8%;
+  background: radial-gradient(circle, rgba(37, 99, 235, 0.2) 0%, rgba(56, 189, 248, 0.06) 60%, transparent 100%);
+  animation: liquid-orb-drift-2 28s ease-in-out infinite alternate;
 }
 
-.liquid-orb.orb-3 {
-  width: min(480px, 55vw);
-  height: min(480px, 55vw);
-  bottom: 8%;
-  left: 8%;
-  background: radial-gradient(circle, rgba(81, 116, 142, 0.2) 0%, rgba(30, 106, 80, 0.05) 65%, transparent 100%);
-  animation: liquid-orb-drift-3 20s ease-in-out infinite alternate;
+.underwater-orb.orb-abyss-3 {
+  width: min(520px, 58vw);
+  height: min(520px, 58vw);
+  bottom: 5%;
+  left: 5%;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.18) 0%, rgba(14, 165, 233, 0.05) 65%, transparent 100%);
+  animation: liquid-orb-drift-3 22s ease-in-out infinite alternate;
+}
+
+:root[data-theme="dark"] .underwater-orb {
+  opacity: 0.35;
+}
+:root[data-theme="dark"] .underwater-orb.orb-abyss-1 {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.35) 0%, rgba(14, 116, 144, 0.1) 65%, transparent 100%);
+}
+:root[data-theme="dark"] .underwater-orb.orb-abyss-2 {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.25) 0%, rgba(37, 99, 235, 0.08) 60%, transparent 100%);
+}
+:root[data-theme="dark"] .underwater-orb.orb-abyss-3 {
+  background: radial-gradient(circle, rgba(20, 184, 166, 0.22) 0%, rgba(14, 165, 233, 0.06) 65%, transparent 100%);
 }
 
 @keyframes liquid-orb-drift-1 {
@@ -102,6 +179,377 @@ svg { flex: none; }
   0% { transform: translate3d(0, 0, 0) scale(1); }
   50% { transform: translate3d(50px, -35px, 0) scale(1.12); }
   100% { transform: translate3d(-40px, -20px, 0) scale(0.96); }
+}
+
+/* ==========================================================================
+   Majestic Swimming Blue Whale
+   ========================================================================== */
+.underwater-whale {
+  position: absolute;
+  top: 24%;
+  left: -580px;
+  width: clamp(280px, 34vw, 520px);
+  pointer-events: none;
+  will-change: transform;
+  filter: drop-shadow(0 14px 32px rgba(14, 165, 233, 0.16));
+  animation: whale-swim-journey 58s cubic-bezier(0.4, 0, 0.6, 1) infinite,
+             whale-swim-undulate 7s ease-in-out infinite alternate;
+}
+
+.underwater-whale-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.whale-torso {
+  transform-origin: 40% 50%;
+  animation: whale-body-flex 6.5s ease-in-out infinite alternate;
+}
+
+.whale-flipper {
+  transform-origin: 185px 110px;
+  animation: whale-flipper-glide 4.5s ease-in-out infinite alternate;
+}
+
+:root {
+  --whale-head: rgba(56, 189, 248, 0.55);
+  --whale-body: rgba(14, 165, 233, 0.45);
+  --whale-tail: rgba(30, 95, 125, 0.35);
+  --whale-fluke: rgba(14, 116, 144, 0.28);
+}
+
+:root[data-theme="dark"] .underwater-whale {
+  filter: drop-shadow(0 0 28px rgba(56, 189, 248, 0.4))
+          drop-shadow(0 0 60px rgba(14, 165, 233, 0.25));
+  opacity: 0.85;
+}
+
+:root[data-theme="dark"] {
+  --whale-head: rgba(56, 189, 248, 0.75);
+  --whale-body: rgba(14, 165, 233, 0.55);
+  --whale-tail: rgba(2, 132, 199, 0.42);
+  --whale-fluke: rgba(3, 105, 161, 0.35);
+}
+
+@keyframes whale-swim-journey {
+  0% {
+    transform: translate3d(-10vw, 0, 0);
+    opacity: 0;
+  }
+  6% {
+    opacity: 0.8;
+  }
+  88% {
+    opacity: 0.8;
+  }
+  100% {
+    transform: translate3d(calc(110vw + 600px), 0, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes whale-swim-undulate {
+  0% {
+    margin-top: 0px;
+    rotate: -1.8deg;
+  }
+  50% {
+    margin-top: -35px;
+    rotate: 1.2deg;
+  }
+  100% {
+    margin-top: 25px;
+    rotate: -1deg;
+  }
+}
+
+@keyframes whale-body-flex {
+  0% {
+    transform: scaleY(0.97) skewY(-1deg);
+  }
+  100% {
+    transform: scaleY(1.03) skewY(1deg);
+  }
+}
+
+@keyframes whale-flipper-glide {
+  0% {
+    transform: rotate(0deg);
+  }
+  100% {
+    transform: rotate(-8deg);
+  }
+}
+
+/* ==========================================================================
+   Translucent Bioluminescent Jellyfish
+   ========================================================================== */
+.underwater-jellyfish {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.underwater-jellyfish-svg {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+/* Jellyfish 1: Large - Right side */
+.underwater-jellyfish.jellyfish-1 {
+  width: clamp(105px, 12vw, 170px);
+  bottom: -280px;
+  right: clamp(4%, 9vw, 14%);
+  animation: 
+    jellyfish-ascend-1 32s linear infinite,
+    jellyfish-pulse 3.8s ease-in-out infinite,
+    jellyfish-sway-1 8s ease-in-out infinite alternate;
+  filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.28));
+  opacity: 0.72;
+}
+
+/* Jellyfish 2: Medium - Left side */
+.underwater-jellyfish.jellyfish-2 {
+  width: clamp(78px, 9vw, 125px);
+  bottom: -280px;
+  left: clamp(3%, 7vw, 12%);
+  animation: 
+    jellyfish-ascend-2 38s linear infinite,
+    jellyfish-pulse 4.2s ease-in-out infinite,
+    jellyfish-sway-2 9s ease-in-out infinite alternate;
+  animation-delay: 15s, 0s, 0s;
+  filter: drop-shadow(0 0 14px rgba(96, 165, 250, 0.25));
+  opacity: 0.65;
+}
+
+:root {
+  --jelly-core: rgba(110, 231, 183, 0.65);
+  --jelly-mid: rgba(56, 189, 248, 0.5);
+  --jelly-rim: rgba(14, 165, 233, 0.35);
+  --jelly-core-2: rgba(147, 197, 253, 0.65);
+  --jelly-mid-2: rgba(96, 165, 250, 0.5);
+  --jelly-rim-2: rgba(37, 99, 235, 0.3);
+}
+
+:root[data-theme="dark"] .underwater-jellyfish.jellyfish-1 {
+  filter: 
+    drop-shadow(0 0 22px rgba(56, 189, 248, 0.65))
+    drop-shadow(0 0 10px rgba(52, 211, 153, 0.5));
+  opacity: 0.92;
+}
+
+:root[data-theme="dark"] .underwater-jellyfish.jellyfish-2 {
+  filter: 
+    drop-shadow(0 0 20px rgba(96, 165, 250, 0.6))
+    drop-shadow(0 0 8px rgba(129, 140, 248, 0.45));
+  opacity: 0.88;
+}
+
+:root[data-theme="dark"] {
+  --jelly-core: rgba(52, 211, 153, 0.95);
+  --jelly-mid: rgba(56, 189, 248, 0.8);
+  --jelly-rim: rgba(14, 165, 233, 0.55);
+  --jelly-core-2: rgba(167, 139, 250, 0.9);
+  --jelly-mid-2: rgba(96, 165, 250, 0.75);
+  --jelly-rim-2: rgba(59, 130, 246, 0.5);
+}
+
+/* Propulsion Pulse: Bell contracts during power stroke, relaxes during glide */
+@keyframes jellyfish-pulse {
+  0%, 100% {
+    transform: scale(1, 1);
+  }
+  28% {
+    transform: scale(0.86, 1.14);
+  }
+  48% {
+    transform: scale(1.08, 0.92);
+  }
+  70% {
+    transform: scale(0.98, 1.02);
+  }
+}
+
+@keyframes jellyfish-ascend-1 {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.75;
+  }
+  90% {
+    opacity: 0.75;
+  }
+  100% {
+    transform: translate3d(-40px, -135vh, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes jellyfish-ascend-2 {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  8% {
+    opacity: 0.68;
+  }
+  90% {
+    opacity: 0.68;
+  }
+  100% {
+    transform: translate3d(35px, -135vh, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes jellyfish-sway-1 {
+  0% { margin-right: 0px; rotate: -2deg; }
+  100% { margin-right: 35px; rotate: 3deg; }
+}
+
+@keyframes jellyfish-sway-2 {
+  0% { margin-left: 0px; rotate: 2deg; }
+  100% { margin-left: 30px; rotate: -2.5deg; }
+}
+
+/* Tentacle Undulation */
+.tentacle {
+  transform-origin: top center;
+  animation: tentacle-flow 3.5s ease-in-out infinite alternate;
+}
+.tentacle.t1 { animation-delay: 0.2s; }
+.tentacle.t2 { animation-delay: 0.5s; }
+.tentacle.t3 { animation-delay: 0.3s; }
+.tentacle.t4 { animation-delay: 0.7s; }
+
+@keyframes tentacle-flow {
+  0% { transform: scaleX(1) skewX(0deg); }
+  50% { transform: scaleX(0.92) skewX(3deg); }
+  100% { transform: scaleX(1.04) skewX(-3deg); }
+}
+
+/* ==========================================================================
+   Ambient Rising Micro-bubbles
+   ========================================================================== */
+.underwater-bubble {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  background: radial-gradient(
+    circle at 35% 30%,
+    rgba(255, 255, 255, 0.7) 0%,
+    rgba(186, 230, 253, 0.3) 30%,
+    rgba(56, 189, 248, 0.12) 65%,
+    rgba(255, 255, 255, 0.4) 100%
+  );
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: 
+    0 0 6px rgba(56, 189, 248, 0.3),
+    inset 0 0 4px rgba(255, 255, 255, 0.6);
+  opacity: 0;
+  will-change: transform;
+}
+
+:root[data-theme="dark"] .underwater-bubble {
+  border-color: rgba(56, 189, 248, 0.5);
+  box-shadow: 
+    0 0 8px rgba(56, 189, 248, 0.45),
+    inset 0 0 5px rgba(186, 230, 253, 0.5);
+}
+
+.underwater-bubble.bubble-1 {
+  width: 14px;
+  height: 14px;
+  left: 18%;
+  bottom: -20px;
+  animation: bubble-rise 22s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 4s ease-in-out infinite alternate;
+  animation-delay: 1s;
+}
+
+.underwater-bubble.bubble-2 {
+  width: 9px;
+  height: 9px;
+  left: 34%;
+  bottom: -20px;
+  animation: bubble-rise 26s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 3.5s ease-in-out infinite alternate;
+  animation-delay: 6s;
+}
+
+.underwater-bubble.bubble-3 {
+  width: 18px;
+  height: 18px;
+  left: 62%;
+  bottom: -20px;
+  animation: bubble-rise 20s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 4.5s ease-in-out infinite alternate;
+  animation-delay: 11s;
+}
+
+.underwater-bubble.bubble-4 {
+  width: 8px;
+  height: 8px;
+  left: 78%;
+  bottom: -20px;
+  animation: bubble-rise 24s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 3s ease-in-out infinite alternate;
+  animation-delay: 4s;
+}
+
+.underwater-bubble.bubble-5 {
+  width: 12px;
+  height: 12px;
+  left: 48%;
+  bottom: -20px;
+  animation: bubble-rise 21s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 4s ease-in-out infinite alternate;
+  animation-delay: 16s;
+}
+
+.underwater-bubble.bubble-6 {
+  width: 7px;
+  height: 7px;
+  left: 88%;
+  bottom: -20px;
+  animation: bubble-rise 28s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 3.2s ease-in-out infinite alternate;
+  animation-delay: 9s;
+}
+
+.underwater-bubble.bubble-7 {
+  width: 11px;
+  height: 11px;
+  left: 8%;
+  bottom: -20px;
+  animation: bubble-rise 25s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 3.8s ease-in-out infinite alternate;
+  animation-delay: 14s;
+}
+
+@keyframes bubble-rise {
+  0% {
+    transform: translate3d(0, 0, 0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.65;
+  }
+  85% {
+    opacity: 0.65;
+  }
+  100% {
+    transform: translate3d(0, -115vh, 0);
+    opacity: 0;
+  }
+}
+
+@keyframes bubble-wobble {
+  0% {
+    margin-left: -12px;
+  }
+  100% {
+    margin-left: 12px;
+  }
 }
 
 .global-loading { height: 7px; position: fixed; inset: 0 0 auto; z-index: 60; overflow: hidden; pointer-events: none; background: rgba(30,106,80,.22); box-shadow: 0 1px 5px rgba(30,106,80,.24); }
@@ -1108,9 +1556,22 @@ h1, h2, h3, p { margin-top: 0; }
   }
 }
 @media (max-width: 600px) {
-  .liquid-orb {
+  .underwater-orb {
     filter: blur(55px);
     opacity: 0.28;
+  }
+  .underwater-whale {
+    top: 36%;
+    width: min(300px, 80vw);
+    opacity: 0.65;
+  }
+  .underwater-jellyfish.jellyfish-1 {
+    width: 95px;
+    right: 2%;
+  }
+  .underwater-jellyfish.jellyfish-2 {
+    width: 72px;
+    left: 2%;
   }
   .liquid-glass {
     border-radius: 12px;
@@ -1122,35 +1583,52 @@ h1, h2, h3, p { margin-top: 0; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .global-loading span { width: 100%; transform: none; animation: none; opacity: 1; }
   .liquid-glass { transform: none !important; animation: none !important; }
-  .liquid-orb { animation: none !important; display: none; }
+  .underwater-whale,
+  .underwater-jellyfish,
+  .underwater-bubble,
+  .underwater-sunrays,
+  .underwater-orb { animation: none !important; display: none !important; }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
   color: #e8eee8;
-  background: #121813;
-  --paper: #121813;
-  --surface: #1b241e;
-  --surface-muted: #242e27;
+  background: #061118;
+  --paper: #09151e;
+  --surface: #101c24;
+  --surface-muted: #16242e;
   --ink: #e8eee8;
   --body: #b4cec9;
   --muted: #84a5a1;
-  --line: #2d3931;
-  --line-dark: #435047;
+  --line: #1c2e39;
+  --line-dark: #29404f;
   --green: #83c69b;
   --green-dark: #a1dbb3;
-  --green-light: #263c2e;
+  --green-light: #163627;
   --orange: #e5a079;
-  --orange-soft: #422f25;
+  --orange-soft: #382820;
   --blue: #93b9d0;
-  --blue-soft: #273641;
+  --blue-soft: #1d303d;
   --red: #ef9386;
-  --red-soft: #422a28;
+  --red-soft: #382321;
   --amber: #dfb66f;
-  --amber-soft: #403622;
+  --amber-soft: #362e1d;
 }
 
-:root[data-theme="dark"] body { color: var(--ink); background: var(--paper); }
+:root[data-theme="dark"] body {
+  color: var(--ink);
+  background: 
+    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(14, 165, 233, 0.18) 0%, transparent 80%),
+    linear-gradient(
+      180deg,
+      #09151e 0%,
+      #061118 22%,
+      #040e14 50%,
+      #03090e 76%,
+      #020508 100%
+    );
+  background-attachment: fixed;
+}
 :root[data-theme="dark"] .font-controls,
 :root[data-theme="dark"] .filter-bar,
 :root[data-theme="dark"] .filter-select select,
