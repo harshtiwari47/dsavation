@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
 import { AVATAR_STYLES, createAvatarDataUri, createAvatarSeeds } from './avatar.js';
 import { initLiquidGlass } from './liquidGlass.js';
-import { AtmosphereBackdrop } from './AtmosphereBackdrop.jsx';
+import { AtmosphereBackdrop } from './components/atmosphere/AtmosphereBackdrop.jsx';
 import './style.css';
 
 function normalizeQuestions(rows = []) {

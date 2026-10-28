@@ -1,0 +1,545 @@
+/* ==========================================================================
+   Modular Atmosphere Architecture: Volumetric Lighting & Multi-Tier Snow
+   ========================================================================== */
+
+/* Root Atmosphere Container (strictly non-interactive, GPU-accelerated) */
+.atmosphere-root {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  user-select: none;
+}
+
+/* --------------------------------------------------------------------------
+   1. Volumetric Ambient Lighting System (Background Layer: z-index 0)
+   -------------------------------------------------------------------------- */
+.atmosphere-lighting {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+  will-change: opacity, filter;
+  animation: atmospheric-light-cycle 36s ease-in-out infinite;
+}
+
+/* High-Contrast Volumetric God Rays */
+.lighting-beam {
+  position: absolute;
+  pointer-events: none;
+  will-change: transform, opacity;
+  transform-origin: top center;
+}
+
+/* Left Descending Sunbeam / Aurora Ray */
+.lighting-beam.beam-left {
+  top: -15%;
+  left: -10%;
+  width: 55vw;
+  height: 95vh;
+  transform-origin: 10% 0%;
+  background: conic-gradient(
+    from 135deg at 0% 0%,
+    transparent 0deg,
+    rgba(255, 255, 255, 0.42) 16deg,
+    rgba(56, 189, 248, 0.38) 28deg,
+    rgba(14, 165, 233, 0.22) 42deg,
+    rgba(255, 255, 255, 0.15) 52deg,
+    transparent 66deg
+  );
+  filter: blur(14px);
+  animation: beam-sweep-left 24s ease-in-out infinite alternate;
+  opacity: 0.88;
+}
+
+/* Center Overhead Canopy Shaft */
+.lighting-beam.beam-center {
+  top: -12%;
+  left: 22%;
+  width: 58vw;
+  height: 80vh;
+  background: radial-gradient(
+    ellipse 75% 55% at 50% 0%,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(186, 230, 253, 0.42) 28%,
+    rgba(56, 189, 248, 0.25) 55%,
+    transparent 80%
+  );
+  filter: blur(18px);
+  animation: beam-sweep-center 20s ease-in-out infinite alternate;
+  opacity: 0.85;
+}
+
+/* Right Descending Prism Ray */
+.lighting-beam.beam-right {
+  top: -15%;
+  right: -8%;
+  width: 52vw;
+  height: 95vh;
+  transform-origin: 90% 0%;
+  background: conic-gradient(
+    from 215deg at 100% 0%,
+    transparent 0deg,
+    rgba(255, 255, 255, 0.2) 12deg,
+    rgba(56, 189, 248, 0.4) 28deg,
+    rgba(45, 212, 191, 0.3) 40deg,
+    rgba(255, 255, 255, 0.35) 50deg,
+    transparent 64deg
+  );
+  filter: blur(14px);
+  animation: beam-sweep-right 28s ease-in-out infinite alternate;
+  opacity: 0.85;
+}
+
+/* Aurora Shimmer Curtains (Dancing Wave Ribbons) */
+.lighting-aurora {
+  position: absolute;
+  top: 0;
+  left: -20%;
+  width: 140%;
+  height: 52vh;
+  pointer-events: none;
+  filter: blur(16px);
+  will-change: transform, opacity;
+}
+
+.lighting-aurora.curtain-1 {
+  background: repeating-linear-gradient(
+    -65deg,
+    transparent 0%,
+    transparent 7%,
+    rgba(255, 255, 255, 0.28) 12%,
+    rgba(56, 189, 248, 0.35) 17%,
+    rgba(45, 212, 191, 0.28) 22%,
+    transparent 28%,
+    transparent 36%
+  );
+  opacity: 0.7;
+  animation: aurora-wave-1 25s ease-in-out infinite alternate;
+}
+
+.lighting-aurora.curtain-2 {
+  background: repeating-linear-gradient(
+    -55deg,
+    transparent 0%,
+    transparent 9%,
+    rgba(14, 165, 233, 0.24) 14%,
+    rgba(255, 255, 255, 0.32) 19%,
+    rgba(56, 189, 248, 0.28) 25%,
+    transparent 30%,
+    transparent 40%
+  );
+  opacity: 0.65;
+  animation: aurora-wave-2 29s ease-in-out infinite alternate -8s;
+}
+
+/* Ambient Bioluminescent Lighting Glow Orbs */
+.lighting-glow-orb {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(100px);
+  pointer-events: none;
+  will-change: transform, opacity;
+}
+
+.lighting-glow-orb.orb-cyan {
+  width: min(650px, 75vw);
+  height: min(650px, 75vw);
+  top: -8%;
+  left: 15%;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.35) 0%, rgba(56, 189, 248, 0.18) 45%, transparent 72%);
+  animation: orb-drift-1 24s ease-in-out infinite alternate;
+}
+
+.lighting-glow-orb.orb-teal {
+  width: min(700px, 80vw);
+  height: min(700px, 80vw);
+  top: 35%;
+  right: -8%;
+  background: radial-gradient(circle, rgba(13, 148, 136, 0.28) 0%, rgba(45, 212, 191, 0.15) 50%, transparent 75%);
+  animation: orb-drift-2 28s ease-in-out infinite alternate;
+}
+
+.lighting-glow-orb.orb-sapphire {
+  width: min(600px, 70vw);
+  height: min(600px, 70vw);
+  bottom: 5%;
+  left: 2%;
+  background: radial-gradient(circle, rgba(2, 132, 199, 0.3) 0%, rgba(14, 165, 233, 0.12) 50%, transparent 75%);
+  animation: orb-drift-3 22s ease-in-out infinite alternate;
+}
+
+/* --------------------------------------------------------------------------
+   2. Multi-Tier Drifting Crystalline Snow System
+   -------------------------------------------------------------------------- */
+/* Background Snow Layer (Behind content: z-index 0) */
+.atmosphere-snow-back {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Foreground Snow Layer (Floats gracefully across entire viewport: z-index 5)
+   Zero interference with clicks because pointer-events is none */
+.atmosphere-snow-fore {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+/* Snow Particle Wrapper: strictly handles physics trajectory (sway + fall)
+   Separated from crystal scale/spin to completely prevent CSS transform collisions */
+.snow-particle {
+  position: absolute;
+  top: -30px;
+  pointer-events: none;
+  will-change: transform;
+  animation-name: snow-fall-drift;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+}
+
+/* Snow Crystal Element: handles rendering, ice contrast, and sparkle */
+.snowflake-crystal {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 50%;
+  pointer-events: none;
+  will-change: transform, opacity;
+  animation: snow-twinkle-spin 4s ease-in-out infinite alternate;
+}
+
+/* ==========================================================================
+   High-Contrast Snow Styling for LIGHT MODE
+   Light mode background is off-white cyan (#f0f8fb to #c6e1ed).
+   White flakes without contrast wash out completely!
+   We use a crisp ice-crystal core with cool cyan refraction rim & subtle drop shadow.
+   ========================================================================== */
+
+/* Tier 0: Distant micro-dust (slow, subtle background depth) */
+.tier-0 .snowflake-crystal {
+  background: radial-gradient(circle at 35% 35%, #ffffff 0%, #bae6fd 65%, #38bdf8 100%);
+  box-shadow: 0 1px 3px rgba(2, 132, 199, 0.35);
+  opacity: 0.65;
+}
+
+/* Tier 1: Midground crisp snowflakes (vivid, clearly visible) */
+.tier-1 .snowflake-crystal {
+  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #e0f2fe 45%, #7dd3fc 85%, #0284c7 100%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 
+    0 1px 5px rgba(2, 132, 199, 0.45),
+    0 0 2px rgba(12, 74, 110, 0.3);
+  opacity: 0.88;
+}
+
+/* Tier 2: Foreground crystalline ice stars / flakes (large, bold, sparkling) */
+.tier-2 .snowflake-crystal {
+  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #e0f2fe 35%, #38bdf8 80%, #0369a1 100%);
+  border: 1.5px solid rgba(255, 255, 255, 0.98);
+  box-shadow: 
+    0 2px 8px rgba(2, 132, 199, 0.5),
+    0 0 4px rgba(255, 255, 255, 0.8);
+  opacity: 0.92;
+}
+
+/* Hexagonal Snowflake Crystal SVG icon variant */
+.tier-2.is-crystal .snowflake-crystal {
+  background: none !important;
+  border: none !important;
+  box-shadow: none !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  filter: drop-shadow(0 2px 4px rgba(2, 132, 199, 0.55));
+}
+.tier-2.is-crystal .snowflake-crystal svg {
+  width: 100%;
+  height: 100%;
+  fill: #ffffff;
+  stroke: #0284c7;
+  stroke-width: 0.6px;
+}
+
+/* --------------------------------------------------------------------------
+   3. Dark Mode Illumination & Radiant Snow Bioluminescence
+   -------------------------------------------------------------------------- */
+:root[data-theme="dark"] .lighting-beam.beam-left {
+  background: conic-gradient(
+    from 135deg at 0% 0%,
+    transparent 0deg,
+    rgba(56, 189, 248, 0.22) 16deg,
+    rgba(14, 165, 233, 0.38) 28deg,
+    rgba(99, 102, 241, 0.25) 42deg,
+    rgba(56, 189, 248, 0.18) 52deg,
+    transparent 66deg
+  );
+  filter: blur(18px);
+  opacity: 0.9;
+}
+
+:root[data-theme="dark"] .lighting-beam.beam-center {
+  background: radial-gradient(
+    ellipse 75% 55% at 50% 0%,
+    rgba(56, 189, 248, 0.45) 0%,
+    rgba(14, 165, 233, 0.32) 28%,
+    rgba(99, 102, 241, 0.18) 55%,
+    transparent 80%
+  );
+  filter: blur(22px);
+  opacity: 0.88;
+}
+
+:root[data-theme="dark"] .lighting-beam.beam-right {
+  background: conic-gradient(
+    from 215deg at 100% 0%,
+    transparent 0deg,
+    rgba(99, 102, 241, 0.22) 12deg,
+    rgba(56, 189, 248, 0.42) 28deg,
+    rgba(45, 212, 191, 0.32) 40deg,
+    rgba(14, 165, 233, 0.2) 50deg,
+    transparent 64deg
+  );
+  filter: blur(18px);
+  opacity: 0.9;
+}
+
+:root[data-theme="dark"] .lighting-aurora.curtain-1 {
+  background: repeating-linear-gradient(
+    -65deg,
+    transparent 0%,
+    transparent 7%,
+    rgba(56, 189, 248, 0.22) 12%,
+    rgba(45, 212, 191, 0.32) 17%,
+    rgba(99, 102, 241, 0.2) 22%,
+    transparent 28%,
+    transparent 36%
+  );
+  opacity: 0.78;
+}
+
+:root[data-theme="dark"] .lighting-aurora.curtain-2 {
+  background: repeating-linear-gradient(
+    -55deg,
+    transparent 0%,
+    transparent 9%,
+    rgba(99, 102, 241, 0.22) 14%,
+    rgba(56, 189, 248, 0.32) 19%,
+    rgba(14, 165, 233, 0.2) 25%,
+    transparent 30%,
+    transparent 40%
+  );
+  opacity: 0.75;
+}
+
+:root[data-theme="dark"] .lighting-glow-orb.orb-cyan {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.38) 0%, rgba(14, 116, 144, 0.16) 45%, transparent 72%);
+}
+
+:root[data-theme="dark"] .lighting-glow-orb.orb-teal {
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.32) 0%, rgba(13, 148, 136, 0.14) 50%, transparent 75%);
+}
+
+:root[data-theme="dark"] .lighting-glow-orb.orb-sapphire {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.35) 0%, rgba(37, 99, 235, 0.12) 50%, transparent 75%);
+}
+
+/* Dark Mode Snow Bioluminescent Glow */
+:root[data-theme="dark"] .tier-0 .snowflake-crystal {
+  background: #ffffff;
+  box-shadow: 0 0 5px 1px rgba(56, 189, 248, 0.85);
+  opacity: 0.8;
+}
+
+:root[data-theme="dark"] .tier-1 .snowflake-crystal {
+  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #bae6fd 55%, #38bdf8 100%);
+  border: 1px solid rgba(255, 255, 255, 0.95);
+  box-shadow: 
+    0 0 8px 2px rgba(56, 189, 248, 0.9),
+    0 0 16px 4px rgba(14, 165, 233, 0.5);
+  opacity: 0.95;
+}
+
+:root[data-theme="dark"] .tier-2 .snowflake-crystal {
+  background: radial-gradient(circle at 30% 30%, #ffffff 0%, #7dd3fc 45%, #0284c7 100%);
+  border: 1.5px solid #ffffff;
+  box-shadow: 
+    0 0 12px 3px rgba(56, 189, 248, 0.95),
+    0 0 24px 6px rgba(14, 165, 233, 0.6);
+  opacity: 1;
+}
+
+:root[data-theme="dark"] .tier-2.is-crystal .snowflake-crystal {
+  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.95)) drop-shadow(0 0 16px rgba(14, 165, 233, 0.6));
+}
+:root[data-theme="dark"] .tier-2.is-crystal .snowflake-crystal svg {
+  fill: #ffffff;
+  stroke: #38bdf8;
+}
+
+/* --------------------------------------------------------------------------
+   4. Animation Keyframes (Smooth Transitions & Physics)
+   -------------------------------------------------------------------------- */
+
+/* Trajectory of falling snow with organic sinusoidal wind sway */
+@keyframes snow-fall-drift {
+  0% {
+    transform: translate3d(0, -30px, 0);
+  }
+  25% {
+    transform: translate3d(calc(var(--sway-x, 24px) * 0.55), 28vh, 0);
+  }
+  50% {
+    transform: translate3d(var(--sway-x, 24px), 56vh, 0);
+  }
+  75% {
+    transform: translate3d(calc(var(--sway-x, 24px) * 0.35), 84vh, 0);
+  }
+  100% {
+    transform: translate3d(calc(var(--sway-x, 24px) * 0.85), 112vh, 0);
+  }
+}
+
+/* Snowflake sparkle, scale oscillation, and subtle crystalline spin */
+@keyframes snow-twinkle-spin {
+  0% {
+    transform: rotate(0deg) scale(0.92);
+    opacity: 0.75;
+  }
+  50% {
+    transform: rotate(180deg) scale(1.12);
+    opacity: 1;
+  }
+  100% {
+    transform: rotate(360deg) scale(0.92);
+    opacity: 0.78;
+  }
+}
+
+/* Volumetric God Rays Sweeping Motion */
+@keyframes beam-sweep-left {
+  0% { transform: rotate(0deg) translate3d(0, 0, 0); }
+  50% { transform: rotate(3.5deg) translate3d(24px, 16px, 0); }
+  100% { transform: rotate(-2.5deg) translate3d(-18px, 26px, 0); }
+}
+
+@keyframes beam-sweep-center {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(20px, 15px, 0) scale(1.06); }
+  100% { transform: translate3d(-24px, 10px, 0) scale(0.96); }
+}
+
+@keyframes beam-sweep-right {
+  0% { transform: rotate(0deg) translate3d(0, 0, 0); }
+  50% { transform: rotate(-4deg) translate3d(-28px, 18px, 0); }
+  100% { transform: rotate(2.5deg) translate3d(20px, 28px, 0); }
+}
+
+/* Aurora Wave Animations */
+@keyframes aurora-wave-1 {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0.65; }
+  50% { transform: translate3d(35px, 18px, 0) rotate(1.5deg); opacity: 0.85; }
+  100% { transform: translate3d(-25px, 30px, 0) rotate(-1deg); opacity: 0.6; }
+}
+
+@keyframes aurora-wave-2 {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0.6; }
+  50% { transform: translate3d(-30px, 20px, 0) rotate(-1.5deg); opacity: 0.8; }
+  100% { transform: translate3d(38px, 12px, 0) rotate(1.5deg); opacity: 0.65; }
+}
+
+/* Smooth Atmospheric Light Phase Cycle:
+   Glacial Daybreak -> Boreal Aurora -> Twilight Prism -> Glacial Daybreak */
+@keyframes atmospheric-light-cycle {
+  0%, 100% {
+    /* Glacial Daybreak: Brilliant crisp cyan-white */
+    filter: brightness(1) saturate(1) hue-rotate(0deg);
+  }
+  33% {
+    /* Boreal Aurora: Ethereal emerald-cyan sheen */
+    filter: brightness(1.12) saturate(1.25) hue-rotate(22deg);
+  }
+  66% {
+    /* Twilight Prism: Deep sapphire celestial hue */
+    filter: brightness(0.94) saturate(1.15) hue-rotate(-20deg);
+  }
+}
+
+/* Ambient Glow Orb Drifting */
+@keyframes orb-drift-1 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(40px, -25px, 0) scale(1.08); }
+}
+
+@keyframes orb-drift-2 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(-45px, 35px, 0) scale(1.06); }
+}
+
+@keyframes orb-drift-3 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(35px, 20px, 0) scale(0.95); }
+}
+
+/* --------------------------------------------------------------------------
+   5. Responsive Viewport Adaptations (Mobile / Tablet / Desktop)
+   -------------------------------------------------------------------------- */
+@media (max-width: 800px) {
+  .lighting-beam.beam-left {
+    width: 75vw;
+    height: 70vh;
+    filter: blur(18px);
+  }
+  .lighting-beam.beam-right {
+    width: 75vw;
+    height: 70vh;
+    filter: blur(18px);
+  }
+  .lighting-beam.beam-center {
+    width: 85vw;
+    height: 60vh;
+    filter: blur(22px);
+  }
+  .lighting-aurora {
+    height: 40vh;
+    filter: blur(20px);
+  }
+}
+
+@media (max-width: 520px) {
+  .lighting-beam.beam-left {
+    top: -20%;
+    left: -20%;
+    width: 90vw;
+  }
+  .lighting-beam.beam-right {
+    top: -20%;
+    right: -20%;
+    width: 90vw;
+  }
+  .lighting-glow-orb {
+    filter: blur(75px);
+  }
+}
+
+/* Accessibility: Respect Reduced Motion Preferences */
+@media (prefers-reduced-motion: reduce) {
+  .lighting-beam,
+  .lighting-aurora,
+  .lighting-glow-orb,
+  .atmosphere-lighting {
+    animation: none !important;
+  }
+  .snow-particle {
+    animation-duration: 40s !important;
+  }
+  .snowflake-crystal {
+    animation: none !important;
+  }
+}
