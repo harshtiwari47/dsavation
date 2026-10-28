@@ -100,13 +100,10 @@ function MemberAvatar({ person, style, seed, className = '', label = '' }) {
 }
 
 function ProgressHeatmap({ progress }) {
-  const [viewMode, setViewMode] = useState('month'); // 'month' or 'year'
   const [selectedMonthKey, setSelectedMonthKey] = useState(null);
 
   const {
     monthsData,
-    annualCells,
-    annualMonths,
     activeDays,
     activeQuestions,
     currentStreak,
@@ -130,6 +127,9 @@ function ProgressHeatmap({ progress }) {
 
     // 1. Calculate 12 Months Breakdown
     const mList = [];
+    let totalActiveDays = 0;
+    let totalQuestionsSolved = 0;
+
     for (let i = 11; i >= 0; i--) {
       const mDate = new Date(Date.UTC(currentYear, currentMonth - i, 1));
       const year = mDate.getUTCFullYear();
@@ -162,6 +162,9 @@ function ProgressHeatmap({ progress }) {
           inRange,
         });
       }
+
+      totalActiveDays += monthActiveDays;
+      totalQuestionsSolved += totalSolved;
 
       mList.push({
         monthKey,
@@ -199,40 +202,10 @@ function ProgressHeatmap({ progress }) {
       }
     }
 
-    // 3. Calculate 52-Week Annual Flow
-    const rangeStart = shiftDay(today, -364);
-    const dateOffset = new Date(`${rangeStart}T00:00:00.000Z`).getUTCDay();
-    const gridStart = shiftDay(rangeStart, -dateOffset);
-    const aDays = Array.from({ length: 371 }, (_, index) => {
-      const date = shiftDay(gridStart, index);
-      const inRange = date >= rangeStart && date <= today;
-      const count = inRange ? counts.get(date) || 0 : 0;
-      const level = count === 0 ? 0 : count === 1 ? 1 : count === 2 ? 2 : count <= 4 ? 3 : 4;
-      return { date, count, level, inRange, week: Math.floor(index / 7) };
-    });
-
-    const monthLabels = [];
-    let prevMonth = '';
-    for (const cell of aDays) {
-      if (!cell.inRange) continue;
-      const month = cell.date.slice(0, 7);
-      if (month !== prevMonth) {
-        monthLabels.push({
-          month: new Date(`${cell.date}T00:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }),
-          week: cell.week,
-        });
-        prevMonth = month;
-      }
-    }
-
-    const visibleCounts = aDays.filter((cell) => cell.inRange && cell.count > 0).map((cell) => cell.count);
-
     return {
       monthsData: mList,
-      annualCells: aDays,
-      annualMonths: monthLabels,
-      activeDays: visibleCounts.length,
-      activeQuestions: visibleCounts.reduce((sum, count) => sum + count, 0),
+      activeDays: totalActiveDays,
+      activeQuestions: totalQuestionsSolved,
       currentStreak: curStreak,
       longestStreak: maxStreak,
     };
@@ -272,28 +245,6 @@ function ProgressHeatmap({ progress }) {
           <div className="eyebrow"><span className="eyebrow-line" />YOUR PRACTICE HISTORY</div>
           <h2 id="progress-heatmap-title">Question activity</h2>
         </div>
-
-        {/* View Mode Toggle */}
-        <div className="heatmap-mode-toggle" role="tablist" aria-label="Heatmap view mode">
-          <button
-            type="button"
-            className={`toggle-tab ${viewMode === 'month' ? 'active' : ''}`}
-            onClick={() => setViewMode('month')}
-            role="tab"
-            aria-selected={viewMode === 'month'}
-          >
-            <Icon name="calendar" size={13} /> Month wise
-          </button>
-          <button
-            type="button"
-            className={`toggle-tab ${viewMode === 'year' ? 'active' : ''}`}
-            onClick={() => setViewMode('year')}
-            role="tab"
-            aria-selected={viewMode === 'year'}
-          >
-            <Icon name="book" size={13} /> Full year
-          </button>
-        </div>
       </div>
 
       {/* Practice Metrics Strip */}
@@ -320,8 +271,8 @@ function ProgressHeatmap({ progress }) {
         Each square counts questions marked solved that day. This record is private to your account and separate from club points.
       </p>
 
-      {/* VIEW MODE 1: MONTH-WISE HEATMAP WITH NAVIGATION BUTTONS */}
-      {viewMode === 'month' && activeMonth && (
+      {/* Month-wise Heatmap with Navigation Buttons */}
+      {activeMonth && (
         <div className="heatmap-month-container">
           {/* Quick Month Selector Tabs */}
           <div className="heatmap-month-selector" role="tablist" aria-label="Select month">
@@ -389,40 +340,6 @@ function ProgressHeatmap({ progress }) {
                     <span className="day-number">{day.day}</span>
                     {day.count > 0 && <span className="day-count-badge">{day.count}</span>}
                   </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* VIEW MODE 2: FULL YEAR CONTINUOUS HEATMAP */}
-      {viewMode === 'year' && (
-        <div className="heatmap-scroll">
-          <div className="heatmap-year-wrapper">
-            {/* Weekday indicators */}
-            <div className="heatmap-weekdays-col" aria-hidden="true">
-              <span style={{ gridRow: 2 }}>Mon</span>
-              <span style={{ gridRow: 4 }}>Wed</span>
-              <span style={{ gridRow: 6 }}>Fri</span>
-            </div>
-            <div className="heatmap-year-content">
-              <div className="heatmap-months" aria-hidden="true">
-                {annualMonths.map(({ month, week }, index) => (
-                  <span key={`${month}-${index}`} style={{ gridColumn: `${week + 1} / span 4` }}>
-                    {month}
-                  </span>
-                ))}
-              </div>
-              <div className="heatmap-grid" role="group" aria-label="Personal question completions over the past year">
-                {annualCells.map(({ date, count, level, inRange }) => (
-                  <span
-                    key={date}
-                    className={`heatmap-cell level-${level} ${inRange ? '' : 'outside-range'}`}
-                    role="img"
-                    aria-label={`${count} ${count === 1 ? 'question' : 'questions'} marked solved on ${date}`}
-                    title={`${count} ${count === 1 ? 'question' : 'questions'} · ${date}`}
-                  />
                 ))}
               </div>
             </div>
