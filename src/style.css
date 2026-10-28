@@ -2,17 +2,17 @@
   font-family: 'DM Sans', sans-serif;
   font-size: 120%;
   color: #0c1b26;
-  background: #f0f8fb;
+  background: #f8fcfe;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
-  --paper: #f0f8fb;
+  --paper: #f8fcfe;
   --surface: #ffffff;
-  --surface-muted: #edf6f9;
+  --surface-muted: #f4fafe;
   --ink: #0c1b26;
-  --body: #334d5c;
-  --muted: #577587;
-  --line: #d8e8ee;
-  --line-dark: #c0d8e2;
+  --body: #3a5260;
+  --muted: #607d8e;
+  --line: #e3eff5;
+  --line-dark: #d5e5ee;
 
   /* Oceanic Core Palette - Seamless Coastal Cyan, Sea Sapphire & Aquatic Teal */
   --ocean: #0284c7;
@@ -44,14 +44,14 @@ body {
   min-width: 280px;
   min-height: 100vh;
   background: 
-    radial-gradient(ellipse 90% 60% at 50% -10%, rgba(186, 230, 253, 0.45) 0%, transparent 80%),
+    radial-gradient(ellipse 80% 50% at 50% -5%, rgba(224, 242, 254, 0.45) 0%, transparent 70%),
     linear-gradient(
       180deg,
-      #f0f8fb 0%,
-      #e5f3f8 22%,
-      #dbeef5 50%,
-      #d0e8f1 76%,
-      #c6e1ed 100%
+      #f8fcfe 0%,
+      #f3f9fb 25%,
+      #edf6fa 50%,
+      #e8f2f8 75%,
+      #e2edf4 100%
     );
   background-attachment: fixed;
   color: var(--ink);

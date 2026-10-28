@@ -7,17 +7,20 @@ import './atmosphere.css';
  * AtmosphereBackdrop: Master Atmospheric Coordinator
  * 
  * Modular architectural component combining:
- * 1. Volumetric Ambient Lighting & Aurora Curtains (LightingEffect)
+ * 1. Volumetric Ambient Lighting & Celestial Sun Crown (LightingEffect)
  * 2. Multi-Tier High-Contrast Crystalline Snow System (SnowEffect)
  * 3. Smooth Harmonic Environmental Phase Transitions
  * 
- * 100% GPU-accelerated and strictly non-interactive (pointer-events: none).
+ * Mounts unconstrained fixed layers to guarantee stacking fidelity:
+ * - Background Lighting & Snow (z-index: 0)
+ * - Foreground Volumetric God Rays & Spotlight (z-index: 4, pointer-events: none)
+ * - Foreground Crystalline Snowflakes & Ice Stars (z-index: 5, pointer-events: none)
  */
 export function AtmosphereBackdrop() {
   return (
-    <div className="atmosphere-root" aria-hidden="true">
+    <>
       <LightingEffect />
       <SnowEffect />
-    </div>
+    </>
   );
 }
