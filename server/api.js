@@ -30,7 +30,11 @@ class HttpError extends Error {
 function json(res, status, body, headers = {}) {
   res.statusCode = status;
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
-  res.setHeader('Cache-Control', 'no-store');
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
   res.end(JSON.stringify(body));
 }
@@ -59,7 +63,14 @@ function setCookie(res, req, key, value, maxAge, options = {}) {
   const parts = [`${key}=${encodeURIComponent(value)}`, 'Path=/', 'HttpOnly', 'SameSite=Lax', `Max-Age=${maxAge}`];
   if (cookieSecure(req)) parts.push('Secure');
   if (options.clear) parts.push('Expires=Thu, 01 Jan 1970 00:00:00 GMT');
-  res.setHeader('Set-Cookie', parts.join('; '));
+  const cookieStr = parts.join('; ');
+  const existing = res.getHeader ? res.getHeader('Set-Cookie') : undefined;
+  if (existing) {
+    const merged = Array.isArray(existing) ? [...existing, cookieStr] : [existing, cookieStr];
+    res.setHeader('Set-Cookie', merged);
+  } else {
+    res.setHeader('Set-Cookie', cookieStr);
+  }
 }
 
 function clearCookie(res, req, key) { setCookie(res, req, key, '', 0, { clear: true }); }
@@ -72,7 +83,7 @@ function safeEqual(left, right) {
   return a.length === b.length && timingSafeEqual(a, b);
 }
 
-function parseCookies(body) {
+function parseJsonBody(body) {
   if (body && typeof body === 'object' && !Buffer.isBuffer(body)) return body;
   if (Buffer.isBuffer(body)) body = body.toString('utf8');
   if (typeof body === 'string' && body.length) {
@@ -82,7 +93,7 @@ function parseCookies(body) {
 }
 
 async function readBody(req) {
-  if (req.body !== undefined) return parseCookies(req.body);
+  if (req.body !== undefined) return parseJsonBody(req.body);
   const chunks = [];
   let size = 0;
   for await (const chunk of req) {
@@ -90,20 +101,33 @@ async function readBody(req) {
     if (size > 16_384) throw new HttpError(413, 'Request body is too large.');
     chunks.push(chunk);
   }
-  return parseCookies(Buffer.concat(chunks));
+  return parseJsonBody(Buffer.concat(chunks));
 }
 
 function assertSameOrigin(req) {
   const origin = req.headers.origin;
-  if (!origin) return;
+  const referer = req.headers.referer;
   const host = String(req.headers['x-forwarded-host'] || req.headers.host || '').split(',')[0].trim();
-  try {
-    if (new URL(origin).host.toLowerCase() !== String(host || '').toLowerCase()) {
-      throw new HttpError(403, 'Cross-site request rejected.');
+  if (origin) {
+    try {
+      if (new URL(origin).host.toLowerCase() !== host.toLowerCase()) {
+        throw new HttpError(403, 'Cross-site request rejected.');
+      }
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(403, 'Invalid request origin.');
     }
-  } catch (error) {
-    if (error instanceof HttpError) throw error;
-    throw new HttpError(403, 'Invalid request origin.');
+    return;
+  }
+  if (referer) {
+    try {
+      if (new URL(referer).host.toLowerCase() !== host.toLowerCase()) {
+        throw new HttpError(403, 'Cross-site request rejected.');
+      }
+    } catch (error) {
+      if (error instanceof HttpError) throw error;
+      throw new HttpError(403, 'Invalid request referer.');
+    }
   }
 }
 
@@ -267,8 +291,9 @@ async function signup(db, req, res, body) {
 }
 
 async function login(db, req, res, body) {
-  await allowRequest(db, req, 'login', 10, 15 * 60 * 1000);
+  await allowRequest(db, req, 'login', 15, 15 * 60 * 1000);
   const email = String(body.email || '').trim().toLowerCase();
+  await allowRequest(db, req, `login-account:${hash(email)}`, 5, 15 * 60 * 1000);
   let user = await db.collection('users').findOne({ email });
   if (!user) throw new HttpError(404, 'No account was found for this email. Check the address or create an account.');
   const valid = await bcrypt.compare(String(body.password || ''), user.passwordHash);
@@ -286,6 +311,7 @@ async function login(db, req, res, body) {
 
 async function generatePasswordReset(db, req, user, memberId) {
   requireRole(user, 'admin');
+  await allowRequest(db, req, `admin-pw-reset-${user._id}`, 20, 60 * 60 * 1000);
   if (!ObjectId.isValid(memberId)) throw new HttpError(404, 'Member not found.');
   const targetId = new ObjectId(memberId);
   const target = await db.collection('users').findOne({ _id: targetId }, { projection: { name: 1, email: 1 } });
@@ -302,6 +328,7 @@ async function generatePasswordReset(db, req, user, memberId) {
 }
 
 async function resetPassword(db, req, res, body) {
+  await allowRequest(db, req, 'password-reset', 10, 15 * 60 * 1000);
   const token = String(body.token || '');
   const password = String(body.password || '');
   if (!/^[A-Za-z0-9_-]{40,60}$/.test(token)) throw new HttpError(400, 'This password reset link is invalid or expired. Ask an administrator for a new one.');
@@ -324,7 +351,8 @@ async function resetPassword(db, req, res, body) {
   return { ok: true };
 }
 
-async function updateProfile(db, user, body) {
+async function updateProfile(db, req, user, body) {
+  await allowRequest(db, req, `profile-${user._id}`, 30, 15 * 60 * 1000);
   const name = String(body.name ?? user.name).trim().replace(/\s+/g, ' ');
   const department = String(body.department ?? user.department).trim();
   const studyYear = String(body.studyYear ?? user.studyYear ?? '');
@@ -419,7 +447,8 @@ async function githubCallback(db, req, res, url) {
   res.end();
 }
 
-async function setProgress(db, user, questionId, solved) {
+async function setProgress(db, req, user, questionId, solved) {
+  await allowRequest(db, req, `progress-${user._id}`, 180, 60 * 1000);
   const id = Number(questionId);
   if (!questionById.has(id)) throw new HttpError(404, 'Question not found in the DSAvation curriculum.');
   const collection = db.collection('personalProgress');
@@ -951,7 +980,7 @@ export async function handleApiNode(req, res, options = {}) {
     if (url.pathname === '/api/auth/me' && method === 'GET') return json(res, 200, { user: account(await currentUser(req, db)) });
     if (url.pathname === '/api/auth/profile' && method === 'PATCH') {
       const user = await requireUser(req, db);
-      return json(res, 200, { ok: true, user: await updateProfile(db, user, await readBody(req)) });
+      return json(res, 200, { ok: true, user: await updateProfile(db, req, user, await readBody(req)) });
     }
     if (url.pathname === '/api/auth/github' && method === 'DELETE') {
       const user = await requireUser(req, db);
@@ -976,7 +1005,7 @@ export async function handleApiNode(req, res, options = {}) {
     const progressMatch = url.pathname.match(/^\/api\/progress\/(\d+)$/);
     if (progressMatch && method === 'PUT') {
       const body = await readBody(req);
-      await setProgress(db, user, progressMatch[1], Boolean(body.solved));
+      await setProgress(db, req, user, progressMatch[1], Boolean(body.solved));
       return json(res, 200, { ok: true, questionId: Number(progressMatch[1]), solved: Boolean(body.solved) });
     }
     if (url.pathname === '/api/submissions' && method === 'GET') return json(res, 200, await listSubmissions(db, req, user, url));
@@ -1023,12 +1052,29 @@ export async function handleApiNode(req, res, options = {}) {
     }
     return json(res, 404, { error: 'API route not found.' });
   } catch (error) {
-    if (error?.code === 11000) return json(res, 409, { error: url.pathname === '/api/admin/assignments'
-      ? 'A question is already published for this date. Only one Question of the Day can be published per date.'
-      : 'This record already exists. Refresh and try again.' });
+    if (error?.code === 11000) {
+      return json(res, 409, {
+        error: url.pathname === '/api/admin/assignments'
+          ? 'A question is already published for this date. Only one Question of the Day can be published per date.'
+          : 'This record already exists. Refresh and try again.',
+      });
+    }
     const status = Number(error?.status) || 500;
-    if (status >= 500) console.error('DSAvation API error:', error?.message || 'Unknown error');
-    return json(res, status, { error: status >= 500 && status !== 503 ? 'The request could not be completed. Try again shortly.' : error.message });
+    const isServerError = status >= 500 && status !== 503;
+    const reqId = String(req.headers['x-client-request-id'] || req.headers['x-request-id'] || '').slice(0, 40)
+      || randomBytes(6).toString('hex');
+
+    if (status >= 500) {
+      console.error(`[DSAvation Error] [${reqId}] ${method} ${url.pathname} (${status}):`, error?.stack || error?.message || error);
+    } else if (status === 401 || status === 403 || status === 429) {
+      console.warn(`[DSAvation Security] [${reqId}] ${method} ${url.pathname} (${status}):`, error?.message);
+    }
+
+    const publicMessage = isServerError
+      ? 'The request could not be completed. Try again shortly.'
+      : (error?.message || 'An unexpected error occurred.');
+
+    return json(res, status, { error: publicMessage, reqId }, { 'X-Request-Id': reqId });
   }
 }
 
@@ -1047,7 +1093,15 @@ export async function handleApiFetch(request, options = {}) {
   const res = {
     statusCode: 200,
     body: '',
-    setHeader(name, value) { responseHeaders.set(name, value); },
+    setHeader(name, value) {
+      if (Array.isArray(value)) {
+        responseHeaders.delete(name);
+        for (const item of value) responseHeaders.append(name, item);
+      } else {
+        responseHeaders.set(name, value);
+      }
+    },
+    getHeader(name) { return responseHeaders.get(name); },
     end(value = '') { this.body = value; },
   };
   await handleApiNode({

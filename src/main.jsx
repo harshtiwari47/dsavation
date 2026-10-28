@@ -26,15 +26,36 @@ function initialTheme() {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(`/api${path}`, {
-    credentials: 'same-origin',
-    ...options,
-    headers: { ...(options.body ? { 'Content-Type': 'application/json' } : {}), ...options.headers },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-  const payload = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(payload.error || `Request failed (${response.status}).`);
-  return payload;
+  const method = (options.method || 'GET').toUpperCase();
+  const requestId = `req_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 6)}`;
+  try {
+    const response = await fetch(`/api${path}`, {
+      credentials: 'same-origin',
+      ...options,
+      headers: {
+        ...(options.body ? { 'Content-Type': 'application/json' } : {}),
+        'X-Client-Request-Id': requestId,
+        ...options.headers,
+      },
+      body: options.body ? JSON.stringify(options.body) : undefined,
+    });
+    const payload = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      const errorMsg = payload.error || `Request failed (${response.status}).`;
+      console.warn(`[DSAvation API ${response.status}] ${method} /api${path} (ref: ${payload.reqId || requestId}):`, errorMsg);
+      const err = new Error(errorMsg);
+      err.status = response.status;
+      err.payload = payload;
+      err.requestId = payload.reqId || requestId;
+      throw err;
+    }
+    return payload;
+  } catch (error) {
+    if (error.name !== 'AbortError' && !error.status) {
+      console.error(`[DSAvation Network Error] ${method} /api${path} (ref: ${requestId}):`, error.message);
+    }
+    throw error;
+  }
 }
 
 function Icon({ name, size = 17 }) {
@@ -731,6 +752,13 @@ function App() {
     return cleanup;
   }, []);
 
+  // Auto-dismiss transient notice toast after 6.5s
+  useEffect(() => {
+    if (!notice) return;
+    const timer = setTimeout(() => setNotice(''), 6500);
+    return () => clearTimeout(timer);
+  }, [notice]);
+
   useEffect(() => {
     api('/auth/me').then(({ user }) => setAccount(user)).catch((error) => {
       setApiNotice(error.message.includes('MONGODB_URI') ? 'Connect MongoDB to enable member accounts and club activity.' : 'Member services are temporarily unavailable.');
@@ -1138,4 +1166,71 @@ function App() {
   </div>;
 }
 
-createRoot(document.getElementById('app')).render(<App/>);
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('[DSAvation UI ErrorBoundary]', error, errorInfo?.componentStack);
+  }
+
+  handleReset = () => {
+    this.setState({ hasError: false, error: null });
+  };
+
+  handleReload = () => {
+    window.location.reload();
+  };
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="error-fallback-container" role="alert">
+          <div className="error-fallback-card">
+            <div className="error-fallback-icon" aria-hidden="true">⚠️</div>
+            <h2>Something went wrong</h2>
+            <p>
+              An unexpected display issue occurred in this section. Your personal and club progress remains safe in the database.
+            </p>
+            <div className="error-fallback-actions">
+              <button type="button" className="button button-dark" onClick={this.handleReset}>
+                Try again
+              </button>
+              <button type="button" className="button button-quiet" onClick={this.handleReload}>
+                Reload page
+              </button>
+            </div>
+            {this.state.error?.message && (
+              <details className="error-fallback-details">
+                <summary>Technical error details</summary>
+                <code>{this.state.error.message}</code>
+              </details>
+            )}
+          </div>
+        </div>
+      );
+    }
+    return this.props.children;
+  }
+}
+
+if (typeof window !== 'undefined') {
+  window.addEventListener('unhandledrejection', (event) => {
+    console.error('[DSAvation Unhandled Rejection]:', event.reason);
+  });
+  window.addEventListener('error', (event) => {
+    console.error('[DSAvation Window Error]:', event.error || event.message);
+  });
+}
+
+createRoot(document.getElementById('app')).render(
+  <ErrorBoundary>
+    <App />
+  </ErrorBoundary>
+);

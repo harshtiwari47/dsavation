@@ -674,3 +674,30 @@ test('admin account approval, role changes, and deletion revoke access and leave
   assert.equal(db.collection('personalProgress').documents.some((item) => String(item.userId) === String(member.user._id)), false);
   assert.ok(db.collection('adminActivity').documents.some((item) => item.action === 'member_deleted'));
 });
+
+test('security headers, correlation reqId, and account-level brute-force rate limiting are enforced', async () => {
+  const db = new FakeDatabase();
+  const res = await call(db, '/club/leaderboard');
+  assert.equal(res.response.status, 200);
+  assert.equal(res.response.headers.get('x-content-type-options'), 'nosniff');
+  assert.equal(res.response.headers.get('x-frame-options'), 'DENY');
+  assert.equal(res.response.headers.get('referrer-policy'), 'strict-origin-when-cross-origin');
+  assert.match(res.response.headers.get('permissions-policy'), /geolocation=\(\)/);
+
+  // Security errors return correlation reqId and X-Request-Id
+  const unauth = await call(db, '/questions');
+  assert.equal(unauth.response.status, 401);
+  assert.ok(unauth.data.reqId);
+  assert.equal(unauth.response.headers.get('x-request-id'), unauth.data.reqId);
+
+  // Account-level rate limit protects individual emails from brute force
+  // seedUser makes 1 login. Next 4 wrong logins return 401, 5th wrong login exceeds limit and returns 429.
+  await seedUser(db, { name: 'Target User', email: 'target@abes.ac.in', username: 'target-gh' });
+  for (let i = 0; i < 4; i++) {
+    const attempt = await call(db, '/auth/login', { method: 'POST', body: { email: 'target@abes.ac.in', password: 'wrong' } });
+    assert.equal(attempt.response.status, 401);
+  }
+  const blocked = await call(db, '/auth/login', { method: 'POST', body: { email: 'target@abes.ac.in', password: 'wrong' } });
+  assert.equal(blocked.response.status, 429);
+  assert.match(blocked.data.error, /too many attempts/i);
+});
