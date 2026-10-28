@@ -1,7 +1,7 @@
 /**
- * Smooth Water Flow Effect Controller
- * Tracks gentle pointer water disturbance and coordinates without
- * any card rotation, tilt, or text warping, keeping text 100% sharp.
+ * Smooth Water Flow & Blue Water Ripple Effect Controller
+ * Spawns organic concentric blue water ripples on click/tap and hover,
+ * tracking cursor water disturbances with zero text blurring or card tilting.
  */
 
 export function initLiquidGlass() {
@@ -10,6 +10,30 @@ export function initLiquidGlass() {
   const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
   const activeCards = new Set();
   let rafId = null;
+
+  function spawnBlueRipple(card, x, y) {
+    if (prefersReduced) return;
+
+    // Primary ripple ring
+    const ripple = document.createElement('span');
+    ripple.className = 'blue-water-ripple';
+    ripple.style.left = `${x}px`;
+    ripple.style.top = `${y}px`;
+
+    // Secondary concentric ring for realistic water droplet physics
+    const ring = document.createElement('span');
+    ring.className = 'blue-water-ripple secondary-ring';
+    ring.style.left = `${x}px`;
+    ring.style.top = `${y}px`;
+
+    card.appendChild(ripple);
+    card.appendChild(ring);
+
+    setTimeout(() => {
+      ripple.remove();
+      ring.remove();
+    }, 1100);
+  }
 
   function handlePointerMove(e) {
     if (prefersReduced) return;
@@ -28,11 +52,23 @@ export function initLiquidGlass() {
   function handlePointerEnter(e) {
     const card = e.currentTarget;
     card.classList.add('water-active');
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    spawnBlueRipple(card, x, y);
   }
 
   function handlePointerLeave(e) {
     const card = e.currentTarget;
     card.classList.remove('water-active');
+  }
+
+  function handlePointerDown(e) {
+    const card = e.currentTarget;
+    const rect = card.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+    spawnBlueRipple(card, x, y);
   }
 
   function bindCard(card) {
@@ -43,6 +79,7 @@ export function initLiquidGlass() {
     card.addEventListener('pointerenter', handlePointerEnter, { passive: true });
     card.addEventListener('pointermove', handlePointerMove, { passive: true });
     card.addEventListener('pointerleave', handlePointerLeave, { passive: true });
+    card.addEventListener('pointerdown', handlePointerDown, { passive: true });
   }
 
   function unbindCard(card) {
@@ -51,6 +88,7 @@ export function initLiquidGlass() {
     card.removeEventListener('pointerenter', handlePointerEnter);
     card.removeEventListener('pointermove', handlePointerMove);
     card.removeEventListener('pointerleave', handlePointerLeave);
+    card.removeEventListener('pointerdown', handlePointerDown);
   }
 
   function scanAndBind() {
