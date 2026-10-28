@@ -3,7 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
 import { AVATAR_STYLES, createAvatarDataUri, createAvatarSeeds } from './avatar.js';
 import { initLiquidGlass } from './liquidGlass.js';
-import { UnderwaterBackdrop } from './UnderwaterBackdrop.jsx';
+import { AtmosphereBackdrop } from './AtmosphereBackdrop.jsx';
 import './style.css';
 
 function normalizeQuestions(rows = []) {
@@ -693,7 +693,7 @@ function App() {
   const clearFilters = () => { setQuery(''); setTopic('All topics'); setDifficulty('Any level'); setStructure('Any data structure'); setPattern('Any pattern'); };
 
   return <div className="app-frame">
-    <UnderwaterBackdrop />
+    <AtmosphereBackdrop />
     {appLoading && <div className="global-loading" role="progressbar" aria-label="Loading DSAvation" aria-valuetext="Loading"><span /></div>}
     <header className="topbar">
       <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true"/><span>DSAvation</span></a>

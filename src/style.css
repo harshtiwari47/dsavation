@@ -66,9 +66,9 @@ svg { flex: none; }
 .app-frame { min-height: 100vh; position: relative; overflow-x: hidden; }
 
 /* ==========================================================================
-   Underwater Atmosphere Backdrop (Oceanic Depth, Whale & Bioluminescent Jellyfish)
+   Atmospheric Lighting & Crystalline Snow Backdrop (Smooth Ambient Transitions)
    ========================================================================== */
-.underwater-backdrop {
+.atmosphere-backdrop {
   position: fixed;
   inset: 0;
   pointer-events: none;
@@ -77,560 +77,387 @@ svg { flex: none; }
   user-select: none;
 }
 
-/* Surface Sunlight Caustic Rays */
-.underwater-sunrays {
+/* --------------------------------------------------------------------------
+   Volumetric Ethereal Light Beams & Breathing Aurora Curtains
+   -------------------------------------------------------------------------- */
+.lighting-chamber {
   position: absolute;
-  top: -12%;
-  left: -25%;
-  width: 150%;
-  height: 60vh;
+  inset: 0;
   pointer-events: none;
-  background: repeating-linear-gradient(
-    -68deg,
-    transparent 0%,
-    transparent 7%,
-    rgba(255, 255, 255, 0.05) 10%,
-    rgba(56, 189, 248, 0.09) 13%,
-    rgba(255, 255, 255, 0.05) 16%,
-    transparent 19%,
-    transparent 28%
+  overflow: hidden;
+}
+
+/* Light Beam: Left Celestial Diagonal Beam */
+.light-beam.beam-left {
+  position: absolute;
+  top: -20%;
+  left: -15%;
+  width: 65vw;
+  height: 90vh;
+  transform-origin: top left;
+  background: conic-gradient(
+    from 140deg at 0% 0%,
+    transparent 0deg,
+    rgba(255, 255, 255, 0.08) 15deg,
+    rgba(56, 189, 248, 0.14) 28deg,
+    rgba(147, 197, 253, 0.08) 42deg,
+    transparent 60deg
   );
-  filter: blur(14px);
-  animation: sunrays-drift 24s ease-in-out infinite alternate;
+  filter: blur(28px);
+  animation: 
+    beam-drift-left 22s ease-in-out infinite alternate,
+    lighting-crossfade 28s ease-in-out infinite;
   opacity: 0.85;
 }
 
-:root[data-theme="dark"] .underwater-sunrays {
-  background: repeating-linear-gradient(
-    -68deg,
-    transparent 0%,
-    transparent 7%,
-    rgba(56, 189, 248, 0.04) 10%,
-    rgba(14, 165, 233, 0.08) 13%,
-    rgba(56, 189, 248, 0.04) 16%,
-    transparent 19%,
-    transparent 28%
+/* Light Beam: Center Canopy Glow */
+.light-beam.beam-center {
+  position: absolute;
+  top: -15%;
+  left: 20%;
+  width: 60vw;
+  height: 85vh;
+  transform-origin: top center;
+  background: radial-gradient(
+    ellipse 80% 55% at 50% 0%,
+    rgba(255, 255, 255, 0.22) 0%,
+    rgba(186, 230, 253, 0.16) 35%,
+    rgba(56, 189, 248, 0.06) 65%,
+    transparent 85%
   );
-  filter: blur(18px);
+  filter: blur(35px);
+  animation: 
+    beam-drift-center 18s ease-in-out infinite alternate,
+    lighting-crossfade 28s ease-in-out infinite 7s;
+  opacity: 0.9;
+}
+
+/* Light Beam: Right Aurora Curtain */
+.light-beam.beam-right {
+  position: absolute;
+  top: -20%;
+  right: -10%;
+  width: 60vw;
+  height: 95vh;
+  transform-origin: top right;
+  background: conic-gradient(
+    from 215deg at 100% 0%,
+    transparent 0deg,
+    rgba(147, 197, 253, 0.1) 18deg,
+    rgba(56, 189, 248, 0.15) 32deg,
+    rgba(255, 255, 255, 0.06) 48deg,
+    transparent 65deg
+  );
+  filter: blur(32px);
+  animation: 
+    beam-drift-right 24s ease-in-out infinite alternate,
+    lighting-crossfade 28s ease-in-out infinite 14s;
+  opacity: 0.8;
+}
+
+/* Aurora Wave Curtains: Gentle Shimmering Light Waves */
+.aurora-curtain {
+  position: absolute;
+  top: 0;
+  left: -20%;
+  width: 140%;
+  height: 48vh;
+  pointer-events: none;
   opacity: 0.65;
+  filter: blur(24px);
 }
 
-@keyframes sunrays-drift {
-  0% { transform: translate3d(0, 0, 0) rotate(0deg); }
-  50% { transform: translate3d(40px, 15px, 0) rotate(1.5deg); }
-  100% { transform: translate3d(-30px, 25px, 0) rotate(-1deg); }
+.aurora-curtain.curtain-primary {
+  background: repeating-linear-gradient(
+    -70deg,
+    transparent 0%,
+    transparent 8%,
+    rgba(255, 255, 255, 0.06) 12%,
+    rgba(56, 189, 248, 0.12) 16%,
+    rgba(186, 230, 253, 0.06) 20%,
+    transparent 24%,
+    transparent 32%
+  );
+  animation: aurora-shimmer-1 26s ease-in-out infinite alternate;
 }
 
-/* Deep Ocean Soft Ambient Depth Layers (Zero hard circles - feathered atmospheric depth) */
-.underwater-orb {
+.aurora-curtain.curtain-secondary {
+  background: repeating-linear-gradient(
+    -60deg,
+    transparent 0%,
+    transparent 10%,
+    rgba(147, 197, 253, 0.08) 14%,
+    rgba(255, 255, 255, 0.1) 18%,
+    rgba(56, 189, 248, 0.06) 22%,
+    transparent 26%,
+    transparent 36%
+  );
+  animation: aurora-shimmer-2 30s ease-in-out infinite alternate;
+  animation-delay: -10s;
+}
+
+/* Atmospheric Ambient Lighting Glow Orbs (Soft, Feathered, Shifting) */
+.lighting-glow {
   position: absolute;
   border-radius: 50%;
   filter: blur(140px);
-  opacity: 0.22;
-  will-change: transform;
-}
-
-.underwater-orb.orb-abyss-1 {
-  width: min(680px, 70vw);
-  height: min(680px, 70vw);
-  top: 2%;
-  left: 18%;
-  background: radial-gradient(circle, rgba(14, 165, 233, 0.24) 0%, rgba(13, 148, 136, 0.08) 55%, transparent 75%);
-  animation: liquid-orb-drift-1 26s ease-in-out infinite alternate;
-}
-
-.underwater-orb.orb-abyss-2 {
-  width: min(740px, 75vw);
-  height: min(740px, 75vw);
-  top: 38%;
-  right: -10%;
-  background: radial-gradient(circle, rgba(2, 132, 199, 0.18) 0%, rgba(56, 189, 248, 0.06) 55%, transparent 75%);
-  animation: liquid-orb-drift-2 30s ease-in-out infinite alternate;
-}
-
-.underwater-orb.orb-abyss-3 {
-  width: min(620px, 65vw);
-  height: min(620px, 65vw);
-  bottom: 0%;
-  left: 0%;
-  background: radial-gradient(circle, rgba(13, 148, 136, 0.16) 0%, rgba(14, 165, 233, 0.04) 55%, transparent 75%);
-  animation: liquid-orb-drift-3 24s ease-in-out infinite alternate;
-}
-
-:root[data-theme="dark"] .underwater-orb {
   opacity: 0.28;
-}
-:root[data-theme="dark"] .underwater-orb.orb-abyss-1 {
-  background: radial-gradient(circle, rgba(56, 189, 248, 0.28) 0%, rgba(14, 116, 144, 0.08) 55%, transparent 75%);
-}
-:root[data-theme="dark"] .underwater-orb.orb-abyss-2 {
-  background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, rgba(37, 99, 235, 0.06) 55%, transparent 75%);
-}
-:root[data-theme="dark"] .underwater-orb.orb-abyss-3 {
-  background: radial-gradient(circle, rgba(20, 184, 166, 0.18) 0%, rgba(14, 165, 233, 0.05) 55%, transparent 75%);
+  will-change: transform, opacity;
+  animation: lighting-crossfade 32s ease-in-out infinite;
 }
 
-@keyframes liquid-orb-drift-1 {
+.lighting-glow.glow-1 {
+  width: min(700px, 75vw);
+  height: min(700px, 75vw);
+  top: -5%;
+  left: 20%;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.25) 0%, rgba(186, 230, 253, 0.08) 55%, transparent 75%);
+  animation: liquid-orb-drift-1 26s ease-in-out infinite alternate, lighting-crossfade 32s ease-in-out infinite;
+}
+
+.lighting-glow.glow-2 {
+  width: min(750px, 80vw);
+  height: min(750px, 80vw);
+  top: 40%;
+  right: -10%;
+  background: radial-gradient(circle, rgba(2, 132, 199, 0.18) 0%, rgba(147, 197, 253, 0.06) 55%, transparent 75%);
+  animation: liquid-orb-drift-2 30s ease-in-out infinite alternate, lighting-crossfade 32s ease-in-out infinite 8s;
+}
+
+.lighting-glow.glow-3 {
+  width: min(650px, 70vw);
+  height: min(650px, 70vw);
+  bottom: 0%;
+  left: 5%;
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.18) 0%, rgba(14, 165, 233, 0.05) 55%, transparent 75%);
+  animation: liquid-orb-drift-3 24s ease-in-out infinite alternate, lighting-crossfade 32s ease-in-out infinite 16s;
+}
+
+/* --------------------------------------------------------------------------
+   Lighting Animations & Transitions
+   -------------------------------------------------------------------------- */
+@keyframes beam-drift-left {
+  0% { transform: rotate(0deg) translate3d(0, 0, 0); }
+  50% { transform: rotate(4deg) translate3d(30px, 15px, 0); }
+  100% { transform: rotate(-3deg) translate3d(-20px, 30px, 0); }
+}
+
+@keyframes beam-drift-center {
   0% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(70px, 40px, 0) scale(1.1); }
-  100% { transform: translate3d(-35px, 80px, 0) scale(0.95); }
+  50% { transform: translate3d(25px, 20px, 0) scale(1.08); }
+  100% { transform: translate3d(-30px, 10px, 0) scale(0.95); }
 }
 
-@keyframes liquid-orb-drift-2 {
-  0% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(-60px, -50px, 0) scale(1.08); }
-  100% { transform: translate3d(25px, 45px, 0) scale(0.94); }
+@keyframes beam-drift-right {
+  0% { transform: rotate(0deg) translate3d(0, 0, 0); }
+  50% { transform: rotate(-5deg) translate3d(-35px, 20px, 0); }
+  100% { transform: rotate(3deg) translate3d(25px, 35px, 0); }
 }
 
-@keyframes liquid-orb-drift-3 {
-  0% { transform: translate3d(0, 0, 0) scale(1); }
-  50% { transform: translate3d(50px, -35px, 0) scale(1.12); }
-  100% { transform: translate3d(-40px, -20px, 0) scale(0.96); }
+@keyframes aurora-shimmer-1 {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0.55; }
+  50% { transform: translate3d(40px, 20px, 0) rotate(2deg); opacity: 0.75; }
+  100% { transform: translate3d(-30px, 35px, 0) rotate(-1.5deg); opacity: 0.5; }
 }
 
-/* ==========================================================================
-   School of Agile Oceanic Fishes (Carangiform Undulation & Schooling Physics)
-   ========================================================================== */
-.fish-school {
-  position: absolute;
-  top: 48%;
-  left: -420px;
-  width: 320px;
-  height: 150px;
-  pointer-events: none;
-  will-change: transform;
-  animation: fish-school-swim 44s cubic-bezier(0.25, 0.1, 0.25, 1) infinite;
-  animation-delay: 5s;
-  opacity: 0.68;
+@keyframes aurora-shimmer-2 {
+  0% { transform: translate3d(0, 0, 0) rotate(0deg); opacity: 0.5; }
+  50% { transform: translate3d(-35px, 25px, 0) rotate(-2deg); opacity: 0.7; }
+  100% { transform: translate3d(45px, 15px, 0) rotate(2deg); opacity: 0.55; }
 }
 
-.school-fish {
-  position: absolute;
-  filter: drop-shadow(0 4px 12px rgba(14, 165, 233, 0.18));
-  animation: fish-school-undulate 4s ease-in-out infinite alternate;
-}
-
-.school-fish.fish-1 { top: 35px; left: 180px; }
-.school-fish.fish-2 { top: 5px; left: 90px; }
-.school-fish.fish-3 { top: 75px; left: 110px; }
-.school-fish.fish-4 { top: 20px; left: 0px; }
-.school-fish.fish-5 { top: 60px; left: 25px; }
-
-.school-fish-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-  overflow: visible;
-}
-
-/* Carangiform Propulsion: Tail sweeps back and forth while anterior head stays steady */
-.fish-caudal {
-  transform-origin: 86px 21px;
-  animation: fish-caudal-flutter 0.36s ease-in-out infinite alternate;
-}
-
-@keyframes fish-caudal-flutter {
-  0% { transform: scaleY(0.75) rotate(-16deg); }
-  100% { transform: scaleY(1.25) rotate(16deg); }
-}
-
-@keyframes fish-school-swim {
-  0% {
-    transform: translate3d(-10vw, 0, 0);
-    opacity: 0;
-  }
-  5% {
-    opacity: 0.75;
-  }
-  86% {
-    opacity: 0.75;
-  }
-  100% {
-    transform: translate3d(calc(110vw + 420px), 0, 0);
-    opacity: 0;
-  }
-}
-
-@keyframes fish-school-undulate {
-  0% { margin-top: 0px; rotate: -1.5deg; }
-  50% { margin-top: -22px; rotate: 2deg; }
-  100% { margin-top: 18px; rotate: -1deg; }
-}
-
-:root[data-theme="dark"] .school-fish {
-  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.5));
-  opacity: 0.85;
-}
-
-/* ==========================================================================
-   Majestic Swimming Blue Whale
-   ========================================================================== */
-.underwater-whale {
-  position: absolute;
-  top: 24%;
-  left: -580px;
-  width: clamp(280px, 34vw, 520px);
-  pointer-events: none;
-  will-change: transform;
-  filter: drop-shadow(0 14px 32px rgba(14, 165, 233, 0.16));
-  animation: whale-swim-journey 58s cubic-bezier(0.4, 0, 0.6, 1) infinite,
-             whale-swim-undulate 7s ease-in-out infinite alternate;
-}
-
-.underwater-whale-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-  overflow: visible;
-}
-
-.whale-torso {
-  transform-origin: 40% 50%;
-  animation: whale-body-flex 6.5s ease-in-out infinite alternate;
-}
-
-.whale-flipper {
-  transform-origin: 185px 110px;
-  animation: whale-flipper-glide 4.5s ease-in-out infinite alternate;
-}
-
-:root {
-  --whale-head: rgba(56, 189, 248, 0.55);
-  --whale-body: rgba(14, 165, 233, 0.45);
-  --whale-tail: rgba(30, 95, 125, 0.35);
-  --whale-fluke: rgba(14, 116, 144, 0.28);
-}
-
-:root[data-theme="dark"] .underwater-whale {
-  filter: drop-shadow(0 0 28px rgba(56, 189, 248, 0.4))
-          drop-shadow(0 0 60px rgba(14, 165, 233, 0.25));
-  opacity: 0.85;
-}
-
-:root[data-theme="dark"] {
-  --whale-head: rgba(56, 189, 248, 0.75);
-  --whale-body: rgba(14, 165, 233, 0.55);
-  --whale-tail: rgba(2, 132, 199, 0.42);
-  --whale-fluke: rgba(3, 105, 161, 0.35);
-}
-
-@keyframes whale-swim-journey {
-  0% {
-    transform: translate3d(-10vw, 0, 0);
-    opacity: 0;
-  }
-  6% {
-    opacity: 0.8;
-  }
-  88% {
-    opacity: 0.8;
-  }
-  100% {
-    transform: translate3d(calc(110vw + 600px), 0, 0);
-    opacity: 0;
-  }
-}
-
-@keyframes whale-swim-undulate {
-  0% {
-    margin-top: 0px;
-    rotate: -1.8deg;
-  }
-  50% {
-    margin-top: -35px;
-    rotate: 1.2deg;
-  }
-  100% {
-    margin-top: 25px;
-    rotate: -1deg;
-  }
-}
-
-@keyframes whale-body-flex {
-  0% {
-    transform: scaleY(0.97) skewY(-1deg);
-  }
-  100% {
-    transform: scaleY(1.03) skewY(1deg);
-  }
-}
-
-@keyframes whale-flipper-glide {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(-8deg);
-  }
-}
-
-/* ==========================================================================
-   Translucent Bioluminescent Jellyfish
-   ========================================================================== */
-.underwater-jellyfish {
-  position: absolute;
-  pointer-events: none;
-  will-change: transform;
-}
-
-.underwater-jellyfish-svg {
-  width: 100%;
-  height: auto;
-  display: block;
-  overflow: visible;
-}
-
-/* Jellyfish 1: Large - Right side */
-.underwater-jellyfish.jellyfish-1 {
-  width: clamp(105px, 12vw, 170px);
-  bottom: -280px;
-  right: clamp(4%, 9vw, 14%);
-  animation: 
-    jellyfish-ascend-1 32s linear infinite,
-    jellyfish-pulse 3.8s ease-in-out infinite,
-    jellyfish-sway-1 8s ease-in-out infinite alternate;
-  filter: drop-shadow(0 0 16px rgba(56, 189, 248, 0.28));
-  opacity: 0.72;
-}
-
-/* Jellyfish 2: Medium - Left side */
-.underwater-jellyfish.jellyfish-2 {
-  width: clamp(78px, 9vw, 125px);
-  bottom: -280px;
-  left: clamp(3%, 7vw, 12%);
-  animation: 
-    jellyfish-ascend-2 38s linear infinite,
-    jellyfish-pulse 4.2s ease-in-out infinite,
-    jellyfish-sway-2 9s ease-in-out infinite alternate;
-  animation-delay: 15s, 0s, 0s;
-  filter: drop-shadow(0 0 14px rgba(96, 165, 250, 0.25));
-  opacity: 0.65;
-}
-
-:root {
-  --jelly-core: rgba(110, 231, 183, 0.65);
-  --jelly-mid: rgba(56, 189, 248, 0.5);
-  --jelly-rim: rgba(14, 165, 233, 0.35);
-  --jelly-core-2: rgba(147, 197, 253, 0.65);
-  --jelly-mid-2: rgba(96, 165, 250, 0.5);
-  --jelly-rim-2: rgba(37, 99, 235, 0.3);
-}
-
-:root[data-theme="dark"] .underwater-jellyfish.jellyfish-1 {
-  filter: 
-    drop-shadow(0 0 22px rgba(56, 189, 248, 0.65))
-    drop-shadow(0 0 10px rgba(52, 211, 153, 0.5));
-  opacity: 0.92;
-}
-
-:root[data-theme="dark"] .underwater-jellyfish.jellyfish-2 {
-  filter: 
-    drop-shadow(0 0 20px rgba(96, 165, 250, 0.6))
-    drop-shadow(0 0 8px rgba(129, 140, 248, 0.45));
-  opacity: 0.88;
-}
-
-:root[data-theme="dark"] {
-  --jelly-core: rgba(52, 211, 153, 0.95);
-  --jelly-mid: rgba(56, 189, 248, 0.8);
-  --jelly-rim: rgba(14, 165, 233, 0.55);
-  --jelly-core-2: rgba(167, 139, 250, 0.9);
-  --jelly-mid-2: rgba(96, 165, 250, 0.75);
-  --jelly-rim-2: rgba(59, 130, 246, 0.5);
-}
-
-/* Propulsion Pulse: Bell contracts during power stroke, relaxes during glide */
-@keyframes jellyfish-pulse {
+/* Smooth Light Transition / Pulse: Warm sunlit ice <-> Ethereal aurora cyan */
+@keyframes lighting-crossfade {
   0%, 100% {
-    transform: scale(1, 1);
+    opacity: 0.72;
+    filter: hue-rotate(0deg) brightness(1);
   }
-  28% {
-    transform: scale(0.86, 1.14);
+  33% {
+    opacity: 0.95;
+    filter: hue-rotate(15deg) brightness(1.12);
   }
-  48% {
-    transform: scale(1.08, 0.92);
-  }
-  70% {
-    transform: scale(0.98, 1.02);
-  }
-}
-
-@keyframes jellyfish-ascend-1 {
-  0% {
-    transform: translate3d(0, 0, 0);
-    opacity: 0;
-  }
-  8% {
-    opacity: 0.75;
-  }
-  90% {
-    opacity: 0.75;
-  }
-  100% {
-    transform: translate3d(-40px, -135vh, 0);
-    opacity: 0;
+  66% {
+    opacity: 0.65;
+    filter: hue-rotate(-15deg) brightness(0.92);
   }
 }
 
-@keyframes jellyfish-ascend-2 {
-  0% {
-    transform: translate3d(0, 0, 0);
-    opacity: 0;
-  }
-  8% {
-    opacity: 0.68;
-  }
-  90% {
-    opacity: 0.68;
-  }
-  100% {
-    transform: translate3d(35px, -135vh, 0);
-    opacity: 0;
-  }
-}
-
-@keyframes jellyfish-sway-1 {
-  0% { margin-right: 0px; rotate: -2deg; }
-  100% { margin-right: 35px; rotate: 3deg; }
-}
-
-@keyframes jellyfish-sway-2 {
-  0% { margin-left: 0px; rotate: 2deg; }
-  100% { margin-left: 30px; rotate: -2.5deg; }
-}
-
-/* Tentacle Undulation */
-.tentacle {
-  transform-origin: top center;
-  animation: tentacle-flow 3.5s ease-in-out infinite alternate;
-}
-.tentacle.t1 { animation-delay: 0.2s; }
-.tentacle.t2 { animation-delay: 0.5s; }
-.tentacle.t3 { animation-delay: 0.3s; }
-.tentacle.t4 { animation-delay: 0.7s; }
-
-@keyframes tentacle-flow {
-  0% { transform: scaleX(1) skewX(0deg); }
-  50% { transform: scaleX(0.92) skewX(3deg); }
-  100% { transform: scaleX(1.04) skewX(-3deg); }
-}
-
-/* ==========================================================================
-   Ambient Rising Micro-bubbles
-   ========================================================================== */
-.underwater-bubble {
+/* --------------------------------------------------------------------------
+   Multi-Tier Drifting Snow Effect (Organic Wind Sway & Specular Glint)
+   -------------------------------------------------------------------------- */
+.snow-container {
   position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+}
+
+.snowflake {
+  position: absolute;
+  top: -20px;
   border-radius: 50%;
   pointer-events: none;
-  background: radial-gradient(
-    circle at 35% 30%,
-    rgba(255, 255, 255, 0.7) 0%,
-    rgba(186, 230, 253, 0.3) 30%,
-    rgba(56, 189, 248, 0.12) 65%,
-    rgba(255, 255, 255, 0.4) 100%
-  );
-  border: 1px solid rgba(255, 255, 255, 0.45);
-  box-shadow: 
-    0 0 6px rgba(56, 189, 248, 0.3),
-    inset 0 0 4px rgba(255, 255, 255, 0.6);
-  opacity: 0;
   will-change: transform;
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(240, 248, 255, 0.75) 45%,
+    rgba(186, 230, 253, 0.35) 75%,
+    transparent 100%
+  );
+  box-shadow: 0 0 6px 1px rgba(255, 255, 255, 0.6);
+  animation: 
+    snow-fall linear infinite,
+    snow-glint 4s ease-in-out infinite alternate;
 }
 
-:root[data-theme="dark"] .underwater-bubble {
-  border-color: rgba(56, 189, 248, 0.5);
-  box-shadow: 
-    0 0 8px rgba(56, 189, 248, 0.45),
-    inset 0 0 5px rgba(186, 230, 253, 0.5);
+/* Tier 0: Background micro-dust (slow, distant) */
+.snowflake.tier-0 {
+  background: rgba(255, 255, 255, 0.6);
+  box-shadow: 0 0 3px rgba(255, 255, 255, 0.4);
 }
 
-.underwater-bubble.bubble-1 {
-  width: 14px;
-  height: 14px;
-  left: 18%;
-  bottom: -20px;
-  animation: bubble-rise 22s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 4s ease-in-out infinite alternate;
-  animation-delay: 1s;
+/* Tier 1: Midground crisp flakes (moderate, clear) */
+.snowflake.tier-1 {
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 1) 0%,
+    rgba(224, 242, 254, 0.8) 50%,
+    rgba(186, 230, 253, 0.3) 100%
+  );
+  box-shadow: 0 0 8px 1px rgba(255, 255, 255, 0.75);
 }
 
-.underwater-bubble.bubble-2 {
-  width: 9px;
-  height: 9px;
-  left: 34%;
-  bottom: -20px;
-  animation: bubble-rise 26s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 3.5s ease-in-out infinite alternate;
-  animation-delay: 6s;
+/* Tier 2: Foreground bokeh crystals (larger, soft depth blur) */
+.snowflake.tier-2 {
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.85) 0%,
+    rgba(186, 230, 253, 0.5) 40%,
+    transparent 80%
+  );
+  box-shadow: 0 0 12px 2px rgba(186, 230, 253, 0.5);
 }
 
-.underwater-bubble.bubble-3 {
-  width: 18px;
-  height: 18px;
-  left: 62%;
-  bottom: -20px;
-  animation: bubble-rise 20s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 4.5s ease-in-out infinite alternate;
-  animation-delay: 11s;
-}
-
-.underwater-bubble.bubble-4 {
-  width: 8px;
-  height: 8px;
-  left: 78%;
-  bottom: -20px;
-  animation: bubble-rise 24s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 3s ease-in-out infinite alternate;
-  animation-delay: 4s;
-}
-
-.underwater-bubble.bubble-5 {
-  width: 12px;
-  height: 12px;
-  left: 48%;
-  bottom: -20px;
-  animation: bubble-rise 21s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 4s ease-in-out infinite alternate;
-  animation-delay: 16s;
-}
-
-.underwater-bubble.bubble-6 {
-  width: 7px;
-  height: 7px;
-  left: 88%;
-  bottom: -20px;
-  animation: bubble-rise 28s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 3.2s ease-in-out infinite alternate;
-  animation-delay: 9s;
-}
-
-.underwater-bubble.bubble-7 {
-  width: 11px;
-  height: 11px;
-  left: 8%;
-  bottom: -20px;
-  animation: bubble-rise 25s cubic-bezier(0.4, 0, 0.6, 1) infinite, bubble-wobble 3.8s ease-in-out infinite alternate;
-  animation-delay: 14s;
-}
-
-@keyframes bubble-rise {
+/* Realistic Snow Fall with Organic Wind Sway */
+@keyframes snow-fall {
   0% {
-    transform: translate3d(0, 0, 0);
-    opacity: 0;
+    transform: translate3d(0, -20px, 0);
   }
-  10% {
-    opacity: 0.65;
+  25% {
+    transform: translate3d(calc(var(--sway-x, 25px) * 0.5), 27vh, 0);
   }
-  85% {
-    opacity: 0.65;
+  50% {
+    transform: translate3d(var(--sway-x, 25px), 54vh, 0);
+  }
+  75% {
+    transform: translate3d(calc(var(--sway-x, 25px) * 0.3), 81vh, 0);
   }
   100% {
-    transform: translate3d(0, -115vh, 0);
-    opacity: 0;
+    transform: translate3d(calc(var(--sway-x, 25px) * 0.8), 108vh, 0);
   }
 }
 
-@keyframes bubble-wobble {
-  0% {
-    margin-left: -12px;
+/* Flakes Glint when drifting through light beams */
+@keyframes snow-glint {
+  0%, 100% {
+    opacity: 0.55;
+    transform: scale(1);
   }
-  100% {
-    margin-left: 12px;
+  50% {
+    opacity: 0.95;
+    transform: scale(1.15);
   }
+}
+
+/* --------------------------------------------------------------------------
+   Dark Mode Lighting & Snow Atmosphere
+   -------------------------------------------------------------------------- */
+:root[data-theme="dark"] .light-beam.beam-left {
+  background: conic-gradient(
+    from 140deg at 0% 0%,
+    transparent 0deg,
+    rgba(56, 189, 248, 0.08) 15deg,
+    rgba(14, 165, 233, 0.16) 28deg,
+    rgba(99, 102, 241, 0.09) 42deg,
+    transparent 60deg
+  );
+  filter: blur(34px);
+  opacity: 0.75;
+}
+
+:root[data-theme="dark"] .light-beam.beam-center {
+  background: radial-gradient(
+    ellipse 80% 55% at 50% 0%,
+    rgba(56, 189, 248, 0.22) 0%,
+    rgba(14, 165, 233, 0.14) 35%,
+    rgba(99, 102, 241, 0.05) 65%,
+    transparent 85%
+  );
+  filter: blur(40px);
+  opacity: 0.8;
+}
+
+:root[data-theme="dark"] .light-beam.beam-right {
+  background: conic-gradient(
+    from 215deg at 100% 0%,
+    transparent 0deg,
+    rgba(99, 102, 241, 0.08) 18deg,
+    rgba(56, 189, 248, 0.16) 32deg,
+    rgba(14, 165, 233, 0.06) 48deg,
+    transparent 65deg
+  );
+  filter: blur(36px);
+  opacity: 0.75;
+}
+
+:root[data-theme="dark"] .aurora-curtain.curtain-primary {
+  background: repeating-linear-gradient(
+    -70deg,
+    transparent 0%,
+    transparent 8%,
+    rgba(56, 189, 248, 0.06) 12%,
+    rgba(45, 212, 191, 0.1) 16%,
+    rgba(99, 102, 241, 0.05) 20%,
+    transparent 24%,
+    transparent 32%
+  );
+}
+
+:root[data-theme="dark"] .aurora-curtain.curtain-secondary {
+  background: repeating-linear-gradient(
+    -60deg,
+    transparent 0%,
+    transparent 10%,
+    rgba(99, 102, 241, 0.06) 14%,
+    rgba(56, 189, 248, 0.1) 18%,
+    rgba(14, 165, 233, 0.05) 22%,
+    transparent 26%,
+    transparent 36%
+  );
+}
+
+:root[data-theme="dark"] .lighting-glow.glow-1 {
+  background: radial-gradient(circle, rgba(56, 189, 248, 0.28) 0%, rgba(14, 116, 144, 0.08) 55%, transparent 75%);
+}
+
+:root[data-theme="dark"] .lighting-glow.glow-2 {
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.2) 0%, rgba(37, 99, 235, 0.06) 55%, transparent 75%);
+}
+
+:root[data-theme="dark"] .lighting-glow.glow-3 {
+  background: radial-gradient(circle, rgba(45, 212, 191, 0.18) 0%, rgba(14, 165, 233, 0.05) 55%, transparent 75%);
+}
+
+:root[data-theme="dark"] .snowflake {
+  background: radial-gradient(
+    circle,
+    rgba(255, 255, 255, 0.95) 0%,
+    rgba(186, 230, 253, 0.75) 50%,
+    rgba(56, 189, 248, 0.3) 80%,
+    transparent 100%
+  );
+  box-shadow: 0 0 8px 1px rgba(56, 189, 248, 0.6);
 }
 
 .global-loading { height: 7px; position: fixed; inset: 0 0 auto; z-index: 60; overflow: hidden; pointer-events: none; background: rgba(30,106,80,.22); box-shadow: 0 1px 5px rgba(30,106,80,.24); }
@@ -1737,22 +1564,17 @@ h1, h2, h3, p { margin-top: 0; }
   }
 }
 @media (max-width: 600px) {
-  .underwater-orb {
-    filter: blur(55px);
-    opacity: 0.28;
+  .lighting-glow {
+    filter: blur(80px);
+    opacity: 0.22;
   }
-  .underwater-whale {
-    top: 36%;
-    width: min(300px, 80vw);
-    opacity: 0.65;
+  .light-beam {
+    filter: blur(24px);
+    opacity: 0.75;
   }
-  .underwater-jellyfish.jellyfish-1 {
-    width: 95px;
-    right: 2%;
-  }
-  .underwater-jellyfish.jellyfish-2 {
-    width: 72px;
-    left: 2%;
+  .aurora-curtain {
+    height: 38vh;
+    filter: blur(18px);
   }
   .liquid-glass {
     border-radius: 12px;
@@ -1764,12 +1586,11 @@ h1, h2, h3, p { margin-top: 0; }
   *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; }
   .global-loading span { width: 100%; transform: none; animation: none; opacity: 1; }
   .liquid-glass { transform: none !important; animation: none !important; }
-  .underwater-whale,
-  .underwater-jellyfish,
-  .underwater-bubble,
-  .underwater-sunrays,
-  .underwater-orb,
-  .fish-school { animation: none !important; display: none !important; }
+  .light-beam,
+  .aurora-curtain,
+  .lighting-glow,
+  .snowflake { animation: none !important; }
+  .snowflake { display: none !important; }
 }
 
 :root[data-theme="dark"] {
