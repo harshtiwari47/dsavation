@@ -1,5 +1,7 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
+import { Analytics } from '@vercel/analytics/react';
+import { AVATAR_STYLES, createAvatarDataUri, createAvatarSeeds } from './avatar.js';
 import './style.css';
 
 function normalizeQuestions(rows = []) {
@@ -15,7 +17,6 @@ const shiftDay = (dateKey, offset) => {
   return date.toISOString().slice(0, 10);
 };
 const studyYearLabel = (year) => ({ 'first-year': 'First year', 'second-year': 'Second year', 'third-year': 'Third year', 'fourth-year': 'Fourth year', passed: 'Passed out' }[year] || 'Year not provided');
-const initials = (name = '') => name.split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() || '').join('') || 'D';
 function initialTheme() {
   const theme = localStorage.getItem('dsavation-theme') === 'dark' ? 'dark' : 'light';
   document.documentElement.dataset.theme = theme;
@@ -58,6 +59,61 @@ function Icon({ name, size = 17 }) {
 
 function Pill({ children, tone = '' }) { return <span className={`pill ${tone}`}>{children}</span>; }
 
+function MemberAvatar({ person, style, seed, className = '', label = '' }) {
+  const avatarStyle = style || person?.avatarStyle || 'critters';
+  const avatarSeed = seed || person?.avatarSeed || person?.id || 'dsavation-member';
+  const [src, setSrc] = useState('');
+  useEffect(() => {
+    let active = true;
+    setSrc('');
+    createAvatarDataUri(avatarStyle, avatarSeed).then((dataUri) => {
+      if (active) setSrc(dataUri);
+    }).catch(() => {});
+    return () => { active = false; };
+  }, [avatarStyle, avatarSeed]);
+  return src
+    ? <img className={`avatar avatar-image ${className}`} src={src} alt={label} loading="lazy" decoding="async"/>
+    : <span className={`avatar avatar-image avatar-loading ${className}`} aria-hidden="true"><i/></span>;
+}
+
+function ProgressHeatmap({ progress }) {
+  const { cells, months, activeDays, activeQuestions } = useMemo(() => {
+    const counts = new Map();
+    for (const solvedAt of Object.values(progress)) {
+      const dateKey = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(solvedAt));
+      counts.set(dateKey, (counts.get(dateKey) || 0) + 1);
+    }
+    const today = localDay();
+    const rangeStart = shiftDay(today, -364);
+    const dateOffset = new Date(`${rangeStart}T00:00:00.000Z`).getUTCDay();
+    const gridStart = shiftDay(rangeStart, -dateOffset);
+    const days = Array.from({ length: 371 }, (_, index) => {
+      const date = shiftDay(gridStart, index);
+      const inRange = date >= rangeStart && date <= today;
+      const count = inRange ? counts.get(date) || 0 : 0;
+      const level = count === 0 ? 0 : count === 1 ? 1 : count === 2 ? 2 : count <= 4 ? 3 : 4;
+      return { date, count, level, inRange, week: Math.floor(index / 7) };
+    });
+    const monthLabels = [];
+    let previousMonth = '';
+    for (const cell of days) {
+      if (!cell.inRange) continue;
+      const month = cell.date.slice(0, 7);
+      if (month !== previousMonth) {
+        monthLabels.push({ month: new Date(`${cell.date}T00:00:00.000Z`).toLocaleDateString('en-US', { month: 'short', timeZone: 'UTC' }), week: cell.week });
+        previousMonth = month;
+      }
+    }
+    const visibleCounts = days.filter((cell) => cell.inRange && cell.count > 0).map((cell) => cell.count);
+    return { cells: days, months: monthLabels, activeDays: visibleCounts.length, activeQuestions: visibleCounts.reduce((sum, count) => sum + count, 0) };
+  }, [progress]);
+  return <section className="panel heatmap-panel" aria-labelledby="progress-heatmap-title">
+    <div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR PRACTICE HISTORY</div><h2 id="progress-heatmap-title">Question activity</h2></div><div className="heatmap-totals"><strong>{activeQuestions}</strong><span>questions · {activeDays} active days</span></div></div>
+    <p className="heatmap-caption">Each square counts questions you marked solved that day. This record is private to your account and is separate from club points.</p>
+    <div className="heatmap-scroll"><div className="heatmap-months" aria-hidden="true">{months.map(({ month, week }, index) => <span key={`${month}-${index}`} style={{ gridColumn: `${week + 1} / span 4` }}>{month}</span>)}</div><div className="heatmap-grid" role="group" aria-label="Personal question completions over the past year">{cells.map(({ date, count, level, inRange }) => <span key={date} className={`heatmap-cell level-${level} ${inRange ? '' : 'outside-range'}`} role="img" aria-label={`${count} ${count === 1 ? 'question' : 'questions'} marked solved on ${date}`} title={`${count} ${count === 1 ? 'question' : 'questions'} · ${date}`}/>)}</div><div className="heatmap-legend"><span>Less</span>{[0, 1, 2, 3, 4].map((level) => <i key={level} className={`heatmap-cell level-${level}`}/>)}<span>More</span></div></div>
+  </section>;
+}
+
 function QuestionActionsGuide() {
   return <div className="question-actions-guide" aria-label="Question controls">
     <span><i className="guide-check"><Icon name="check" size={12}/></i>Mark solved for personal progress</span>
@@ -92,7 +148,7 @@ function QuestionRow({ question, solved, solvedAt, bookmarked, onSolve, onBookma
 }
 
 function App() {
-  const [view, setView] = useState(() => window.location.pathname === '/dashboard' ? 'dashboard' : window.location.pathname === '/reset-password' ? 'reset-password' : 'general');
+  const [view, setView] = useState(() => window.location.pathname === '/dashboard' ? 'dashboard' : window.location.pathname === '/members' ? 'members' : window.location.pathname === '/reset-password' ? 'reset-password' : 'general');
   const [account, setAccount] = useState(null);
   const [theme, setTheme] = useState(initialTheme);
   const [questions, setQuestions] = useState([]);
@@ -128,6 +184,18 @@ function App() {
   const [members, setMembers] = useState([]);
   const [membersPagination, setMembersPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
   const [memberCounts, setMemberCounts] = useState({ pending: 0, approved: 0 });
+  const [directoryMembers, setDirectoryMembers] = useState([]);
+  const [directoryDepartments, setDirectoryDepartments] = useState([]);
+  const [directoryPagination, setDirectoryPagination] = useState({ page: 1, pageSize: 16, total: 0, totalPages: 1 });
+  const [directoryQuery, setDirectoryQuery] = useState('');
+  const [directoryDepartment, setDirectoryDepartment] = useState('');
+  const [directoryYear, setDirectoryYear] = useState('');
+  const [directoryBusy, setDirectoryBusy] = useState(false);
+  const [directoryLeetcodeStats, setDirectoryLeetcodeStats] = useState({});
+  const [leetcodeStatsBusy, setLeetcodeStatsBusy] = useState('');
+  const [avatarDraftStyle, setAvatarDraftStyle] = useState('critters');
+  const [avatarDraftSeed, setAvatarDraftSeed] = useState('');
+  const [avatarChoices, setAvatarChoices] = useState([]);
   const [activity, setActivity] = useState([]);
   const [activityPagination, setActivityPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
   const [scoredSubmissions, setScoredSubmissions] = useState([]);
@@ -149,6 +217,17 @@ function App() {
   const [memberFilter, setMemberFilter] = useState('pending');
   const [memberQuery, setMemberQuery] = useState('');
   const [publicPreferenceBusy, setPublicPreferenceBusy] = useState(false);
+
+  useEffect(() => {
+    if (!account) return;
+    const style = account.avatarStyle || 'critters';
+    const seed = account.avatarSeed || account.id;
+    const choices = createAvatarSeeds();
+    choices[0] = seed;
+    setAvatarDraftStyle(style);
+    setAvatarDraftSeed(seed);
+    setAvatarChoices(choices);
+  }, [account?.id]);
 
   const byId = useMemo(() => new Map(questions.map((question) => [question.id, question])), [questions]);
   const patterns = useMemo(() => [...new Set(questions.map((item) => item.pattern))].sort((a, b) => a.localeCompare(b)), [questions]);
@@ -259,6 +338,47 @@ function App() {
     } catch (error) { setNotice(error.message); }
   }
 
+  async function loadDirectory(page = 1, search = directoryQuery, department = directoryDepartment, year = directoryYear) {
+    setDirectoryBusy(true);
+    const params = new URLSearchParams({ page: String(page), pageSize: '16' });
+    if (search.trim()) params.set('q', search.trim());
+    if (department) params.set('department', department);
+    if (year) params.set('year', year);
+    try {
+      const result = await api(`/members?${params}`);
+      setDirectoryMembers(result.members || []);
+      setDirectoryDepartments(result.departments || []);
+      setDirectoryPagination(result.pagination || { page: 1, pageSize: 16, total: 0, totalPages: 1 });
+    } catch (error) {
+      setDirectoryMembers([]);
+      setNotice(error.message);
+    } finally { setDirectoryBusy(false); }
+  }
+
+  async function loadDirectoryLeetcodeStats(member) {
+    if (!member.leetcodeUsername || leetcodeStatsBusy) return;
+    setLeetcodeStatsBusy(member.id);
+    try {
+      const result = await api(`/members/${member.id}/leetcode-stats`);
+      setDirectoryLeetcodeStats((current) => ({ ...current, [member.id]: result }));
+    } catch (error) {
+      setDirectoryLeetcodeStats((current) => ({ ...current, [member.id]: { available: false, reason: error.message } }));
+    } finally { setLeetcodeStatsBusy(''); }
+  }
+
+  function chooseAvatarStyle(style) {
+    const choices = createAvatarSeeds();
+    setAvatarDraftStyle(style);
+    setAvatarDraftSeed(choices[0]);
+    setAvatarChoices(choices);
+  }
+
+  function shuffleAvatarChoices() {
+    const choices = createAvatarSeeds();
+    setAvatarDraftSeed(choices[0]);
+    setAvatarChoices(choices);
+  }
+
   async function refreshActivity(page = 1) {
     try {
       const result = await api(`/admin/activity?page=${page}&pageSize=10`);
@@ -324,15 +444,19 @@ function App() {
   }, [authReady, isAdmin]);
 
   useEffect(() => {
-    const onPopState = () => setView(window.location.pathname === '/dashboard' ? 'dashboard' : window.location.pathname === '/reset-password' ? 'reset-password' : 'general');
+    const onPopState = () => setView(window.location.pathname === '/dashboard' ? 'dashboard' : window.location.pathname === '/members' ? 'members' : window.location.pathname === '/reset-password' ? 'reset-password' : 'general');
     window.addEventListener('popstate', onPopState);
     return () => window.removeEventListener('popstate', onPopState);
   }, []);
 
   useEffect(() => {
+    if (view === 'members' && account) loadDirectory(1);
+  }, [view, account?.id]);
+
+  useEffect(() => {
     if (!authReady) return undefined;
     if (!account) {
-      setQuestions([]); setTopics([]); setProgress({}); setSubmissions([]); setPending([]); setMembers([]);
+      setQuestions([]); setTopics([]); setProgress({}); setSubmissions([]); setPending([]); setMembers([]); setDirectoryMembers([]);
       setHistory([]); setLeaderboard([]);
       setClub({ dateKey: localDay(), assignment: null, submittedCount: 0, acceptedCount: 0, participants: [] });
       setAppLoading(false);
@@ -357,7 +481,7 @@ function App() {
   }, [authReady, account?.id]);
 
   function navigate(nextView) {
-    const path = nextView === 'dashboard' ? '/dashboard' : '/';
+    const path = nextView === 'dashboard' ? '/dashboard' : nextView === 'members' ? '/members' : nextView === 'reset-password' ? '/reset-password' : '/';
     if (window.location.pathname !== path) window.history.pushState({}, '', path);
     setView(nextView);
     if (nextView === 'dashboard' && account?.role === 'admin') refreshMembers(1, memberFilter, memberQuery);
@@ -499,6 +623,7 @@ function App() {
       const result = await api('/auth/profile', { method: 'PATCH', body: {
         name: values.name, department: values.department, studyYear: values.studyYear,
         githubUsername: values.githubUsername, leetcodeUsername: values.leetcodeUsername,
+        avatarStyle: avatarDraftStyle, avatarSeed: avatarDraftSeed,
       } });
       setAccount(result.user);
       setNotice(result.user.githubVerified ? 'Your account details were saved.' : 'Details saved. Re-link your GitHub account to verify the updated username.');
@@ -567,13 +692,14 @@ function App() {
       <nav className="main-nav" aria-label="Main navigation">
         <button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><Icon name="book" size={15}/>General</button>
         <button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={15}/>Account</button>
+        {account && <button className={view === 'members' ? 'active' : ''} onClick={() => navigate('members')}><Icon name="users" size={15}/>Members</button>}
         <button className={view === 'club' ? 'active' : ''} onClick={() => navigate('club')}><Icon name="users" size={15}/>Club challenge</button>
         {isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={15}/>Dashboard{memberCounts.pending > 0 && <span className="nav-count">{memberCounts.pending}</span>}</button>}
       </nav>
       <div className="account-actions">
         <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15}/><span>{theme === 'dark' ? 'Light' : 'Dark'}</span></button>
         <div className="font-controls" aria-label="Text size controls"><span>TEXT</span><button onClick={() => changeFontSize(-.05)} aria-label="Decrease text size" disabled={fontScale <= .9}>A−</button><output aria-live="polite">{Math.round(fontScale * 100)}%</output><button onClick={() => changeFontSize(.05)} aria-label="Increase text size" disabled={fontScale >= 1.5}>A+</button></div>
-        {account ? <><span className="account-name"><span className="avatar">{initials(account.name)}</span><span>{account.name.split(' ')[0]}{account.role !== 'member' && <small>{account.role}</small>}</span></span>{!account.githubVerified && <button className="button button-quiet github-link" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/><span>Link GitHub</span></button>}<button className="button button-quiet sign-out" onClick={logout} aria-label="Sign out" title="Sign out"><span>Sign out</span><Icon name="logout" size={14}/></button></> : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
+        {account ? <><span className="account-name"><MemberAvatar person={account} label=""/><span>{account.name.split(' ')[0]}{account.role !== 'member' && <small>{account.role}</small>}</span></span>{!account.githubVerified && <button className="button button-quiet github-link" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/><span>Link GitHub</span></button>}<button className="button button-quiet sign-out" onClick={logout} aria-label="Sign out" title="Sign out"><span>Sign out</span><Icon name="logout" size={14}/></button></> : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
       </div>
     </header>
 
@@ -590,7 +716,7 @@ function App() {
           {!account ? <div className="empty-assignment"><h2>Sign in to view today’s question</h2><p>Approved members can see the daily question and track their practice.</p></div> : assignedQuestion ? <><div className="today-date">{club.assignment.dateKey} <span>·</span> {assignedQuestion.topic}</div><h2>{assignedQuestion.title}</h2><div className="today-details"><Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill><span>LeetCode #{assignedQuestion.id}</span><span>Day {assignedQuestion.day} / 220</span></div><div className="club-participation"><strong>{club.acceptedCount}</strong><span>accepted club submissions</span><span className="participation-divider"/><span>{club.submittedCount} submitted</span><button className="text-button" onClick={() => navigate('club')}>View challenge <Icon name="arrow" size={14}/></button></div></> : <div className="empty-assignment"><h2>No question assigned today</h2><p>Club leads can publish the next Question of the Day. Holidays and break days do not count as missed practice.</p></div>}
         </article>
         <article className="overview-card personal-card"><div className="card-kicker">YOUR PRIVATE TRACKER <span className="card-count">02</span></div><div className="personal-stat"><strong>{account ? solvedCount : '—'}</strong><span><b>{account ? `${Math.round((solvedCount / 220) * 100)}%` : 'Personal'}</b><br/>{account ? 'of the 220 questions tracked' : 'progress stays private'}</span></div><div className="personal-track"><i style={{ width: `${account ? Math.min(100, solvedCount / 220 * 100) : 0}%` }}/></div><p>{account ? 'Your manual checkmarks are visible only to you. They never add club points.' : 'Sign in to save which questions you have solved.'}</p><button className="text-button" onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}>{account ? 'Open my progress' : 'Sign in to track'} <Icon name="arrow" size={14}/></button></article>
-        <article className="overview-card community-card"><div className="card-kicker"><Icon name="users" size={14}/> CLUB PARTICIPATION <span className="card-count">03</span></div><div className="community-figure"><strong>{club.acceptedCount}</strong><span>members accepted today</span></div>{club.participants?.length ? <div className="participant-list">{club.participants.slice(0, 4).map((person) => <span className="participant" key={`${person.githubUsername}-${person.name}`}><i>{initials(person.name)}</i>{person.name.split(' ')[0]}</span>)}{club.participants.length > 4 && <span className="participant-more">+{club.participants.length - 4}</span>}</div> : <p className="privacy-note">Approved members with accepted club submissions appear here; personal checkmarks stay private.</p>}<button className="text-button" onClick={() => navigate('club')}>See the scoreboard <Icon name="arrow" size={14}/></button></article>
+        <article className="overview-card community-card"><div className="card-kicker"><Icon name="users" size={14}/> CLUB PARTICIPATION <span className="card-count">03</span></div><div className="community-figure"><strong>{club.acceptedCount}</strong><span>members accepted today</span></div>{club.participants?.length ? <div className="participant-list">{club.participants.slice(0, 4).map((person) => <span className="participant" key={`${person.githubUsername}-${person.name}`}><MemberAvatar person={person} label=""/>{person.name.split(' ')[0]}</span>)}{club.participants.length > 4 && <span className="participant-more">+{club.participants.length - 4}</span>}</div> : <p className="privacy-note">Approved members with accepted club submissions appear here; personal checkmarks stay private.</p>}<button className="text-button" onClick={() => navigate('club')}>See the scoreboard <Icon name="arrow" size={14}/></button></article>
       </section>
 
       {!account && <section className="library-locked panel"><div><div className="eyebrow"><span className="eyebrow-line"/>THE QUESTION LIBRARY</div><h2>Sign in to access the curriculum<span>.</span></h2><p>Question titles, patterns, and solution notes are available to approved members.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></section>}
@@ -605,7 +731,33 @@ function App() {
 
     {view === 'progress' && <main className="content-shell page-content">
       <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>PERSONAL ACCOUNT</div><h1>Account<span>.</span></h1><p>Update your member details and review your private DSA progress. Personal checkmarks never affect club points.</p></div><div className="metric-card"><strong>{solvedCount}</strong><span>QUESTIONS TRACKED</span></div></div>
-      {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Your account and progress are private.</h2><p>Sign in to update your member details and keep a dated record of solved questions.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <><section className="panel account-settings"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>MEMBER DETAILS</div><h2>Your profile</h2></div>{account.githubVerified ? <Pill tone="green">GitHub verified</Pill> : <Pill tone="amber">GitHub not verified</Pill>}</div><form className="account-form" key={`${account.id}:${account.githubUsername}:${account.githubVerified}`} onSubmit={saveProfile}><label>FULL NAME<input name="name" defaultValue={account.name} required minLength="2" maxLength="80" autoComplete="name"/></label><label>CLUB DEPARTMENT<input name="department" defaultValue={account.department} required minLength="2" maxLength="80"/></label><label>GITHUB USERNAME<input name="githubUsername" defaultValue={account.githubUsername} required={!account.githubVerified && Boolean(account.githubUsername)} pattern="[A-Za-z0-9-]{1,39}" readOnly={account.githubVerified} placeholder="Connect GitHub to fill this automatically"/><small>{account.githubVerified ? 'Read from your verified GitHub account.' : 'Connect GitHub to verify and fill this username.'}</small></label><label>LEETCODE USERNAME<input name="leetcodeUsername" defaultValue={account.leetcodeUsername} required pattern="[A-Za-z0-9_-]{1,40}"/></label><label>YEAR OF STUDY<select name="studyYear" defaultValue={account.studyYear} required><option value="first-year">First year</option><option value="second-year">Second year</option><option value="third-year">Third year</option><option value="fourth-year">Fourth year</option><option value="passed">Passed out</option></select></label><div className="account-form-actions"><button className="button button-dark" disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save account details'} <Icon name="arrow" size={14}/></button>{account.githubVerified ? <button className="button button-danger" type="button" disabled={profileBusy} onClick={disconnectGithub}>Disconnect GitHub</button> : <button className="button button-quiet" type="button" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/>Connect GitHub</button>}</div></form></section><div className="progress-summary"><article><span>COMPLETED</span><strong>{solvedCount}<small> / 220</small></strong></article><article><span>CURRICULUM COVERED</span><strong>{Math.round(solvedCount / 220 * 100)}<small>%</small></strong></article><article><span>DAILY PRACTICE</span><strong>{new Set(Object.values(progress).map((value) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))).size}<small> sessions</small></strong></article><article><span>PERSONAL STREAK</span><strong>{personalStreak.current}<small> days</small></strong><small className="streak-best">Best: {personalStreak.best} days · checkmarks only</small></article><article><span>SAVED FOR REVIEW</span><strong>{bookmarks.length}<small> questions</small></strong></article></div><div className="section-heading compact"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR COMPLETIONS</div><h2>{solvedCount ? 'Recently tracked' : 'A clean slate'}</h2></div><button className="button button-quiet" onClick={() => { navigate('general'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Browse questions <Icon name="arrow" size={14}/></button></div>{solvedCount ? <><QuestionActionsGuide/><div className="question-list">{Object.entries(progress).sort((a, b) => new Date(b[1]) - new Date(a[1])).map(([id, solvedAt]) => byId.get(Number(id)) && ({ question: byId.get(Number(id)), solvedAt })).filter(Boolean).map(({ question, solvedAt }) => <QuestionRow key={question.id} question={question} solved={true} solvedAt={solvedAt} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>)}</div></> : <div className="empty-panel"><span>01</span><h2>Your first question starts the record.</h2><p>Use the personal checkmark in the question library when you finish a problem. Club challenge submissions are tracked separately.</p><button className="button button-dark" onClick={() => navigate('general')}>Browse the library <Icon name="arrow" size={14}/></button></div>}</>}
+      {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Your account and progress are private.</h2><p>Sign in to update your member details and keep a dated record of solved questions.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <><section className="panel account-settings"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>MEMBER DETAILS</div><h2>Your profile</h2></div>{account.githubVerified ? <Pill tone="green">GitHub verified</Pill> : <Pill tone="amber">GitHub not verified</Pill>}</div><form className="account-form" key={`${account.id}:${account.githubUsername}:${account.githubVerified}`} onSubmit={saveProfile}><label>FULL NAME<input name="name" defaultValue={account.name} required minLength="2" maxLength="80" autoComplete="name"/></label><label>CLUB DEPARTMENT<input name="department" defaultValue={account.department} required minLength="2" maxLength="80"/></label><label>GITHUB USERNAME<input name="githubUsername" defaultValue={account.githubUsername} required={!account.githubVerified && Boolean(account.githubUsername)} pattern="[A-Za-z0-9-]{1,39}" readOnly={account.githubVerified} placeholder="Connect GitHub to fill this automatically"/><small>{account.githubVerified ? 'Read from your verified GitHub account.' : 'Connect GitHub to verify and fill this username.'}</small></label><label>LEETCODE USERNAME<input name="leetcodeUsername" defaultValue={account.leetcodeUsername} required pattern="[A-Za-z0-9_-]{1,40}"/></label><label>YEAR OF STUDY<select name="studyYear" defaultValue={account.studyYear} required><option value="first-year">First year</option><option value="second-year">Second year</option><option value="third-year">Third year</option><option value="fourth-year">Fourth year</option><option value="passed">Passed out</option></select></label><div className="avatar-picker"><div className="avatar-picker-heading"><MemberAvatar style={avatarDraftStyle} seed={avatarDraftSeed || account.avatarSeed || account.id} className="avatar-current" label="Selected avatar preview"/><div><strong>Choose your avatar</strong><span>Pick a style, then select a face or shuffle the options.</span></div><button type="button" className="button button-quiet" onClick={shuffleAvatarChoices}>Shuffle options</button></div><div className="avatar-style-tabs" role="tablist" aria-label="DiceBear avatar styles">{AVATAR_STYLES.map((style) => <button type="button" key={style.id} role="tab" aria-selected={avatarDraftStyle === style.id} className={avatarDraftStyle === style.id ? 'selected' : ''} onClick={() => chooseAvatarStyle(style.id)}>{style.name}</button>)}</div><div className="avatar-choice-grid" aria-label="Choose an avatar">{avatarChoices.map((seed, index) => <button type="button" key={seed} className={`avatar-choice ${avatarDraftSeed === seed ? 'selected' : ''}`} aria-label={`Choose avatar ${index + 1}`} aria-pressed={avatarDraftSeed === seed} onClick={() => setAvatarDraftSeed(seed)}><MemberAvatar style={avatarDraftStyle} seed={seed} label=""/></button>)}</div><small className="avatar-license-note">CC BY 4.0 credits: <a href="https://www.dicebear.com/styles/fun-emoji/" target="_blank" rel="noreferrer">Fun Emoji Set by Davis Uche</a> and <a href="https://www.dicebear.com/styles/micah/" target="_blank" rel="noreferrer">Avatar Illustration System by Micah Lanier</a>.</small></div><div className="account-form-actions"><button className="button button-dark" disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save account details'} <Icon name="arrow" size={14}/></button>{account.githubVerified ? <button className="button button-danger" type="button" disabled={profileBusy} onClick={disconnectGithub}>Disconnect GitHub</button> : <button className="button button-quiet" type="button" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/>Connect GitHub</button>}</div></form></section><ProgressHeatmap progress={progress}/><div className="progress-summary"><article><span>COMPLETED</span><strong>{solvedCount}<small> / 220</small></strong></article><article><span>CURRICULUM COVERED</span><strong>{Math.round(solvedCount / 220 * 100)}<small>%</small></strong></article><article><span>DAILY PRACTICE</span><strong>{new Set(Object.values(progress).map((value) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))).size}<small> sessions</small></strong></article><article><span>PERSONAL STREAK</span><strong>{personalStreak.current}<small> days</small></strong><small className="streak-best">Best: {personalStreak.best} days · checkmarks only</small></article><article><span>SAVED FOR REVIEW</span><strong>{bookmarks.length}<small> questions</small></strong></article></div><div className="section-heading compact"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR COMPLETIONS</div><h2>{solvedCount ? 'Recently tracked' : 'A clean slate'}</h2></div><button className="button button-quiet" onClick={() => { navigate('general'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Browse questions <Icon name="arrow" size={14}/></button></div>{solvedCount ? <><QuestionActionsGuide/><div className="question-list">{Object.entries(progress).sort((a, b) => new Date(b[1]) - new Date(a[1])).map(([id, solvedAt]) => byId.get(Number(id)) && ({ question: byId.get(Number(id)), solvedAt })).filter(Boolean).map(({ question, solvedAt }) => <QuestionRow key={question.id} question={question} solved={true} solvedAt={solvedAt} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>)}</div></> : <div className="empty-panel"><span>01</span><h2>Your first question starts the record.</h2><p>Use the personal checkmark in the question library when you finish a problem. Club challenge submissions are tracked separately.</p><button className="button button-dark" onClick={() => navigate('general')}>Browse the library <Icon name="arrow" size={14}/></button></div>}</>}
+    </main>}
+
+    {view === 'members' && <main className="content-shell page-content members-page">
+      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ABES TECHNOVATION CLUB</div><h1>Member directory<span>.</span></h1><p>Find club members by Club Department or year, and explore their public LeetCode progress.</p></div><div className="metric-card"><strong>{directoryPagination.total}</strong><span>APPROVED MEMBERS</span></div></div>
+      {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>The member directory is for approved accounts.</h2><p>Sign in with your approved ABES account to browse club profiles.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <>
+        <form className="panel directory-filters" onSubmit={(event) => { event.preventDefault(); loadDirectory(1, directoryQuery, directoryDepartment, directoryYear); }}>
+          <label className="member-search"><Icon name="search" size={15}/><input value={directoryQuery} onChange={(event) => setDirectoryQuery(event.target.value)} placeholder="Search name, Club Department, or username" aria-label="Search members"/></label>
+          <label className="directory-select"><span>CLUB DEPARTMENT</span><select value={directoryDepartment} onChange={(event) => { setDirectoryDepartment(event.target.value); loadDirectory(1, directoryQuery, event.target.value, directoryYear); }}><option value="">All departments</option>{directoryDepartments.map((department) => <option key={department} value={department}>{department}</option>)}</select></label>
+          <label className="directory-select"><span>YEAR</span><select value={directoryYear} onChange={(event) => { setDirectoryYear(event.target.value); loadDirectory(1, directoryQuery, directoryDepartment, event.target.value); }}><option value="">All years</option><option value="first-year">First year</option><option value="second-year">Second year</option><option value="third-year">Third year</option><option value="fourth-year">Fourth year</option><option value="passed">Passed out</option></select></label>
+          <button className="button button-dark" type="submit" disabled={directoryBusy}>{directoryBusy ? 'Searching…' : 'Search'}</button>
+          {(directoryQuery || directoryDepartment || directoryYear) && <button className="button button-quiet" type="button" onClick={() => { setDirectoryQuery(''); setDirectoryDepartment(''); setDirectoryYear(''); loadDirectory(1, '', '', ''); }}>Clear filters</button>}
+        </form>
+        {directoryBusy && !directoryMembers.length ? <div className="panel directory-loading" role="status">Loading approved member profiles…</div> : directoryMembers.length ? <div className="member-directory-grid">{directoryMembers.map((member) => {
+          const lookup = directoryLeetcodeStats[member.id];
+          const stats = lookup?.stats;
+          const maxActivity = Math.max(1, ...(stats?.byDifficulty || []).map((item) => item.attempted ?? item.solved));
+          return <article className="panel member-directory-card" key={member.id}>
+            <header className="directory-card-header"><MemberAvatar person={member} className="directory-avatar" label=""/><div><h2>{member.name}</h2><p>{member.department} · {studyYearLabel(member.studyYear)}</p></div><Pill tone={member.role === 'admin' ? 'green' : 'neutral'}>{member.role === 'lead' ? 'Club lead' : member.role}</Pill></header>
+            <div className="directory-socials">{member.githubUsername ? <a href={`https://github.com/${encodeURIComponent(member.githubUsername)}`} target="_blank" rel="noreferrer"><Icon name="github" size={14}/>@{member.githubUsername}<Icon name="external" size={12}/></a> : <span>GitHub not linked</span>}{member.leetcodeUsername ? <a href={`https://leetcode.com/${encodeURIComponent(member.leetcodeUsername)}/`} target="_blank" rel="noreferrer">LeetCode @{member.leetcodeUsername}<Icon name="external" size={12}/></a> : <span>LeetCode ID not added</span>}</div>
+            {member.leetcodeUsername && <section className="directory-leetcode" aria-label={`LeetCode statistics for ${member.name}`}><div className="directory-leetcode-heading"><strong>LeetCode progress</strong>{stats && <span>Updated {new Date(stats.fetchedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}</span>}</div>{lookup?.available && stats ? <><div className="leetcode-counts"><span><strong>{stats.attemptedCount ?? '—'}</strong> attempted</span><span><strong>{stats.solvedCount}</strong> solved</span></div><div className="leetcode-bars">{stats.byDifficulty.map((item) => <div className="leetcode-bar-row" key={item.difficulty}><span>{item.difficulty}</span><i><b style={{ width: `${Math.max(2, Math.round(((item.attempted ?? item.solved) / maxActivity) * 100))}%` }}/></i><strong>{item.attempted ?? item.solved}</strong></div>)}</div>{lookup.stale && <small className="leetcode-unavailable">{lookup.reason}</small>}</> : <div className="leetcode-empty"><span>{lookup?.reason || 'Public statistics are fetched only when requested.'}</span><button className="text-button" type="button" disabled={leetcodeStatsBusy === member.id} onClick={() => loadDirectoryLeetcodeStats(member)}>{leetcodeStatsBusy === member.id ? 'Fetching…' : lookup ? 'Try again' : 'Load stats'} <Icon name="arrow" size={13}/></button></div>}</section>}
+          </article>;
+        })}</div> : <div className="panel directory-empty"><span>⌕</span><h2>No members match these filters.</h2><p>Try another year, department, or search term.</p></div>}
+        {directoryPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={directoryBusy || directoryPagination.page <= 1} onClick={() => loadDirectory(directoryPagination.page - 1)}>Previous</button><span>Page {directoryPagination.page} of {directoryPagination.totalPages} · {directoryPagination.total} members</span><button className="button button-quiet" disabled={directoryBusy || directoryPagination.page >= directoryPagination.totalPages} onClick={() => loadDirectory(directoryPagination.page + 1)}>Next</button></div>}
+        <p className="directory-disclaimer">LeetCode statistics come from its public GraphQL service and may be unavailable or change without notice. Only profile links and summary counts are shown; private personal progress is never shared here.</p>
+      </>}
+      <footer className="site-footer"><span>DSAvation · ABES Technovation Club</span><span>Directory access is limited to approved members</span></footer>
     </main>}
 
     {view === 'dashboard' && isAdmin && <main className="content-shell page-content dashboard-page">
@@ -615,7 +767,7 @@ function App() {
         <div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ACCOUNT ACCESS</div><h2>Club accounts <span className="count-badge">{membersPagination.total}</span></h2></div><button className="button button-quiet refresh-members" onClick={() => refreshMembers(membersPagination.page)}>Refresh</button></div>
         <div className="member-dashboard-toolbar"><div className="member-filter-tabs" role="tablist" aria-label="Filter member accounts">{[['pending', `Pending · ${memberCounts.pending}`], ['approved', `Approved · ${memberCounts.approved}`], ['all', `All · ${membersPagination.total}`]].map(([key, label]) => <button key={key} role="tab" aria-selected={memberFilter === key} className={memberFilter === key ? 'selected' : ''} onClick={() => { setMemberFilter(key); refreshMembers(1, key, memberQuery); }}>{label}</button>)}</div><label className="member-search"><Icon name="search" size={15}/><input value={memberQuery} onChange={(event) => setMemberQuery(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') refreshMembers(1, memberFilter, event.currentTarget.value); }} placeholder="Search name, email, Club Department"/></label><button className="button button-quiet" onClick={() => refreshMembers(1, memberFilter, memberQuery)}>Search</button></div>
         {displayedMembers.length ? <div className="dashboard-member-list">{displayedMembers.map((member) => <article className="dashboard-member-row" key={member.id}>
-          <span className="avatar">{initials(member.name)}</span>
+          <MemberAvatar person={member} label=""/>
           <div className="dashboard-member-identity"><div className="member-name-line"><strong>{member.name}</strong><Pill tone={member.approvalStatus === 'approved' ? 'green' : 'amber'}>{member.approvalStatus === 'approved' ? 'Approved' : 'Pending'}</Pill></div><span>{member.email}</span><small>Club Department: {member.department} · {studyYearLabel(member.studyYear)} · GitHub @{member.githubUsername || '—'} · LeetCode @{member.leetcodeUsername || '—'}</small><small>Joined {member.createdAt ? new Date(member.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'date unavailable'}</small></div>
           <div className="dashboard-member-actions">
             <select aria-label={`Role for ${member.name}`} value={member.role} disabled={memberBusy === member.id || member.id === account.id || member.approvalStatus !== 'approved'} onChange={(event) => updateRole(member, event.target.value)}><option value="member">Member</option><option value="lead">Club lead</option><option value="admin">Admin</option></select>
@@ -640,7 +792,7 @@ function App() {
               {!account ? <div className="inline-callout"><Icon name="lock" size={16}/><span>Sign in with an approved ABES account to submit a club solution.</span><button onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div> : !account.githubVerified ? <div className="inline-callout"><Icon name="github" size={16}/><span>Connect the GitHub account you want to use; its verified username will replace the signup value.</span><button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button></div> : submissions.some((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated') ? <div className="inline-callout submitted"><Icon name="check" size={16}/><span>Your submission for today is {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.status} · {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.points ?? 0} point(s).</span></div> : <form className="submission-form" onSubmit={submitClubSolution}><div className="submission-form-heading"><label htmlFor="commit-url">GITHUB COMMIT URL</label><button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}><Icon name="info" size={15}/></button></div>{submissionHelpOpen && <div className="submission-help" id="submission-help"><strong>Before you submit</strong><ol><li>Create or use a public repository that you own under <code>@{account.githubUsername}</code>.</li><li>Create or update exactly <code>{assignedQuestion.id}/solution.txt</code> directly inside the question folder. The file can contain any language, but must have at least one byte.</li><li>Commit and push it during today’s assignment date. The GitHub author must match your linked account; commits made in GitHub's web editor use its web-flow committer and are accepted.</li><li>Open the commit in GitHub and paste its URL, for example <code>https://github.com/{account.githubUsername}/YOUR-REPO/commit/FULL_SHA</code>.</li></ol><p>Only the first valid submission for today earns a point. Admins can adjust points if needed.</p></div>}<div className="submission-input-row"><input id="commit-url" type="url" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder={`https://github.com/${account.githubUsername}/REPO/commit/FULL_SHA`}/><button className="button button-dark" disabled={submissionBusy}>{submissionBusy ? 'Verifying…' : 'Verify and submit'} <Icon name="arrow" size={14}/></button></div><small>Required changed file: <code>{assignedQuestion.id}/solution.txt</code> (at least one byte). The linked GitHub account must own the repository.</small></form>}</> : <div className="no-assignment-note"><p>A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from punctuality calculations.</p></div>}
           </section>
 
-          {account && <section className="panel profile-panel"><div className="profile-head"><span className="avatar large">{initials(account.name)}</span><div><h3>{account.name}</h3><p>Club Department: {account.department} <span>·</span> @{account.githubUsername || 'GitHub not linked'}</p></div><Pill tone={account.role === 'member' ? 'neutral' : 'green'}>{account.role}</Pill></div><label className="privacy-toggle"><input type="checkbox" checked={account.showPublic} disabled={publicPreferenceBusy} onChange={(event) => updatePublicPreference(event.target.checked)}/><span>Show my full name and Club Department publicly; otherwise use only my GitHub username.</span></label></section>}
+          {account && <section className="panel profile-panel"><div className="profile-head"><MemberAvatar person={account} className="large" label=""/><div><h3>{account.name}</h3><p>Club Department: {account.department} <span>·</span> @{account.githubUsername || 'GitHub not linked'}</p></div><Pill tone={account.role === 'member' ? 'neutral' : 'green'}>{account.role}</Pill></div><label className="privacy-toggle"><input type="checkbox" checked={account.showPublic} disabled={publicPreferenceBusy} onChange={(event) => updatePublicPreference(event.target.checked)}/><span>Show my full name and Club Department publicly; otherwise use only my GitHub username.</span></label></section>}
 
           {isLeader && <section className="panel leader-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>LEAD TOOLS</div><h2>{editingTodayAssignment ? 'Change today’s question' : 'Publish a Question of the Day'}</h2></div><Pill tone="green">{account.role}</Pill></div><form className="publish-form" onSubmit={publishAssignment}><label><span>ASSIGNMENT DATE <i>Asia/Kolkata</i></span><input type="date" value={assignmentDate} min={localDay()} onChange={(event) => setAssignmentDate(event.target.value)} required/></label><label className="wide"><span>QUESTION</span><select value={assignmentQuestion} onChange={(event) => setAssignmentQuestion(event.target.value)} required><option value="">Choose from the 220 question curriculum</option>{questions.map((question) => <option key={question.id} value={question.id}>Day {String(question.day).padStart(3, '0')} · LC {question.id} · {question.title}</option>)}</select></label><button className="button button-green" disabled={assignmentBusy || !assignmentQuestion || (editingTodayAssignment && assignmentDate === localDay() && Number(assignmentQuestion) === Number(club.assignment.questionId)) || (!editingTodayAssignment && history.some((item) => item.dateKey === assignmentDate))}>{assignmentBusy ? 'Saving…' : editingTodayAssignment && assignmentDate === localDay() ? 'Replace today’s question' : 'Publish assignment'} <Icon name="arrow" size={14}/></button></form><p className="helper-copy">{editingTodayAssignment && assignmentDate === localDay() ? 'Changing today’s question invalidates existing submissions, removes their points, and lets members submit the corrected question.' : history.some((item) => item.dateKey === assignmentDate) ? 'A question is already published for this date.' : 'Publish at most one question per date. Leave holidays and breaks unassigned.'}</p></section>}
 
@@ -648,7 +800,7 @@ function App() {
 
         </div>
 
-        <aside className="club-side-column"><section className="panel leaderboard-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>CLUB STANDINGS</div><h2><Icon name="trophy" size={18}/> Leaderboard</h2></div><span className="live-tag">LIVE</span></div><p className="leaderboard-note">Verified submissions earn one point by default. Admin point adjustments are recorded in the activity log.</p>{leaderboard.length ? <><div className="leaderboard-list">{leaderboard.map((person, index) => { const rank = (leaderboardPagination.page - 1) * leaderboardPagination.pageSize + index + 1; return <div className="leaderboard-row" key={`${person.githubUsername || person.name}:${rank}`}><span className={`rank ${rank <= 3 ? `rank-${rank}` : ''}`}>{String(rank).padStart(2, '0')}</span><span className="avatar">{initials(person.name)}</span><div className="leader-person"><strong>{person.name}</strong><span>{person.department} · {person.punctuality}% punctuality</span></div><strong className="leader-score">{person.points}<small> pts</small></strong></div>; })}</div><div className="pagination-controls" aria-label="Leaderboard pages"><button className="button button-quiet" disabled={leaderboardPagination.page <= 1} onClick={() => loadLeaderboardPage(leaderboardPagination.page - 1)}>Previous</button><span>Page {leaderboardPagination.page} of {leaderboardPagination.totalPages} · {leaderboardPagination.total} members</span><button className="button button-quiet" disabled={leaderboardPagination.page >= leaderboardPagination.totalPages} onClick={() => loadLeaderboardPage(leaderboardPagination.page + 1)}>Next</button></div></> : <div className="soft-empty">No scored club submissions yet. Be first to get on the board.</div>}</section>
+        <aside className="club-side-column"><section className="panel leaderboard-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>CLUB STANDINGS</div><h2><Icon name="trophy" size={18}/> Leaderboard</h2></div><span className="live-tag">LIVE</span></div><p className="leaderboard-note">Verified submissions earn one point by default. Admin point adjustments are recorded in the activity log.</p>{leaderboard.length ? <><div className="leaderboard-list">{leaderboard.map((person, index) => { const rank = (leaderboardPagination.page - 1) * leaderboardPagination.pageSize + index + 1; return <div className="leaderboard-row" key={`${person.githubUsername || person.name}:${rank}`}><span className={`rank ${rank <= 3 ? `rank-${rank}` : ''}`}>{String(rank).padStart(2, '0')}</span><MemberAvatar person={person} label=""/><div className="leader-person"><strong>{person.name}</strong><span>{person.department} · {person.punctuality}% punctuality</span></div><strong className="leader-score">{person.points}<small> pts</small></strong></div>; })}</div><div className="pagination-controls" aria-label="Leaderboard pages"><button className="button button-quiet" disabled={leaderboardPagination.page <= 1} onClick={() => loadLeaderboardPage(leaderboardPagination.page - 1)}>Previous</button><span>Page {leaderboardPagination.page} of {leaderboardPagination.totalPages} · {leaderboardPagination.total} members</span><button className="button button-quiet" disabled={leaderboardPagination.page >= leaderboardPagination.totalPages} onClick={() => loadLeaderboardPage(leaderboardPagination.page + 1)}>Next</button></div></> : <div className="soft-empty">No scored club submissions yet. Be first to get on the board.</div>}</section>
           <section className="panel history-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ASSIGNMENT LOG</div><h2>Published days</h2></div><span className="micro-count">{historyPagination.total}</span></div>{history.length ? <><div className="history-list">{history.map((item) => { const question = byId.get(Number(item.questionId)); return <div className="history-row" key={item.id}><span className="history-date">{item.dateKey.slice(5)}</span><span>{question?.title || `LeetCode #${item.questionId}`}</span></div>; })}</div><div className="pagination-controls" aria-label="Assignment log pages"><button className="button button-quiet" disabled={historyPagination.page <= 1} onClick={() => loadHistoryPage(historyPagination.page - 1)}>Previous</button><span>Page {historyPagination.page} of {historyPagination.totalPages}</span><button className="button button-quiet" disabled={historyPagination.page >= historyPagination.totalPages} onClick={() => loadHistoryPage(historyPagination.page + 1)}>Next</button></div></> : <div className="soft-empty">No questions have been assigned yet.</div>}</section>
           {submissions.length > 0 && <section className="panel my-submissions"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR CLUB SUBMISSIONS</div><h2>Review history</h2></div></div>{submissions.slice(0, 5).map((item) => <div className="my-submission" key={item.id}><span>{item.assignment?.dateKey} · LC {item.assignment?.questionId}</span><Pill tone={item.status === 'accepted' ? 'green' : item.status === 'rejected' ? 'red' : 'amber'}>{item.status}</Pill></div>)}</section>}
         </aside>
@@ -668,7 +820,8 @@ function App() {
         <div className="auth-switch">{authMode === 'signup' ? 'Already a member?' : 'New to DSAvation?'} <button onClick={() => { setAuthMode(authMode === 'signup' ? 'login' : 'signup'); setAuthError(''); }}>{authMode === 'signup' ? 'Sign in' : 'Create account'}</button>{authMode === 'login' && <><span> · </span><button onClick={() => setAuthError('Ask an administrator to generate a one-time password reset link for your account.')}>Forgot password?</button></>}</div>
         <p className="auth-privacy"><Icon name="lock" size={13}/> Personal checkmarks are private and never count toward the club scoreboard.</p>
       </section></div>}
-    <div className={`mobile-bottom-nav ${isAdmin ? 'admin-nav' : ''}`}><button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><Icon name="book" size={17}/>General</button><button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={17}/>Account</button><button className={view === 'club' ? 'active' : ''} onClick={() => navigate('club')}><Icon name="users" size={17}/>Club</button>{isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={17}/>Admin</button>}</div>
+    <div className={`mobile-bottom-nav ${account ? 'has-account' : ''} ${isAdmin ? 'admin-nav' : ''}`}><button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><Icon name="book" size={17}/>General</button><button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={17}/>Account</button>{account && <button className={view === 'members' ? 'active' : ''} onClick={() => navigate('members')}><Icon name="users" size={17}/>Members</button>}<button className={view === 'club' ? 'active' : ''} onClick={() => navigate('club')}><Icon name="users" size={17}/>Club</button>{isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={17}/>Admin</button>}</div>
+    <Analytics/>
   </div>;
 }
 

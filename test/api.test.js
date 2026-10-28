@@ -12,6 +12,8 @@ let originalFetch;
 let originalAdminEmails;
 let originalSecureCookie;
 let oauthGithubUsername = 'canonical-github-user';
+let leetcodePayload;
+let leetcodeFetchCount = 0;
 
 function equalValue(left, right) {
   if (left instanceof Date || right instanceof Date) return new Date(left).getTime() === new Date(right).getTime();
@@ -155,12 +157,12 @@ async function call(db, path, { method = 'GET', body, cookie = '' } = {}) {
   return { response, data: await response.json() };
 }
 
-async function seedUser(db, { name, email, username, role = 'member', approved = true, leetcodeUsername = 'leet-id' }) {
+async function seedUser(db, { name, email, username, role = 'member', approved = true, leetcodeUsername = 'leet-id', department = 'Computer Science', studyYear = 'third-year', showPublic = true }) {
   const user = {
-    _id: new ObjectId(), name, department: 'Computer Science', studyYear: 'third-year',
+    _id: new ObjectId(), name, department, studyYear,
     email, passwordHash: await bcrypt.hash('correct-horse-123', 4),
     githubUsername: username, githubUserLower: username.toLowerCase(), githubId: 100,
-    githubVerifiedAt: new Date(), leetcodeUsername, showPublic: true, role,
+    githubVerifiedAt: new Date(), leetcodeUsername, showPublic, role,
     approvalStatus: approved ? 'approved' : 'pending', approvedAt: approved ? new Date() : null,
     createdAt: new Date(), updatedAt: new Date(),
   };
@@ -193,6 +195,10 @@ before(() => {
   process.env.SESSION_COOKIE_SECURE = 'false';
   globalThis.fetch = async (input) => {
     const url = new URL(String(input));
+    if (url.hostname === 'leetcode.com' && url.pathname === '/graphql/') {
+      leetcodeFetchCount += 1;
+      return new Response(JSON.stringify(leetcodePayload || { data: { matchedUser: null } }), { status: 200 });
+    }
     if (url.hostname === 'github.com' && url.pathname === '/login/oauth/access_token') {
       return new Response(JSON.stringify({ access_token: 'test-github-access-token' }), { status: 200 });
     }
@@ -222,7 +228,7 @@ after(() => {
   else process.env.SESSION_COOKIE_SECURE = originalSecureCookie;
 });
 
-beforeEach(() => { commits.clear(); commitTrees.clear(); });
+beforeEach(() => { commits.clear(); commitTrees.clear(); leetcodePayload = null; leetcodeFetchCount = 0; });
 
 test('commit links, solution paths, and India assignment dates reject malformed or nested values', () => {
   assert.deepEqual(parsePersonalCommitUrl('https://github.com/alex/dsa/commit/abcdef0123456789'), { owner: 'alex', repository: 'dsa', sha: 'abcdef0123456789' });
@@ -282,10 +288,17 @@ test('authenticated profile and private-progress APIs validate and persist membe
   const update = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
     name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
     githubUsername: 'student-gh', leetcodeUsername: 'leet-updated', showPublic: true,
+    avatarStyle: 'micah', avatarSeed: 'avatar-account-choice-1',
   } });
   assert.equal(update.response.status, 200);
   assert.equal(update.data.user.leetcodeUsername, 'leet-updated');
   assert.equal(update.data.user.studyYear, 'fourth-year');
+  assert.equal(update.data.user.avatarStyle, 'micah');
+  assert.equal(update.data.user.avatarSeed, 'avatar-account-choice-1');
+  const invalidAvatarStyle = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: { avatarStyle: 'not-a-style' } });
+  assert.equal(invalidAvatarStyle.response.status, 400);
+  const invalidAvatarSeed = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: { avatarSeed: 'invalid seed !' } });
+  assert.equal(invalidAvatarSeed.response.status, 400);
   const newGithub = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
     name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
     githubUsername: 'student-new-gh', leetcodeUsername: 'leet-updated',
@@ -352,6 +365,62 @@ test('GitHub OAuth username becomes canonical and members can disconnect the lin
     if (oldClientSecret === undefined) delete process.env.GITHUB_OAUTH_CLIENT_SECRET;
     else process.env.GITHUB_OAUTH_CLIENT_SECRET = oldClientSecret;
   }
+});
+
+test('member directory requires an approved login, filters profiles, paginates, and excludes email and private progress', async () => {
+  const db = new FakeDatabase();
+  const viewer = await seedUser(db, { name: 'Directory Viewer', email: 'viewer@abes.ac.in', username: 'directory-viewer', department: 'Electronics', studyYear: 'fourth-year' });
+  for (let index = 1; index <= 3; index += 1) {
+    await seedUser(db, { name: `Directory Student ${index}`, email: `directory${index}@abes.ac.in`, username: `directory-student-${index}`, department: 'Computer Science', studyYear: 'second-year' });
+  }
+  const pending = await seedUser(db, { name: 'Pending Directory Student', email: 'pending-directory@abes.ac.in', username: 'pending-directory', department: 'Computer Science', studyYear: 'second-year' });
+  await db.collection('users').updateOne({ _id: pending.user._id }, { $set: { approvalStatus: 'pending' } });
+  const anonymous = await call(db, '/members');
+  assert.equal(anonymous.response.status, 401);
+
+  const firstPage = await call(db, '/members?department=Computer%20Science&year=second-year&page=1&pageSize=2', { cookie: viewer.cookie });
+  assert.equal(firstPage.response.status, 200);
+  assert.equal(firstPage.data.pagination.total, 3);
+  assert.equal(firstPage.data.pagination.totalPages, 2);
+  assert.equal(firstPage.data.members.length, 2);
+  assert.equal(firstPage.data.departments.includes('Electronics'), true);
+  for (const member of firstPage.data.members) {
+    assert.equal(member.department, 'Computer Science');
+    assert.equal(member.studyYear, 'second-year');
+    assert.equal(Object.hasOwn(member, 'email'), false);
+    assert.equal(Object.hasOwn(member, 'progress'), false);
+  }
+  const lastPage = await call(db, '/members?department=Computer%20Science&year=second-year&page=2&pageSize=2', { cookie: viewer.cookie });
+  assert.equal(lastPage.data.members.length, 1);
+  const escapedSearch = await call(db, '/members?q=Directory%20Student%201', { cookie: viewer.cookie });
+  assert.equal(escapedSearch.data.pagination.total, 1);
+  assert.equal(escapedSearch.data.members[0].name, 'Directory Student 1');
+  const invalidYear = await call(db, '/members?year=graduate', { cookie: viewer.cookie });
+  assert.equal(invalidYear.response.status, 400);
+});
+
+test('LeetCode profile statistics are fetched on demand and cached for subsequent member views', async () => {
+  const db = new FakeDatabase();
+  const viewer = await seedUser(db, { name: 'Stats Viewer', email: 'stats-viewer@abes.ac.in', username: 'stats-viewer' });
+  const member = await seedUser(db, { name: 'Stats Member', email: 'stats-member@abes.ac.in', username: 'stats-member', leetcodeUsername: 'stats-member-lc' });
+  leetcodePayload = { data: { matchedUser: { username: 'stats-member-lc', submitStats: {
+    acSubmissionNum: [{ difficulty: 'All', count: 24 }, { difficulty: 'Easy', count: 10 }, { difficulty: 'Medium', count: 11 }, { difficulty: 'Hard', count: 3 }],
+    totalSubmissionNum: [{ difficulty: 'All', count: 37 }, { difficulty: 'Easy', count: 14 }, { difficulty: 'Medium', count: 17 }, { difficulty: 'Hard', count: 6 }],
+  } } } };
+  const path = `/members/${member.user._id}/leetcode-stats`;
+  const first = await call(db, path, { cookie: viewer.cookie });
+  assert.equal(first.response.status, 200);
+  assert.equal(first.data.available, true);
+  assert.equal(first.data.stats.solvedCount, 24);
+  assert.equal(first.data.stats.attemptedCount, 37);
+  assert.equal(first.data.stats.byDifficulty.find((item) => item.difficulty === 'Medium').solved, 11);
+  assert.equal(first.data.cached, false);
+  assert.equal(leetcodeFetchCount, 1);
+
+  const cached = await call(db, path, { cookie: viewer.cookie });
+  assert.equal(cached.data.available, true);
+  assert.equal(cached.data.cached, true);
+  assert.equal(leetcodeFetchCount, 1);
 });
 
 test('personal-repo commits score automatically, admin adjustments and assignment correction are audited', async () => {

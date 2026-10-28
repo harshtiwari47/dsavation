@@ -6,6 +6,7 @@ import { getDatabase } from './db.js';
 
 const TZ = 'Asia/Kolkata';
 const DAY_MS = 24 * 60 * 60 * 1000;
+const AVATAR_STYLES = new Set(['critters', 'fun-emoji', 'clay', 'micah']);
 const questionById = new Map(curriculum.questions.map((row) => [Number(row[1]), {
   id: Number(row[1]), title: row[2], topic: row[0], difficulty: row[3],
 }]));
@@ -117,6 +118,8 @@ function account(user) {
   return {
     id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
     email: user.email, githubUsername: user.githubUsername || '', leetcodeUsername: user.leetcodeUsername || '',
+    avatarStyle: AVATAR_STYLES.has(user.avatarStyle) ? user.avatarStyle : 'critters',
+    avatarSeed: String(user.avatarSeed || user._id),
     githubVerified: Boolean(user.githubVerifiedAt), role: user.role || 'member',
     showPublic: Boolean(user.showPublic), createdAt: user.createdAt,
   };
@@ -327,15 +330,19 @@ async function updateProfile(db, user, body) {
   const studyYear = String(body.studyYear ?? user.studyYear ?? '');
   const githubUsername = String(body.githubUsername ?? user.githubUsername ?? '').trim().replace(/^@/, '');
   const leetcodeUsername = String(body.leetcodeUsername ?? user.leetcodeUsername ?? '').trim();
+  const avatarStyle = String(body.avatarStyle ?? user.avatarStyle ?? 'critters');
+  const avatarSeed = String(body.avatarSeed ?? user.avatarSeed ?? user._id);
   if (name.length < 2 || name.length > 80) throw new HttpError(400, 'Enter your full name (2–80 characters).');
   if (department.length < 2 || department.length > 80) throw new HttpError(400, 'Enter your Club Department (2–80 characters).');
   if (!['first-year', 'second-year', 'third-year', 'fourth-year', 'passed'].includes(studyYear)) throw new HttpError(400, 'Choose your current year of study.');
   if (leetcodeUsername && !/^[a-z0-9_-]{1,40}$/i.test(leetcodeUsername)) throw new HttpError(400, 'Enter a valid LeetCode username.');
-  const update = { name, department, studyYear, leetcodeUsername, updatedAt: new Date() };
-  let unset;
+  if (!AVATAR_STYLES.has(avatarStyle)) throw new HttpError(400, 'Choose one of the available DiceBear avatar styles.');
+  if (!/^[A-Za-z0-9_-]{1,64}$/.test(avatarSeed)) throw new HttpError(400, 'Choose a valid avatar variant.');
+  const update = { name, department, studyYear, leetcodeUsername, avatarStyle, avatarSeed, updatedAt: new Date() };
+  const unset = {};
   if (!githubUsername) {
     Object.assign(update, { githubUsername: '' });
-    unset = { githubUserLower: '', githubId: '', githubVerifiedAt: '' };
+    Object.assign(unset, { githubUserLower: '', githubId: '', githubVerifiedAt: '' });
   } else if (!/^[a-z0-9-]{1,39}$/i.test(githubUsername)) {
     throw new HttpError(400, 'Enter a valid GitHub username.');
   } else if (githubUsername.toLowerCase() !== String(user.githubUsername || '').toLowerCase()) {
@@ -346,10 +353,14 @@ async function updateProfile(db, user, body) {
     if (occupied) throw new HttpError(409, 'That GitHub account is already linked to another member.');
     Object.assign(update, { githubUsername: gh.login, githubUserLower, githubId: gh.id, githubVerifiedAt: null });
   }
+  if (leetcodeUsername.toLowerCase() !== String(user.leetcodeUsername || '').toLowerCase()) unset.leetcodeStats = '';
   if (typeof body.showPublic === 'boolean') update.showPublic = body.showPublic;
-  await db.collection('users').updateOne({ _id: user._id }, { $set: update, ...(unset ? { $unset: unset } : {}) });
+  await db.collection('users').updateOne({ _id: user._id }, { $set: update, ...(Object.keys(unset).length ? { $unset: unset } : {}) });
   if (['admin', 'lead'].includes(user.role)) await recordAdminActivity(db, user, 'administrator_profile_updated', { id: user._id, label: user.email }, { fields: Object.keys(update).filter((key) => key !== 'updatedAt') });
-  return account({ ...user, ...update, ...(unset ? { githubVerifiedAt: null, githubUserLower: undefined, githubId: undefined } : {}) });
+  return account({
+    ...user, ...update,
+    ...(unset.githubVerifiedAt ? { githubVerifiedAt: null, githubUserLower: undefined, githubId: undefined } : {}),
+  });
 }
 
 async function disconnectGithub(db, user) {
@@ -432,7 +443,7 @@ async function getClubToday(db) {
   const submissions = await db.collection('submissions').find({ assignmentId: assignment._id }).sort({ submittedAt: 1 }).toArray();
   const userIds = [...new Set(submissions.map((item) => String(item.userId)))].map((id) => new ObjectId(id));
   const profiles = userIds.length ? await db.collection('users').find(approvedUserFilter({ _id: { $in: userIds } }), {
-    projection: { name: 1, department: 1, showPublic: 1, githubUsername: 1 },
+    projection: { name: 1, department: 1, showPublic: 1, githubUsername: 1, avatarStyle: 1, avatarSeed: 1 },
   }).toArray() : [];
   const profileById = new Map(profiles.map((profile) => [String(profile._id), profile]));
   const activeSubmissions = submissions.filter((item) => item.status !== 'invalidated' && profileById.has(String(item.userId)));
@@ -442,6 +453,8 @@ async function getClubToday(db) {
       name: profile.showPublic ? profile.name : profile.githubUsername ? `@${profile.githubUsername}` : 'ABES member',
       department: profile.showPublic ? profile.department : '',
       githubUsername: profile.githubUsername,
+      avatarStyle: AVATAR_STYLES.has(profile.avatarStyle) ? profile.avatarStyle : 'critters',
+      avatarSeed: String(profile.avatarSeed || profile._id),
     }] : [];
   });
   return {
@@ -552,7 +565,7 @@ async function leaderboard(db, url) {
     { $sort: { accepted: -1, lastAcceptedAt: 1 } },
   ]).toArray();
   const profiles = await db.collection('users').find(approvedUserFilter(), {
-    projection: { name: 1, department: 1, githubUsername: 1, showPublic: 1, createdAt: 1 },
+    projection: { name: 1, department: 1, githubUsername: 1, showPublic: 1, createdAt: 1, avatarStyle: 1, avatarSeed: 1 },
   }).toArray();
   const totalById = new Map(totals.map((row) => [String(row._id), row]));
   const sortedProfiles = profiles.map((profile) => {
@@ -569,6 +582,8 @@ async function leaderboard(db, url) {
       name: profile.showPublic ? profile.name : profile.githubUsername ? `@${profile.githubUsername}` : 'ABES member',
       department: profile.showPublic ? profile.department : 'ABES member',
       githubUsername: profile.githubUsername,
+      avatarStyle: AVATAR_STYLES.has(profile.avatarStyle) ? profile.avatarStyle : 'critters',
+      avatarSeed: String(profile.avatarSeed || profile._id),
       points: row.points ?? row.accepted, completed: row.accepted, scheduled: eligible.length,
       punctuality: eligible.length ? Math.round((row.accepted / eligible.length) * 100) : 0,
       streak,
@@ -698,7 +713,7 @@ async function listMembers(db, url) {
   const [total, members, pending, approved] = await Promise.all([
     db.collection('users').countDocuments(filter),
     db.collection('users').find(filter, {
-      projection: { name: 1, department: 1, studyYear: 1, email: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1 },
+      projection: { name: 1, department: 1, studyYear: 1, email: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1, avatarStyle: 1, avatarSeed: 1 },
     }).sort({ name: 1 }).skip(skip).limit(pageSize).toArray(),
     db.collection('users').countDocuments({ $or: [{ approvalStatus: 'pending' }, { approvalStatus: { $exists: false }, verifiedAt: null }] }),
     db.collection('users').countDocuments(approvedUserFilter()),
@@ -706,8 +721,109 @@ async function listMembers(db, url) {
   return { members: members.map((user) => ({
     id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
     email: user.email, githubUsername: user.githubUsername, leetcodeUsername: user.leetcodeUsername || '', role: user.role || 'member',
+    avatarStyle: AVATAR_STYLES.has(user.avatarStyle) ? user.avatarStyle : 'critters', avatarSeed: String(user.avatarSeed || user._id),
     approvalStatus: approvalStatus(user), showPublic: Boolean(user.showPublic), createdAt: user.createdAt, approvedAt: user.approvedAt || user.verifiedAt || null,
   })), pagination: pageMeta(page, pageSize, total), counts: { pending, approved } };
+}
+
+async function listDirectory(db, url) {
+  const query = String(url.searchParams.get('q') || '').trim().slice(0, 80);
+  const department = String(url.searchParams.get('department') || '').trim().slice(0, 80);
+  const studyYear = String(url.searchParams.get('year') || '');
+  const filters = [approvedUserFilter()];
+  if (query) {
+    const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const regex = new RegExp(escaped, 'i');
+    filters.push({ $or: [{ name: regex }, { department: regex }, { githubUsername: regex }, { leetcodeUsername: regex }] });
+  }
+  if (department) filters.push({ department: new RegExp(`^${department.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
+  if (studyYear) {
+    if (!['first-year', 'second-year', 'third-year', 'fourth-year', 'passed'].includes(studyYear)) throw new HttpError(400, 'Choose a valid year of study.');
+    filters.push({ studyYear });
+  }
+  const filter = filters.length === 1 ? filters[0] : { $and: filters };
+  const { page, pageSize, skip } = pageOptions(url, 16, 40);
+  const [total, members, departments] = await Promise.all([
+    db.collection('users').countDocuments(filter),
+    db.collection('users').find(filter, {
+      projection: { name: 1, department: 1, studyYear: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, avatarStyle: 1, avatarSeed: 1 },
+    }).sort({ name: 1 }).skip(skip).limit(pageSize).toArray(),
+    db.collection('users').find(approvedUserFilter(), { projection: { department: 1 } }).toArray(),
+  ]);
+  return {
+    members: members.map((member) => ({
+      id: String(member._id), name: member.name, department: member.department, studyYear: member.studyYear || '',
+      githubUsername: member.githubUsername || '', leetcodeUsername: member.leetcodeUsername || '', role: member.role || 'member',
+      avatarStyle: AVATAR_STYLES.has(member.avatarStyle) ? member.avatarStyle : 'critters',
+      avatarSeed: String(member.avatarSeed || member._id),
+    })),
+    departments: [...new Set(departments.map((member) => String(member.department || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
+    pagination: pageMeta(page, pageSize, total),
+  };
+}
+
+async function getMemberLeetcodeStats(db, req, viewer, memberId) {
+  if (!ObjectId.isValid(memberId)) throw new HttpError(404, 'Member not found.');
+  const target = await db.collection('users').findOne(approvedUserFilter({ _id: new ObjectId(memberId) }), {
+    projection: { leetcodeUsername: 1, leetcodeStats: 1 },
+  });
+  if (!target) throw new HttpError(404, 'Member not found.');
+  const username = String(target.leetcodeUsername || '').trim();
+  if (!username) return { available: false, reason: 'This member has not added a LeetCode username.' };
+
+  const cached = target.leetcodeStats;
+  const cacheIsFresh = cached?.username?.toLowerCase() === username.toLowerCase() &&
+    Date.now() - new Date(cached.fetchedAt).getTime() < 6 * 60 * 60 * 1000;
+  if (cacheIsFresh) return { available: true, stats: cached, cached: true };
+
+  await allowRequest(db, req, `leetcode-stats-${viewer._id}`, 12, 60 * 60 * 1000);
+  const query = `query getUserStats($username: String!) {
+    allQuestionsCount { difficulty count }
+    matchedUser(username: $username) {
+      username
+      submitStats: submitStatsGlobal {
+        acSubmissionNum { difficulty count submissions }
+        totalSubmissionNum { difficulty count submissions }
+      }
+    }
+  }`;
+  try {
+    const response = await fetch('https://leetcode.com/graphql/', {
+      method: 'POST',
+      headers: {
+        Accept: 'application/json', 'Content-Type': 'application/json',
+        Referer: `https://leetcode.com/${encodeURIComponent(username)}/`,
+        'User-Agent': 'DSAvation-Club-Directory',
+      },
+      body: JSON.stringify({ query, variables: { username } }),
+      signal: AbortSignal.timeout(7000),
+    });
+    if (!response.ok) throw new Error('LeetCode public profile request failed.');
+    const payload = await response.json();
+    const matchedUser = payload?.data?.matchedUser;
+    const accepted = matchedUser?.submitStats?.acSubmissionNum;
+    const attempted = matchedUser?.submitStats?.totalSubmissionNum;
+    if (payload?.errors?.length || !matchedUser || !Array.isArray(accepted)) throw new Error('LeetCode public statistics are unavailable.');
+    const byDifficulty = ['Easy', 'Medium', 'Hard'].map((difficulty) => ({
+      difficulty,
+      solved: Number(accepted.find((item) => item.difficulty === difficulty)?.count || 0),
+      attempted: attempted ? Number(attempted.find((item) => item.difficulty === difficulty)?.count || 0) : null,
+      available: Boolean(attempted),
+    }));
+    const stats = {
+      username: matchedUser.username || username,
+      solvedCount: byDifficulty.reduce((sum, item) => sum + item.solved, 0),
+      attemptedCount: attempted ? byDifficulty.reduce((sum, item) => sum + item.attempted, 0) : null,
+      byDifficulty,
+      fetchedAt: new Date(),
+    };
+    await db.collection('users').updateOne({ _id: target._id, leetcodeUsername: username }, { $set: { leetcodeStats: stats } });
+    return { available: true, stats, cached: false };
+  } catch {
+    return cached?.username?.toLowerCase() === username.toLowerCase()
+      ? { available: true, stats: cached, cached: true, stale: true, reason: 'Showing the last saved public statistics.' }
+      : { available: false, reason: 'LeetCode did not return public statistics. The profile link is still available.' };
+  }
 }
 
 async function updateMember(db, user, memberId, body) {
@@ -845,6 +961,9 @@ export async function handleApiNode(req, res, options = {}) {
     if (url.pathname === '/api/club/leaderboard' && method === 'GET') return json(res, 200, await leaderboard(db, url));
 
     const user = await requireUser(req, db);
+    const memberStatsMatch = url.pathname.match(/^\/api\/members\/([a-f0-9]{24})\/leetcode-stats$/i);
+    if (memberStatsMatch && method === 'GET') return json(res, 200, await getMemberLeetcodeStats(db, req, user, memberStatsMatch[1]));
+    if (url.pathname === '/api/members' && method === 'GET') return json(res, 200, await listDirectory(db, url));
     if (url.pathname === '/api/questions' && method === 'GET') {
       return json(res, 200, { questions: curriculum.questions, topics: curriculum.topics });
     }
