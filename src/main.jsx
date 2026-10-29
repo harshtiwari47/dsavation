@@ -81,6 +81,7 @@ function Icon({ name, size = 17 }) {
     lock: <><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></>,
     logout: <><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></>,
     external: <><path d="M14 3h7v7M10 14 21 3"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></>,
+    download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></>,
     moon: <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z"/>,
     sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></>,
@@ -434,6 +435,8 @@ function App() {
   const [submissions, setSubmissions] = useState([]);
   const [pending, setPending] = useState([]);
   const [pendingPagination, setPendingPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
+  const [todaySubmissionsData, setTodaySubmissionsData] = useState({ totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [], questionId: null, questionTitle: '' });
+  const [todaySubmissionsBusy, setTodaySubmissionsBusy] = useState(false);
   const [members, setMembers] = useState([]);
   const [membersPagination, setMembersPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
   const [memberCounts, setMemberCounts] = useState({ pending: 0, approved: 0 });
@@ -554,9 +557,24 @@ function App() {
       setSubmissions(own.submissions || []);
     } catch (error) { setNotice(error.message); }
     if (['lead', 'admin'].includes(user.role)) {
-      try { const result = await api(`/admin/submissions?status=pending&page=${pendingPagination.page}&pageSize=10`); setPending(result.submissions || []); setPendingPagination(result.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 }); }
-      catch (error) { setPending([]); setNotice(error.message); }
-    } else { setPending([]); setPendingPagination({ page: 1, pageSize: 10, total: 0, totalPages: 1 }); }
+      try {
+        const [pendingResult, todayResult] = await Promise.all([
+          api(`/admin/submissions?status=pending&page=${pendingPagination.page}&pageSize=10`),
+          api('/admin/today-submissions'),
+        ]);
+        setPending(pendingResult.submissions || []);
+        setPendingPagination(pendingResult.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
+        setTodaySubmissionsData(todayResult || { totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [] });
+      } catch (error) {
+        setPending([]);
+        setTodaySubmissionsData({ totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [] });
+        setNotice(error.message);
+      }
+    } else {
+      setPending([]);
+      setPendingPagination({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
+      setTodaySubmissionsData({ totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [] });
+    }
     if (user.role === 'admin') {
       try {
         const query = new URLSearchParams({ page: String(membersPagination.page), pageSize: '20', status: memberFilter });
@@ -654,6 +672,53 @@ function App() {
       setPending(result.submissions || []);
       setPendingPagination(result.pagination || { page, pageSize: 10, total: 0, totalPages: 1 });
     } catch (error) { setNotice(error.message); }
+  }
+
+  async function refreshTodaySubmissions() {
+    if (!isLeader) return;
+    setTodaySubmissionsBusy(true);
+    try {
+      const result = await api('/admin/today-submissions');
+      setTodaySubmissionsData(result || { totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [] });
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setTodaySubmissionsBusy(false);
+    }
+  }
+
+  function exportTodayCsv() {
+    if (!todaySubmissionsData.submissions?.length) {
+      setNotice('No submissions recorded for today to export.');
+      return;
+    }
+    const studyYearNames = { 'first-year': 'First year', 'second-year': 'Second year', 'third-year': 'Third year', 'fourth-year': 'Fourth year', passed: 'Passed out' };
+    const escapeCsv = (str) => `"${String(str ?? '').replace(/"/g, '""')}"`;
+    const headers = ['Name', 'Email', 'Club Department', 'Year of Study', 'GitHub Username', 'LeetCode Username', 'Question ID', 'Status', 'Points', 'Commit URL', 'Submitted At (IST)'];
+    const rows = todaySubmissionsData.submissions.map((s) => [
+      escapeCsv(s.name),
+      escapeCsv(s.email),
+      escapeCsv(s.department),
+      escapeCsv(studyYearNames[s.studyYear] || s.studyYear),
+      escapeCsv(s.githubUsername),
+      escapeCsv(s.leetcodeUsername),
+      s.questionId || todaySubmissionsData.questionId || '',
+      s.status || '',
+      s.points ?? '',
+      escapeCsv(s.commitUrl),
+      escapeCsv(new Date(s.submittedAt).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })),
+    ]);
+    const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `dsavation-today-attempts-${todaySubmissionsData.dateKey || localDay()}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    setNotice(`Exported ${todaySubmissionsData.submissions.length} attempted submissions to CSV.`);
   }
 
   async function loadLeaderboardPage(page) {
@@ -837,7 +902,7 @@ function App() {
     setMemberBusy(item.id); setNotice('');
     try {
       await api(`/admin/submissions/${item.id}`, { method: 'PATCH', body: { status, note: '' } });
-      await loadClub(); await loadMemberData(); await refreshPendingSubmissions(1);
+      await loadClub(); await loadMemberData(); await refreshPendingSubmissions(1); await refreshTodaySubmissions();
       await refreshActivity(activityPagination.page);
       setNotice(status === 'accepted' ? 'Submission accepted and added to the club leaderboard.' : 'Submission declined; no points were awarded.');
     } catch (error) { setNotice(error.message); }
@@ -1062,7 +1127,156 @@ function App() {
 
           {isLeader && <section className="panel leader-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>LEAD TOOLS</div><h2>{editingTodayAssignment ? 'Change today’s question' : 'Publish a Question of the Day'}</h2></div><Pill tone="green">{account.role}</Pill></div><form className="publish-form" onSubmit={publishAssignment}><label><span>ASSIGNMENT DATE <i>Asia/Kolkata</i></span><input type="date" value={assignmentDate} min={localDay()} onChange={(event) => setAssignmentDate(event.target.value)} required/></label><label className="wide"><span>QUESTION</span><select value={assignmentQuestion} onChange={(event) => setAssignmentQuestion(event.target.value)} required><option value="">Choose from the 220 question curriculum</option>{questions.map((question) => <option key={question.id} value={question.id}>Day {String(question.day).padStart(3, '0')} · LC {question.id} · {question.title}</option>)}</select></label><button className="button button-green" disabled={assignmentBusy || !assignmentQuestion || (editingTodayAssignment && assignmentDate === localDay() && Number(assignmentQuestion) === Number(club.assignment.questionId)) || (!editingTodayAssignment && history.some((item) => item.dateKey === assignmentDate))}>{assignmentBusy ? 'Saving…' : editingTodayAssignment && assignmentDate === localDay() ? 'Replace today’s question' : 'Publish assignment'} <Icon name="arrow" size={14}/></button></form><p className="helper-copy">{editingTodayAssignment && assignmentDate === localDay() ? 'Changing today’s question invalidates existing submissions, removes their points, and lets members submit the corrected question.' : history.some((item) => item.dateKey === assignmentDate) ? 'A question is already published for this date.' : 'Publish at most one question per date. Leave holidays and breaks unassigned.'}</p></section>}
 
-          {isLeader && <section className="panel review-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>MODERATION</div><h2>Submissions to review <span className="count-badge">{pendingPagination.total}</span></h2></div></div>{pending.length ? <div className="review-list">{pending.map((item) => <article className="review-item" key={item.id}><div><strong>{item.member?.name || 'Member'} <span>· Club Department: {item.member?.department}</span></strong><p>{item.assignment?.dateKey} · LC {item.assignment?.questionId} · {item.assignment?.question}</p><div className="review-evidence">{item.verifiedPusher ? <Pill tone="green">PUSH VERIFIED</Pill> : <Pill tone="amber">COMMIT LINK ONLY</Pill>}<a href={item.commitUrl} target="_blank" rel="noreferrer">Review commit <Icon name="external" size={13}/></a></div></div><div className="review-actions"><button className="button button-quiet" disabled={memberBusy === item.id} onClick={() => review(item, 'rejected')}>Decline</button><button className="button button-green" disabled={memberBusy === item.id} onClick={() => review(item, 'accepted')}>Accept <Icon name="check" size={14}/></button></div></article>)}</div> : <div className="soft-empty">No submissions are waiting for review.</div>}{pendingPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={pendingPagination.page <= 1} onClick={() => refreshPendingSubmissions(pendingPagination.page - 1)}>Previous</button><span>Page {pendingPagination.page} of {pendingPagination.totalPages}</span><button className="button button-quiet" disabled={pendingPagination.page >= pendingPagination.totalPages} onClick={() => refreshPendingSubmissions(pendingPagination.page + 1)}>Next</button></div>}</section>}
+          {isLeader && <section className="panel review-panel" aria-labelledby="moderation-panel-title">
+            <div className="panel-heading">
+              <div>
+                <div className="eyebrow"><span className="eyebrow-line"/>MODERATION</div>
+                <h2 id="moderation-panel-title">
+                  Today's question activity <span className="count-badge">{todaySubmissionsData.totalAttempted}</span>
+                </h2>
+              </div>
+              <div className="panel-heading-actions">
+                <button
+                  type="button"
+                  className="button button-quiet export-csv-btn"
+                  onClick={exportTodayCsv}
+                  disabled={!todaySubmissionsData.submissions?.length}
+                  title="Export today's attempts as CSV"
+                >
+                  <Icon name="download" size={14}/> <span>Export as .CSV</span>
+                </button>
+                <button
+                  type="button"
+                  className="button button-quiet"
+                  onClick={refreshTodaySubmissions}
+                  disabled={todaySubmissionsBusy}
+                  title="Refresh attempts list"
+                >
+                  {todaySubmissionsBusy ? 'Refreshing…' : 'Refresh'}
+                </button>
+              </div>
+            </div>
+
+            {/* Quick Metrics Strip */}
+            <div className="moderation-stats-strip">
+              <div className="moderation-stat">
+                <strong>{todaySubmissionsData.totalAttempted}</strong>
+                <span>Users Attempted</span>
+              </div>
+              <div className="moderation-stat">
+                <strong className="stat-accepted">{todaySubmissionsData.acceptedCount}</strong>
+                <span>Accepted &amp; Scored</span>
+              </div>
+              <div className="moderation-stat">
+                <strong className="stat-pending">{todaySubmissionsData.pendingCount}</strong>
+                <span>Pending Review</span>
+              </div>
+            </div>
+
+            {/* Submissions waiting for review (if any) */}
+            {pending.length > 0 && (
+              <div className="moderation-subsection">
+                <div className="moderation-subheading">
+                  <strong>Pending review ({pending.length})</strong>
+                </div>
+                <div className="review-list">
+                  {pending.map((item) => (
+                    <article className="review-item" key={item.id}>
+                      <div>
+                        <strong>{item.member?.name || 'Member'} <span>· Club Department: {item.member?.department || '—'}</span></strong>
+                        <p>{item.assignment?.dateKey} · LC {item.assignment?.questionId} · {item.assignment?.question}</p>
+                        <div className="review-evidence">
+                          {item.verifiedPusher ? <Pill tone="green">PUSH VERIFIED</Pill> : <Pill tone="amber">COMMIT LINK ONLY</Pill>}
+                          <a href={item.commitUrl} target="_blank" rel="noreferrer">Review commit <Icon name="external" size={13}/></a>
+                        </div>
+                      </div>
+                      <div className="review-actions">
+                        <button className="button button-quiet" disabled={memberBusy === item.id} onClick={() => review(item, 'rejected')}>Decline</button>
+                        <button className="button button-green" disabled={memberBusy === item.id} onClick={() => review(item, 'accepted')}>Accept <Icon name="check" size={14}/></button>
+                      </div>
+                    </article>
+                  ))}
+                </div>
+                {pendingPagination.totalPages > 1 && (
+                  <div className="pagination-controls">
+                    <button className="button button-quiet" disabled={pendingPagination.page <= 1} onClick={() => refreshPendingSubmissions(pendingPagination.page - 1)}>Previous</button>
+                    <span>Page {pendingPagination.page} of {pendingPagination.totalPages}</span>
+                    <button className="button button-quiet" disabled={pendingPagination.page >= pendingPagination.totalPages} onClick={() => refreshPendingSubmissions(pendingPagination.page + 1)}>Next</button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {/* List of all users who attempted today's question */}
+            <div className="moderation-subsection">
+              <div className="moderation-subheading">
+                <strong>Users who attempted today's question ({todaySubmissionsData.submissions?.length || 0})</strong>
+                {todaySubmissionsData.questionId && (
+                  <span className="moderation-subheading-tag">
+                    LC #{todaySubmissionsData.questionId} · {todaySubmissionsData.questionTitle}
+                  </span>
+                )}
+              </div>
+
+              {todaySubmissionsData.submissions?.length ? (
+                <div className="today-attempts-list">
+                  {todaySubmissionsData.submissions.map((sub) => (
+                    <article className="today-attempt-row" key={sub.id}>
+                      <div className="attempt-user-col">
+                        <MemberAvatar person={sub} label="" />
+                        <div className="attempt-user-info">
+                          <div className="attempt-name-line">
+                            <strong>{sub.name}</strong>
+                            <Pill tone={sub.status === 'accepted' ? 'green' : sub.status === 'rejected' ? 'red' : 'amber'}>
+                              {sub.status.toUpperCase()}
+                            </Pill>
+                            <span className="attempt-points-tag">{sub.points} pt{sub.points === 1 ? '' : 's'}</span>
+                          </div>
+                          <div className="attempt-meta-line">
+                            <span>{sub.email}</span>
+                            <span>·</span>
+                            <span>{sub.department || 'Club Member'}</span>
+                            {sub.studyYear && <span>· {studyYearLabel(sub.studyYear)}</span>}
+                          </div>
+                          <div className="attempt-handles-line">
+                            {sub.githubUsername && (
+                              <a href={`https://github.com/${encodeURIComponent(sub.githubUsername)}`} target="_blank" rel="noreferrer">
+                                <Icon name="github" size={12}/> @{sub.githubUsername}
+                              </a>
+                            )}
+                            {sub.leetcodeUsername && (
+                              <a href={`https://leetcode.com/${encodeURIComponent(sub.leetcodeUsername)}/`} target="_blank" rel="noreferrer">
+                                LC: @{sub.leetcodeUsername}
+                              </a>
+                            )}
+                            <span className="attempt-time">
+                              Submitted {new Date(sub.submittedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="attempt-actions-col">
+                        <a href={sub.commitUrl} className="button button-quiet attempt-commit-btn" target="_blank" rel="noreferrer">
+                          <span>View commit</span> <Icon name="external" size={12}/>
+                        </a>
+                        {sub.status === 'pending' && (
+                          <div className="review-actions">
+                            <button className="button button-quiet" disabled={memberBusy === sub.id} onClick={() => review(sub, 'rejected')}>Decline</button>
+                            <button className="button button-green" disabled={memberBusy === sub.id} onClick={() => review(sub, 'accepted')}>Accept</button>
+                          </div>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              ) : (
+                <div className="soft-empty">
+                  {!club.assignment ? 'No Question of the Day is published for today.' : 'No members have attempted today’s question yet.'}
+                </div>
+              )}
+            </div>
+          </section>}
 
         </div>
 

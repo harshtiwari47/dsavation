@@ -847,6 +847,39 @@ h1, h2, h3, p { margin-top: 0; }
 .review-actions { display: flex; align-items: center; gap: 6px; flex: none; }
 .review-actions .button { min-height: 29px; padding: 0 8px; font-size: 0.5rem; }
 .soft-empty { padding: 18px 4px; color: #63817e; font-size: 0.625rem; line-height: 1.5; }
+
+/* Moderation & Today's Attempts Section */
+.panel-heading-actions { display: flex; align-items: center; gap: 8px; }
+.export-csv-btn { display: inline-flex; align-items: center; gap: 5px; }
+
+.moderation-stats-strip { display: grid; grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); gap: 8px; margin: 10px 0 14px; }
+.moderation-stat { padding: 8px 12px; display: grid; gap: 2px; border: 1px solid var(--line); border-radius: 5px; background: var(--surface-muted); }
+.moderation-stat strong { color: var(--ink); font: 600 1.125rem var(--display); letter-spacing: -0.3px; }
+.moderation-stat strong.stat-accepted { color: var(--green); }
+.moderation-stat strong.stat-pending { color: var(--orange); }
+.moderation-stat span { color: var(--muted); font: 500 .46875rem var(--mono); letter-spacing: 0.4px; text-transform: uppercase; }
+
+.moderation-subsection { margin-top: 14px; }
+.moderation-subheading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; font-size: .625rem; color: var(--ink); }
+.moderation-subheading strong { font-weight: 600; }
+.moderation-subheading-tag { color: var(--muted); font: 500 .5rem var(--mono); }
+
+.today-attempts-list { display: grid; gap: 8px; }
+.today-attempt-row { padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); transition: border-color 140ms ease; }
+.today-attempt-row:hover { border-color: var(--line-dark); }
+.attempt-user-col { display: flex; align-items: center; gap: 10px; min-width: 0; flex: 1; }
+.attempt-user-info { display: grid; gap: 3px; min-width: 0; }
+.attempt-name-line { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.attempt-name-line strong { color: var(--ink); font-size: .625rem; }
+.attempt-points-tag { padding: 1px 5px; border-radius: 3px; background: var(--surface-muted); color: var(--green); font: 600 .4375rem var(--mono); }
+.attempt-meta-line { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; color: var(--muted); font-size: .5rem; }
+.attempt-handles-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--muted); font-size: .46875rem; }
+.attempt-handles-line a { display: inline-flex; align-items: center; gap: 3px; color: var(--ocean); text-decoration: none; }
+.attempt-handles-line a:hover { text-decoration: underline; }
+.attempt-time { color: var(--muted); font-family: var(--mono); }
+.attempt-actions-col { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.attempt-commit-btn { min-height: 27px; padding: 0 8px; font-size: .5rem; }
+
 .member-table { display: grid; }
 .member-row { min-width: 0; padding: 10px 0; display: flex; align-items: center; gap: 9px; border-top: 1px solid #eff0eb; }
 .member-identity { min-width: 0; flex: 1; display: grid; gap: 3px; }
@@ -1680,6 +1713,12 @@ h1, h2, h3, p { margin-top: 0; }
 :root[data-theme="dark"] .month-nav-btn { background: var(--surface-muted); border-color: var(--line); color: var(--ink); }
 :root[data-theme="dark"] .month-nav-btn:hover:not(:disabled) { border-color: var(--green); color: var(--green); }
 :root[data-theme="dark"] .month-detail-cell.empty { background: transparent; border-color: transparent; }
+:root[data-theme="dark"] .moderation-stat { background: var(--surface-muted); border-color: var(--line); }
+:root[data-theme="dark"] .today-attempt-row { background: var(--surface); border-color: var(--line); }
+:root[data-theme="dark"] .today-attempt-row:hover { border-color: var(--line-dark); }
+:root[data-theme="dark"] .attempt-points-tag { background: rgba(13, 148, 136, 0.2); color: #2dd4bf; }
+:root[data-theme="dark"] .moderation-subheading { color: var(--ink); }
+:root[data-theme="dark"] .attempt-name-line strong { color: var(--ink); }
 :root[data-theme="dark"] .member-directory-card,
 :root[data-theme="dark"] .directory-filters { border-color: var(--line); background: var(--surface); }
 :root[data-theme="dark"] .directory-card-header h2,

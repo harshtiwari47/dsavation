@@ -39,6 +39,17 @@ function json(res, status, body, headers = {}) {
   res.end(JSON.stringify(body));
 }
 
+function sendText(res, status, text, headers = {}) {
+  res.statusCode = status;
+  res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate');
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
+  res.setHeader('Referrer-Policy', 'strict-origin-when-cross-origin');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  for (const [key, value] of Object.entries(headers)) res.setHeader(key, value);
+  res.end(text);
+}
+
 function dayKey(date = new Date()) {
   return new Intl.DateTimeFormat('sv-SE', { timeZone: TZ, year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 }
@@ -691,6 +702,99 @@ async function listSubmissions(db, req, user, url) {
   })), pagination: pageMeta(page, pageSize, total) };
 }
 
+async function getTodaySubmissions(db, req, user, url) {
+  requireRole(user, 'lead', 'admin');
+  const assignment = await getTodayAssignment(db);
+  if (!assignment) {
+    if (url.searchParams.get('format') === 'csv') {
+      return {
+        csv: 'Name,Email,Club Department,Year of Study,GitHub Username,LeetCode Username,Question ID,Status,Points,Commit URL,Submitted At (IST)\r\n',
+        filename: `today-attempts-${dayKey()}.csv`,
+      };
+    }
+    return {
+      dateKey: dayKey(),
+      assignment: null,
+      totalAttempted: 0,
+      acceptedCount: 0,
+      pendingCount: 0,
+      submissions: [],
+    };
+  }
+
+  const submissions = await db.collection('submissions')
+    .find({ assignmentId: assignment._id, status: { $ne: 'invalidated' } })
+    .sort({ submittedAt: -1 })
+    .toArray();
+
+  const userIds = [...new Set(submissions.map((item) => String(item.userId)))].map((id) => new ObjectId(id));
+  const profiles = userIds.length ? await db.collection('users').find({ _id: { $in: userIds } }, {
+    projection: { name: 1, email: 1, department: 1, studyYear: 1, githubUsername: 1, leetcodeUsername: 1, avatarStyle: 1, avatarSeed: 1 },
+  }).toArray() : [];
+  const profileById = new Map(profiles.map((p) => [String(p._id), p]));
+
+  const rows = submissions.map((item) => {
+    const profile = profileById.get(String(item.userId));
+    return {
+      id: String(item._id),
+      userId: String(item.userId),
+      name: profile?.name || item.authorLogin || 'Member',
+      email: profile?.email || '',
+      department: profile?.department || '',
+      studyYear: profile?.studyYear || '',
+      githubUsername: profile?.githubUsername || item.authorLogin || '',
+      leetcodeUsername: profile?.leetcodeUsername || '',
+      avatarStyle: AVATAR_STYLES.has(profile?.avatarStyle) ? profile.avatarStyle : 'critters',
+      avatarSeed: String(profile?.avatarSeed || profile?._id || item.userId),
+      commitUrl: item.commitUrl,
+      commitSha: item.commitSha,
+      solutionPath: item.solutionPath,
+      solutionSizeBytes: item.solutionSizeBytes,
+      submittedAt: item.submittedAt,
+      commitDate: item.commitDate,
+      status: item.status,
+      points: item.points ?? (item.status === 'accepted' ? 1 : 0),
+      verifiedPusher: Boolean(item.verifiedPusher),
+      reviewNote: item.reviewNote || '',
+      questionId: assignment.questionId,
+    };
+  });
+
+  if (url.searchParams.get('format') === 'csv') {
+    const studyYearNames = { 'first-year': 'First year', 'second-year': 'Second year', 'third-year': 'Third year', 'fourth-year': 'Fourth year', passed: 'Passed out' };
+    const escapeCsv = (str) => `"${String(str ?? '').replace(/"/g, '""')}"`;
+    const header = ['Name', 'Email', 'Club Department', 'Year of Study', 'GitHub Username', 'LeetCode Username', 'Question ID', 'Status', 'Points', 'Commit URL', 'Submitted At (IST)'].join(',');
+    const bodyRows = rows.map((r) => [
+      escapeCsv(r.name),
+      escapeCsv(r.email),
+      escapeCsv(r.department),
+      escapeCsv(studyYearNames[r.studyYear] || r.studyYear),
+      escapeCsv(r.githubUsername),
+      escapeCsv(r.leetcodeUsername),
+      r.questionId,
+      r.status,
+      r.points,
+      escapeCsv(r.commitUrl),
+      escapeCsv(new Date(r.submittedAt).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })),
+    ].join(','));
+    return {
+      csv: [header, ...bodyRows].join('\r\n'),
+      filename: `today-attempts-${assignment.dateKey}.csv`,
+    };
+  }
+
+  return {
+    dateKey: assignment.dateKey,
+    assignmentId: String(assignment._id),
+    questionId: assignment.questionId,
+    questionTitle: questionById.get(assignment.questionId)?.title || `LeetCode #${assignment.questionId}`,
+    totalAttempted: rows.length,
+    acceptedCount: rows.filter((r) => r.status === 'accepted').length,
+    pendingCount: rows.filter((r) => r.status === 'pending').length,
+    submissions: rows,
+  };
+}
+
 async function reviewSubmission(db, user, submissionId, body) {
   requireRole(user, 'lead', 'admin');
   if (!ObjectId.isValid(submissionId)) throw new HttpError(404, 'Submission not found.');
@@ -1022,6 +1126,16 @@ export async function handleApiNode(req, res, options = {}) {
     }
     if (url.pathname === '/api/admin/submissions' && method === 'GET') {
       return json(res, 200, await listSubmissions(db, req, user, url));
+    }
+    if (url.pathname === '/api/admin/today-submissions' && method === 'GET') {
+      const result = await getTodaySubmissions(db, req, user, url);
+      if (result.csv) {
+        return sendText(res, 200, result.csv, {
+          'Content-Type': 'text/csv; charset=utf-8',
+          'Content-Disposition': `attachment; filename="${result.filename}"`,
+        });
+      }
+      return json(res, 200, result);
     }
     const reviewMatch = url.pathname.match(/^\/api\/admin\/submissions\/([a-f0-9]{24})$/i);
     if (reviewMatch && method === 'PATCH') {

@@ -154,7 +154,13 @@ async function call(db, path, { method = 'GET', body, cookie = '' } = {}) {
   const response = await handleApiFetch(new Request(`http://localhost/api${path}`, {
     method, headers, ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   }), { db });
-  return { response, data: await response.json() };
+  const contentType = response.headers.get('content-type') || '';
+  const isJson = contentType.includes('application/json');
+  return {
+    response,
+    data: isJson ? await response.json() : null,
+    text: !isJson ? await response.text() : null,
+  };
 }
 
 async function seedUser(db, { name, email, username, role = 'member', approved = true, leetcodeUsername = 'leet-id', department = 'Computer Science', studyYear = 'third-year', showPublic = true }) {
@@ -700,4 +706,52 @@ test('security headers, correlation reqId, and account-level brute-force rate li
   const blocked = await call(db, '/auth/login', { method: 'POST', body: { email: 'target@abes.ac.in', password: 'wrong' } });
   assert.equal(blocked.response.status, 429);
   assert.match(blocked.data.error, /too many attempts/i);
+});
+
+test('leads and admins can inspect today question attempts and export as CSV', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const student = await seedUser(db, { name: 'Attempt Student', email: 'attempt@abes.ac.in', username: 'attempt-student', department: 'Technical', studyYear: 'second-year' });
+  const otherMember = await seedUser(db, { name: 'Regular Member', email: 'regular@abes.ac.in', username: 'regular-member' });
+
+  // Regular members are forbidden
+  const denied = await call(db, '/admin/today-submissions', { cookie: otherMember.cookie });
+  assert.equal(denied.response.status, 403);
+
+  // Empty state before assignment
+  const emptyRes = await call(db, '/admin/today-submissions', { cookie: admin.cookie });
+  assert.equal(emptyRes.response.status, 200);
+  assert.equal(emptyRes.data.totalAttempted, 0);
+
+  // Create assignment for today
+  const indiaToday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  const assignmentRes = await call(db, '/admin/assignments', { method: 'POST', cookie: admin.cookie, body: { dateKey: indiaToday, questionId: 217 } });
+  const assignmentId = assignmentRes.data.assignment.id;
+
+  // Insert submission
+  await db.collection('submissions').insertOne({
+    assignmentId: new ObjectId(assignmentId),
+    userId: student.user._id,
+    questionId: 217,
+    status: 'accepted',
+    points: 1,
+    commitUrl: 'https://github.com/attempt-student/repo/commit/1234567890abcdef',
+    solutionPath: '217/solution.txt',
+    submittedAt: new Date(),
+  });
+
+  // Query today submissions (JSON)
+  const todayRes = await call(db, '/admin/today-submissions', { cookie: admin.cookie });
+  assert.equal(todayRes.response.status, 200);
+  assert.equal(todayRes.data.totalAttempted, 1);
+  assert.equal(todayRes.data.acceptedCount, 1);
+  assert.equal(todayRes.data.submissions[0].name, 'Attempt Student');
+  assert.equal(todayRes.data.submissions[0].department, 'Technical');
+
+  // Query as CSV
+  const csvRes = await call(db, '/admin/today-submissions?format=csv', { cookie: admin.cookie });
+  assert.equal(csvRes.response.status, 200);
+  assert.match(csvRes.response.headers.get('content-type'), /text\/csv/);
+  assert.match(csvRes.text, /Attempt Student/);
+  assert.match(csvRes.text, /Technical/);
 });
