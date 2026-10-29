@@ -1,76 +1,9 @@
 /* ==========================================================================
-   Modular Atmosphere Architecture: Thunder Lightning & Crystalline Snow
+   Modular Atmosphere Architecture: Crystalline Snow & Soft Bubbles
    ========================================================================== */
 
 /* --------------------------------------------------------------------------
-   1. Thunder & Lightning Atmospheric System (z-index: 2, pointer-events: none)
-   -------------------------------------------------------------------------- */
-.thunder-atmosphere {
-  position: fixed;
-  inset: 0;
-  z-index: 2;
-  pointer-events: none;
-  overflow: hidden;
-  user-select: none;
-}
-
-/* Ambient Thunder Sky Flash Sheet */
-.thunder-flash-sheet {
-  position: fixed;
-  inset: 0;
-  pointer-events: none;
-  opacity: 0;
-  background: radial-gradient(
-    ellipse 90% 60% at 50% -5%,
-    rgba(255, 255, 255, 0.88) 0%,
-    rgba(224, 242, 254, 0.45) 45%,
-    transparent 80%
-  );
-  transition: opacity 0.3s ease-out;
-}
-
-/* Multi-stage electrical discharge flash (strike -> micro-dip -> return stroke) */
-.thunder-flash-sheet.is-flashing {
-  animation: thunder-sheet-sequence 0.48s cubic-bezier(0.1, 0.9, 0.2, 1) forwards;
-}
-
-/* Lightning Bolt Positioning & Animation Container */
-.lightning-bolt-container {
-  position: absolute;
-  top: 0;
-  pointer-events: none;
-  transform-origin: top center;
-  animation: bolt-strike-flicker 0.48s ease-out forwards;
-}
-
-/* SVG Lightning Bolt Paths */
-.lightning-bolt-svg {
-  display: block;
-  overflow: visible;
-  pointer-events: none;
-}
-
-/* Outer Ionized Corona Glow */
-.bolt-corona {
-  stroke: rgba(56, 189, 248, 0.65);
-  filter: blur(4px);
-  opacity: 0.85;
-}
-
-/* Radiant Mid-Layer Electrical Arc */
-.bolt-mid {
-  stroke: rgba(186, 230, 253, 0.95);
-  filter: drop-shadow(0 0 8px rgba(56, 189, 248, 0.9)) drop-shadow(0 0 16px rgba(14, 165, 233, 0.5));
-}
-
-/* Intense Pure White High-Voltage Core */
-.bolt-core {
-  stroke: #ffffff;
-  filter: drop-shadow(0 0 4px #ffffff) drop-shadow(0 0 10px rgba(56, 189, 248, 0.95));
-}
-
-/* --------------------------------------------------------------------------
-   2. Multi-Tier Drifting Crystalline Snow System
+   1. Multi-Tier Drifting Crystalline Snow System
    -------------------------------------------------------------------------- */
 .atmosphere-snow-back {
   position: fixed;
@@ -157,32 +90,8 @@
 }
 
 /* --------------------------------------------------------------------------
-   3. Dark Mode Thunder & Snow Luminescence
+   2. Dark Mode Snow & Bubble Luminescence
    -------------------------------------------------------------------------- */
-:root[data-theme="dark"] .thunder-flash-sheet {
-  background: radial-gradient(
-    ellipse 90% 60% at 50% -5%,
-    rgba(56, 189, 248, 0.42) 0%,
-    rgba(99, 102, 241, 0.22) 45%,
-    transparent 80%
-  );
-}
-
-:root[data-theme="dark"] .bolt-corona {
-  stroke: rgba(99, 102, 241, 0.8);
-  filter: blur(5px);
-}
-
-:root[data-theme="dark"] .bolt-mid {
-  stroke: rgba(56, 189, 248, 0.95);
-  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 1)) drop-shadow(0 0 22px rgba(14, 165, 233, 0.7));
-}
-
-:root[data-theme="dark"] .bolt-core {
-  stroke: #ffffff;
-  filter: drop-shadow(0 0 6px #ffffff) drop-shadow(0 0 14px rgba(56, 189, 248, 1));
-}
-
 /* Dark Mode Bubble / Snow - Soft, Gentle, Translucent Bioluminescence */
 :root[data-theme="dark"] .tier-0 .snowflake-crystal {
   background: rgba(186, 230, 253, 0.45);
@@ -218,32 +127,8 @@
 }
 
 /* --------------------------------------------------------------------------
-   4. Animation Keyframes (Realistic Electrical Discharges & Snow Physics)
+   3. Animation Keyframes (Snow & Bubble Physics)
    -------------------------------------------------------------------------- */
-
-/* Thunder Sky Sheet Flash Sequence (0.48s multi-stroke) */
-@keyframes thunder-sheet-sequence {
-  0% { opacity: 0; }
-  8% { opacity: 0.85; }
-  18% { opacity: 0.2; }
-  32% { opacity: 0.95; }
-  45% { opacity: 0.4; }
-  60% { opacity: 0.7; }
-  80% { opacity: 0.2; }
-  100% { opacity: 0; }
-}
-
-/* Lightning Bolt Strike & Flicker Sequence */
-@keyframes bolt-strike-flicker {
-  0% { opacity: 0; transform: scale(0.98); }
-  10% { opacity: 1; transform: scale(1); }
-  22% { opacity: 0.3; }
-  34% { opacity: 1; transform: scale(1.01); }
-  50% { opacity: 0.45; }
-  68% { opacity: 0.85; }
-  82% { opacity: 0.25; }
-  100% { opacity: 0; transform: scale(1); }
-}
 
 /* Falling snow drift trajectory with organic sinusoidal wind sway */
 @keyframes snow-fall-drift {
@@ -281,14 +166,10 @@
 }
 
 /* --------------------------------------------------------------------------
-   5. Responsive Device Scaling (Mobile / Tablet / Desktop)
+   4. Responsive Device Scaling (Mobile / Tablet / Desktop)
    -------------------------------------------------------------------------- */
 @media (max-width: 800px) {
   /* Turn off all behind & atmospheric background animations on mobile view */
-  .thunder-atmosphere,
-  .thunder-flash-sheet,
-  .lightning-bolt-container,
-  .lightning-bolt-svg,
   .atmosphere-snow-back,
   .atmosphere-snow-fore,
   .snow-particle,
@@ -303,14 +184,6 @@
 
 /* Accessibility: Respect Reduced Motion Preferences */
 @media (prefers-reduced-motion: reduce) {
-  .thunder-flash-sheet.is-flashing {
-    animation: none !important;
-    opacity: 0 !important;
-  }
-  .lightning-bolt-container {
-    animation: none !important;
-    display: none !important;
-  }
   .snow-particle {
     animation-duration: 40s !important;
   }
