@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createRoot } from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
 import { AVATAR_STYLES, createAvatarDataUri, createAvatarSeeds } from './avatar.js';
+import { downloadExplainerImage, copyExplainerImage } from './explainerCard.js';
 import { initLiquidGlass } from './liquidGlass.js';
 import { AtmosphereBackdrop } from './components/atmosphere/AtmosphereBackdrop.jsx';
 import './style.css';
@@ -83,6 +84,9 @@ function Icon({ name, size = 17 }) {
     external: <><path d="M14 3h7v7M10 14 21 3"/><path d="M19 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h6"/></>,
     download: <><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></>,
     info: <><circle cx="12" cy="12" r="9"/><path d="M12 11v5M12 8h.01"/></>,
+    trash: <><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></>,
+    dice: <><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><circle cx="15.5" cy="8.5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="8.5" cy="15.5" r="1.5"/><circle cx="15.5" cy="15.5" r="1.5"/></>,
+    copy: <><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></>,
     moon: <path d="M20.5 14.5A8.5 8.5 0 0 1 9.5 3.5 8.5 8.5 0 1 0 20.5 14.5Z"/>,
     sun: <><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.42 1.42m11.3 11.3 1.42 1.42M2 12h2m16 0h2M4.93 19.07l1.42-1.42m11.3-11.3 1.42-1.42"/></>,
   };
@@ -469,6 +473,10 @@ function App() {
   const [assignmentDate, setAssignmentDate] = useState(localDay());
   const [assignmentQuestion, setAssignmentQuestion] = useState('');
   const [assignmentBusy, setAssignmentBusy] = useState(false);
+  const [selectedExplainer, setSelectedExplainer] = useState(null);
+  const [explainerModalOpen, setExplainerModalOpen] = useState(false);
+  const [imageExporting, setImageExporting] = useState(false);
+  const [copiedNotice, setCopiedNotice] = useState(false);
   const [memberBusy, setMemberBusy] = useState('');
   const [memberFilter, setMemberFilter] = useState('pending');
   const [memberQuery, setMemberQuery] = useState('');
@@ -721,6 +729,69 @@ function App() {
     setNotice(`Exported ${todaySubmissionsData.submissions.length} attempted submissions to CSV.`);
   }
 
+  function handlePickRandomExplainer() {
+    const pool = todaySubmissionsData.submissions || [];
+    if (!pool.length) {
+      setNotice('No users have attempted today’s question yet. Wait for submissions before picking an explainer.');
+      return;
+    }
+    const randomIndex = Math.floor(Math.random() * pool.length);
+    setSelectedExplainer(pool[randomIndex]);
+    setExplainerModalOpen(true);
+  }
+
+  function pickAnotherExplainer() {
+    const pool = todaySubmissionsData.submissions || [];
+    if (pool.length <= 1) {
+      if (pool[0]) setSelectedExplainer(pool[0]);
+      return;
+    }
+    let next;
+    do {
+      next = pool[Math.floor(Math.random() * pool.length)];
+    } while (next.id === selectedExplainer?.id && pool.length > 1);
+    setSelectedExplainer(next);
+  }
+
+  async function handleDownloadExplainerImage() {
+    if (!selectedExplainer || imageExporting) return;
+    setImageExporting(true);
+    try {
+      await downloadExplainerImage({
+        explainer: selectedExplainer,
+        question: assignedQuestion || { id: selectedExplainer.questionId, title: selectedExplainer.questionTitle },
+        dateKey: club.assignment?.dateKey || localDay(),
+      });
+      setNotice('Explainer spotlight card downloaded!');
+    } catch (err) {
+      setNotice(`Image download failed: ${err.message}`);
+    } finally {
+      setImageExporting(false);
+    }
+  }
+
+  async function handleCopyExplainerImage() {
+    if (!selectedExplainer || imageExporting) return;
+    setImageExporting(true);
+    try {
+      const res = await copyExplainerImage({
+        explainer: selectedExplainer,
+        question: assignedQuestion || { id: selectedExplainer.questionId, title: selectedExplainer.questionTitle },
+        dateKey: club.assignment?.dateKey || localDay(),
+      });
+      if (res === 'copied') {
+        setCopiedNotice(true);
+        setTimeout(() => setCopiedNotice(false), 2500);
+      } else {
+        setNotice('Spotlight card image saved to your device!');
+      }
+    } catch (err) {
+      setNotice(`Copy failed: ${err.message}`);
+    } finally {
+      setImageExporting(false);
+    }
+  }
+
   async function loadLeaderboardPage(page) {
     try {
       const result = await api(`/club/leaderboard?page=${page}&pageSize=12`);
@@ -898,6 +969,30 @@ function App() {
     finally { setAssignmentBusy(false); }
   }
 
+  async function deleteTodayAssignment() {
+    if (!club.assignment?.id || assignmentBusy) return;
+    const confirmMsg = `Are you sure you want to delete today's Question of the Day (LC #${club.assignment.questionId})?\n\nThis will remove today's question assignment and any submissions tied to it.`;
+    if (!window.confirm(confirmMsg)) return;
+    setAssignmentBusy(true);
+    setNotice('');
+    try {
+      await api(`/admin/assignments/${club.assignment.id}`, { method: 'DELETE' });
+      setNotice('Today’s Question of the Day was deleted.');
+      setExplainerModalOpen(false);
+      setSelectedExplainer(null);
+      setAssignmentQuestion('');
+      await loadClub();
+      await loadHistoryPage(1);
+      await loadMemberData();
+      await refreshTodaySubmissions();
+      await refreshActivity(activityPagination.page);
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setAssignmentBusy(false);
+    }
+  }
+
   async function review(item, status) {
     setMemberBusy(item.id); setNotice('');
     try {
@@ -1066,7 +1161,7 @@ function App() {
     </main>}
 
     {view === 'members' && <main className="content-shell page-content members-page">
-      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ABES TECHNOVATION CLUB</div><h1>Member directory<span>.</span></h1><p>Find club members by Club Department or year, and explore their public LeetCode progress.</p></div><div className="metric-card"><strong>{directoryPagination.total}</strong><span>APPROVED MEMBERS</span></div></div>
+      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ABES TECHNOVATION CLUB</div><h1>Member directory<span>.</span></h1><p>Find club members by Club Department or year{isAdmin ? ', and review member LeetCode progress' : ''}.</p></div><div className="metric-card"><strong>{directoryPagination.total}</strong><span>APPROVED MEMBERS</span></div></div>
       {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>The member directory is for approved accounts.</h2><p>Sign in with your approved ABES account to browse club profiles.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <>
         <form className="panel directory-filters" onSubmit={(event) => { event.preventDefault(); loadDirectory(1, directoryQuery, directoryDepartment, directoryYear); }}>
           <label className="member-search"><Icon name="search" size={15}/><input value={directoryQuery} onChange={(event) => setDirectoryQuery(event.target.value)} placeholder="Search name, Club Department, or username" aria-label="Search members"/></label>
@@ -1076,17 +1171,22 @@ function App() {
           {(directoryQuery || directoryDepartment || directoryYear) && <button className="button button-quiet" type="button" onClick={() => { setDirectoryQuery(''); setDirectoryDepartment(''); setDirectoryYear(''); loadDirectory(1, '', '', ''); }}>Clear filters</button>}
         </form>
         {directoryBusy && !directoryMembers.length ? <div className="panel directory-loading" role="status">Loading approved member profiles…</div> : directoryMembers.length ? <div className="member-directory-grid">{directoryMembers.map((member) => {
+          const isSelf = member.id === account.id;
+          const canSeeLeetcode = isAdmin || isSelf;
           const lookup = directoryLeetcodeStats[member.id];
           const stats = lookup?.stats;
           const maxActivity = Math.max(1, ...(stats?.byDifficulty || []).map((item) => item.attempted ?? item.solved));
           return <article className="panel member-directory-card" key={member.id}>
             <header className="directory-card-header"><MemberAvatar person={member} className="directory-avatar" label=""/><div><h2>{member.name}</h2><p>{member.department} · {studyYearLabel(member.studyYear)}</p></div><Pill tone={member.role === 'admin' ? 'green' : 'neutral'}>{member.role === 'lead' ? 'Club lead' : member.role}</Pill></header>
-            <div className="directory-socials">{member.githubUsername ? <a href={`https://github.com/${encodeURIComponent(member.githubUsername)}`} target="_blank" rel="noreferrer"><Icon name="github" size={14}/>@{member.githubUsername}<Icon name="external" size={12}/></a> : <span>GitHub not linked</span>}{member.leetcodeUsername ? <a href={`https://leetcode.com/${encodeURIComponent(member.leetcodeUsername)}/`} target="_blank" rel="noreferrer">LeetCode @{member.leetcodeUsername}<Icon name="external" size={12}/></a> : <span>LeetCode ID not added</span>}</div>
-            {member.leetcodeUsername && <section className="directory-leetcode" aria-label={`LeetCode statistics for ${member.name}`}><div className="directory-leetcode-heading"><strong>LeetCode progress</strong>{stats && <span>Updated {new Date(stats.fetchedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}</span>}</div>{lookup?.available && stats ? <><div className="leetcode-counts"><span><strong>{stats.attemptedCount ?? '—'}</strong> attempted</span><span><strong>{stats.solvedCount}</strong> solved</span></div><div className="leetcode-bars">{stats.byDifficulty.map((item) => <div className="leetcode-bar-row" key={item.difficulty}><span>{item.difficulty}</span><i><b style={{ width: `${Math.max(2, Math.round(((item.attempted ?? item.solved) / maxActivity) * 100))}%` }}/></i><strong>{item.attempted ?? item.solved}</strong></div>)}</div>{lookup.stale && <small className="leetcode-unavailable">{lookup.reason}</small>}</> : <div className="leetcode-empty"><span>{lookup?.reason || 'Public statistics are fetched only when requested.'}</span><button className="text-button" type="button" disabled={leetcodeStatsBusy === member.id} onClick={() => loadDirectoryLeetcodeStats(member)}>{leetcodeStatsBusy === member.id ? 'Fetching…' : lookup ? 'Try again' : 'Load stats'} <Icon name="arrow" size={13}/></button></div>}</section>}
+            <div className="directory-socials">
+              {member.githubUsername ? <a href={`https://github.com/${encodeURIComponent(member.githubUsername)}`} target="_blank" rel="noreferrer"><Icon name="github" size={14}/>@{member.githubUsername}<Icon name="external" size={12}/></a> : <span>GitHub not linked</span>}
+              {canSeeLeetcode && (member.leetcodeUsername ? <a href={`https://leetcode.com/${encodeURIComponent(member.leetcodeUsername)}/`} target="_blank" rel="noreferrer">LeetCode @{member.leetcodeUsername}<Icon name="external" size={12}/></a> : <span>LeetCode ID not added</span>)}
+            </div>
+            {canSeeLeetcode && member.leetcodeUsername && <section className="directory-leetcode" aria-label={`LeetCode statistics for ${member.name}`}><div className="directory-leetcode-heading"><strong>LeetCode progress</strong>{stats && <span>Updated {new Date(stats.fetchedAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'Asia/Kolkata' })}</span>}</div>{lookup?.available && stats ? <><div className="leetcode-counts"><span><strong>{stats.attemptedCount ?? '—'}</strong> attempted</span><span><strong>{stats.solvedCount}</strong> solved</span></div><div className="leetcode-bars">{stats.byDifficulty.map((item) => <div className="leetcode-bar-row" key={item.difficulty}><span>{item.difficulty}</span><i><b style={{ width: `${Math.max(2, Math.round(((item.attempted ?? item.solved) / maxActivity) * 100))}%` }}/></i><strong>{item.attempted ?? item.solved}</strong></div>)}</div>{lookup.stale && <small className="leetcode-unavailable">{lookup.reason}</small>}</> : <div className="leetcode-empty"><span>{lookup?.reason || 'Public statistics are fetched only when requested.'}</span><button className="text-button" type="button" disabled={leetcodeStatsBusy === member.id} onClick={() => loadDirectoryLeetcodeStats(member)}>{leetcodeStatsBusy === member.id ? 'Fetching…' : lookup ? 'Try again' : 'Load stats'} <Icon name="arrow" size={13}/></button></div>}</section>}
           </article>;
         })}</div> : <div className="panel directory-empty"><span>⌕</span><h2>No members match these filters.</h2><p>Try another year, department, or search term.</p></div>}
         {directoryPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={directoryBusy || directoryPagination.page <= 1} onClick={() => loadDirectory(directoryPagination.page - 1)}>Previous</button><span>Page {directoryPagination.page} of {directoryPagination.totalPages} · {directoryPagination.total} members</span><button className="button button-quiet" disabled={directoryBusy || directoryPagination.page >= directoryPagination.totalPages} onClick={() => loadDirectory(directoryPagination.page + 1)}>Next</button></div>}
-        <p className="directory-disclaimer">LeetCode statistics come from its public GraphQL service and may be unavailable or change without notice. Only profile links and summary counts are shown; private personal progress is never shared here.</p>
+        <p className="directory-disclaimer">{isAdmin ? 'Admin view: LeetCode statistics come from its public GraphQL service and are only visible to administrators. Private personal progress is never shared.' : 'Member profiles display verified club identity and links. LeetCode account statistics are private to administrators.'}</p>
       </>}
       <footer className="site-footer"><span>DSAvation · ABES Technovation Club</span><span>Directory access is limited to approved members</span></footer>
     </main>}
@@ -1118,14 +1218,14 @@ function App() {
       <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>SHARED CLUB CHALLENGE</div><h1>Show up. Ship a solution<span>.</span></h1><p>Only reviewed submissions to a published Question of the Day count toward these standings.</p></div><div className="club-date-badge"><span>INDIA TIME</span><strong>{club.dateKey || localDay()}</strong></div></div>
       {account ? <div className="club-grid">
         <div className="club-main-column">
-          <section className="panel qotd-panel"><div className="panel-header"><div><div className="eyebrow"><span className="eyebrow-line"/>TODAY'S ASSIGNMENT</div><h2>{assignedQuestion ? assignedQuestion.title : 'No assignment today'}</h2></div>{assignedQuestion && <Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill>}</div>
+          <section className="panel qotd-panel"><div className="panel-header"><div><div className="eyebrow"><span className="eyebrow-line"/>TODAY'S ASSIGNMENT</div><h2>{assignedQuestion ? assignedQuestion.title : 'No assignment today'}</h2></div><div className="panel-heading-actions">{assignedQuestion && <Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill>}{isLeader && editingTodayAssignment && club.assignment && <button type="button" className="button button-danger delete-today-btn" onClick={deleteTodayAssignment} disabled={assignmentBusy} title="Delete today’s published question"><Icon name="trash" size={13}/> <span>Delete today's question</span></button>}</div></div>
             {assignedQuestion ? <><div className="assignment-meta"><span>{club.assignment.dateKey}</span><span>{assignedQuestion.topic}</span><span>LeetCode #{assignedQuestion.id}</span><span>{assignedQuestion.pattern}</span></div><p className="assignment-prompt">Use a public repository you own. During this assignment day, commit a non-empty <code>{assignedQuestion.id}/solution.txt</code>. It may contain code in any language; only this exact path is tracked. GitHub verifies your linked identity, file path, and commit date; a valid submission earns a point automatically.</p><div className="assignment-counts"><div><strong>{club.submittedCount}</strong><span>SUBMITTED</span></div><div><strong>{club.acceptedCount}</strong><span>ACCEPTED</span></div><a href={`https://leetcode.com/problems/${assignedQuestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`} target="_blank" rel="noreferrer">Open problem <Icon name="external" size={14}/></a></div>
               {!account ? <div className="inline-callout"><Icon name="lock" size={16}/><span>Sign in with an approved ABES account to submit a club solution.</span><button onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div> : !account.githubVerified ? <div className="inline-callout"><Icon name="github" size={16}/><span>Connect the GitHub account you want to use; its verified username will replace the signup value.</span><button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button></div> : submissions.some((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated') ? <div className="inline-callout submitted"><Icon name="check" size={16}/><span>Your submission for today is {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.status} · {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.points ?? 0} point(s).</span></div> : <form className="submission-form" onSubmit={submitClubSolution}><div className="submission-form-heading"><label htmlFor="commit-url">GITHUB COMMIT URL</label><button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}><Icon name="info" size={15}/></button></div>{submissionHelpOpen && <div className="submission-help" id="submission-help"><strong>Before you submit</strong><ol><li>Create or use a public repository that you own under <code>@{account.githubUsername}</code>.</li><li>Create or update exactly <code>{assignedQuestion.id}/solution.txt</code> directly inside the question folder. The file can contain any language, but must have at least one byte.</li><li>Commit and push it during today’s assignment date. The GitHub author must match your linked account; commits made in GitHub's web editor use its web-flow committer and are accepted.</li><li>Open the commit in GitHub and paste its URL, for example <code>https://github.com/{account.githubUsername}/YOUR-REPO/commit/FULL_SHA</code>.</li></ol><p>Only the first valid submission for today earns a point. Admins can adjust points if needed.</p></div>}<div className="submission-input-row"><input id="commit-url" type="url" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder={`https://github.com/${account.githubUsername}/REPO/commit/FULL_SHA`}/><button className="button button-dark" disabled={submissionBusy}>{submissionBusy ? 'Verifying…' : 'Verify and submit'} <Icon name="arrow" size={14}/></button></div><small>Required changed file: <code>{assignedQuestion.id}/solution.txt</code> (at least one byte). The linked GitHub account must own the repository.</small></form>}</> : <div className="no-assignment-note"><p>A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from punctuality calculations.</p></div>}
           </section>
 
           {account && <section className="panel profile-panel"><div className="profile-head"><MemberAvatar person={account} className="large" label=""/><div><h3>{account.name}</h3><p>Club Department: {account.department} <span>·</span> @{account.githubUsername || 'GitHub not linked'}</p></div><Pill tone={account.role === 'member' ? 'neutral' : 'green'}>{account.role}</Pill></div><label className="privacy-toggle"><input type="checkbox" checked={account.showPublic} disabled={publicPreferenceBusy} onChange={(event) => updatePublicPreference(event.target.checked)}/><span>Show my full name and Club Department publicly; otherwise use only my GitHub username.</span></label></section>}
 
-          {isLeader && <section className="panel leader-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>LEAD TOOLS</div><h2>{editingTodayAssignment ? 'Change today’s question' : 'Publish a Question of the Day'}</h2></div><Pill tone="green">{account.role}</Pill></div><form className="publish-form" onSubmit={publishAssignment}><label><span>ASSIGNMENT DATE <i>Asia/Kolkata</i></span><input type="date" value={assignmentDate} min={localDay()} onChange={(event) => setAssignmentDate(event.target.value)} required/></label><label className="wide"><span>QUESTION</span><select value={assignmentQuestion} onChange={(event) => setAssignmentQuestion(event.target.value)} required><option value="">Choose from the 220 question curriculum</option>{questions.map((question) => <option key={question.id} value={question.id}>Day {String(question.day).padStart(3, '0')} · LC {question.id} · {question.title}</option>)}</select></label><button className="button button-green" disabled={assignmentBusy || !assignmentQuestion || (editingTodayAssignment && assignmentDate === localDay() && Number(assignmentQuestion) === Number(club.assignment.questionId)) || (!editingTodayAssignment && history.some((item) => item.dateKey === assignmentDate))}>{assignmentBusy ? 'Saving…' : editingTodayAssignment && assignmentDate === localDay() ? 'Replace today’s question' : 'Publish assignment'} <Icon name="arrow" size={14}/></button></form><p className="helper-copy">{editingTodayAssignment && assignmentDate === localDay() ? 'Changing today’s question invalidates existing submissions, removes their points, and lets members submit the corrected question.' : history.some((item) => item.dateKey === assignmentDate) ? 'A question is already published for this date.' : 'Publish at most one question per date. Leave holidays and breaks unassigned.'}</p></section>}
+          {isLeader && <section className="panel leader-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>LEAD TOOLS</div><h2>{editingTodayAssignment ? 'Change today’s question' : 'Publish a Question of the Day'}</h2></div><div className="panel-heading-actions"><Pill tone="green">{account.role}</Pill>{editingTodayAssignment && club.assignment && <button type="button" className="button button-danger delete-today-btn" onClick={deleteTodayAssignment} disabled={assignmentBusy} title="Delete today’s published question"><Icon name="trash" size={13}/> <span>Delete today's question</span></button>}</div></div><form className="publish-form" onSubmit={publishAssignment}><label><span>ASSIGNMENT DATE <i>Asia/Kolkata</i></span><input type="date" value={assignmentDate} min={localDay()} onChange={(event) => setAssignmentDate(event.target.value)} required/></label><label className="wide"><span>QUESTION</span><select value={assignmentQuestion} onChange={(event) => setAssignmentQuestion(event.target.value)} required><option value="">Choose from the 220 question curriculum</option>{questions.map((question) => <option key={question.id} value={question.id}>Day {String(question.day).padStart(3, '0')} · LC {question.id} · {question.title}</option>)}</select></label><button className="button button-green" disabled={assignmentBusy || !assignmentQuestion || (editingTodayAssignment && assignmentDate === localDay() && Number(assignmentQuestion) === Number(club.assignment.questionId)) || (!editingTodayAssignment && history.some((item) => item.dateKey === assignmentDate))}>{assignmentBusy ? 'Saving…' : editingTodayAssignment && assignmentDate === localDay() ? 'Replace today’s question' : 'Publish assignment'} <Icon name="arrow" size={14}/></button></form><p className="helper-copy">{editingTodayAssignment && assignmentDate === localDay() ? 'Changing today’s question invalidates existing submissions, removes their points, and lets members submit the corrected question.' : history.some((item) => item.dateKey === assignmentDate) ? 'A question is already published for this date.' : 'Publish at most one question per date. Leave holidays and breaks unassigned.'}</p></section>}
 
           {isLeader && <section className="panel review-panel" aria-labelledby="moderation-panel-title">
             <div className="panel-heading">
@@ -1136,6 +1236,15 @@ function App() {
                 </h2>
               </div>
               <div className="panel-heading-actions">
+                <button
+                  type="button"
+                  className="button button-green pick-explainer-head-btn"
+                  onClick={handlePickRandomExplainer}
+                  disabled={!todaySubmissionsData.submissions?.length}
+                  title="Select a random member who attempted today's question to explain their solution"
+                >
+                  <Icon name="dice" size={14}/> <span>Pick Explainer</span>
+                </button>
                 <button
                   type="button"
                   className="button button-quiet export-csv-btn"
@@ -1157,7 +1266,7 @@ function App() {
               </div>
             </div>
 
-            {/* Quick Metrics Strip */}
+            {/* Quick Metrics Strip with Explainer Random Picker */}
             <div className="moderation-stats-strip">
               <div className="moderation-stat">
                 <strong>{todaySubmissionsData.totalAttempted}</strong>
@@ -1167,10 +1276,20 @@ function App() {
                 <strong className="stat-accepted">{todaySubmissionsData.acceptedCount}</strong>
                 <span>Accepted &amp; Scored</span>
               </div>
-              <div className="moderation-stat">
-                <strong className="stat-pending">{todaySubmissionsData.pendingCount}</strong>
-                <span>Pending Review</span>
-              </div>
+              <button
+                type="button"
+                className="moderation-stat explainer-picker-stat-btn"
+                onClick={handlePickRandomExplainer}
+                disabled={!todaySubmissionsData.submissions?.length}
+                title="Select a random member who attempted today's question to explain their solution"
+              >
+                <div className="picker-stat-badge">
+                  <Icon name="dice" size={13}/>
+                  <span>SPOTLIGHT</span>
+                </div>
+                <strong className="picker-stat-action">Pick Explainer</strong>
+                <span>Random Submitter ➔</span>
+              </button>
             </div>
 
             {/* Submissions waiting for review (if any) */}
@@ -1287,6 +1406,82 @@ function App() {
       </div> : <div className="library-locked panel"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Sign in to view club questions and activity.</h2><p>Approved club members can view the current assignment, history, and standings.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div>}
       <footer className="site-footer"><span>DSAvation · ABES Technovation Club Website</span><span>Verified commit links earn points automatically</span></footer>
     </main>}
+
+    {explainerModalOpen && selectedExplainer && (
+      <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setExplainerModalOpen(false); }}>
+        <section className="auth-modal explainer-modal" role="dialog" aria-modal="true" aria-labelledby="explainer-modal-title">
+          <button className="modal-close" onClick={() => setExplainerModalOpen(false)} aria-label="Close">×</button>
+          <div className="eyebrow"><span className="eyebrow-line"/>TODAY'S SOLUTION SPOTLIGHT</div>
+          <h2 id="explainer-modal-title">Solution Explainer Selected 🎉</h2>
+          <p className="auth-lede">
+            Randomly selected among members who attempted today's question. Download or copy their share card image to share on WhatsApp or the club group so they can explain their solution!
+          </p>
+
+          <div className="explainer-preview-card">
+            <div className="explainer-preview-header">
+              <span className="explainer-preview-brand">ABES TECHNOVATION CLUB · DSAVATION</span>
+              <span className="explainer-preview-tag">SELECTED EXPLAINER</span>
+            </div>
+
+            <div className="explainer-preview-question">
+              <span>QUESTION OF THE DAY</span>
+              <strong>
+                LC #{assignedQuestion?.id || selectedExplainer.questionId} · {assignedQuestion?.title || selectedExplainer.questionTitle}
+                {assignedQuestion?.difficulty && ` (${assignedQuestion.difficulty})`}
+              </strong>
+            </div>
+
+            <div className="explainer-preview-body">
+              <MemberAvatar person={selectedExplainer} className="explainer-preview-avatar" label="" />
+              <div className="explainer-preview-info">
+                <h3>{selectedExplainer.name}</h3>
+                <div className="explainer-preview-dept">
+                  {selectedExplainer.department || 'Club Member'} {selectedExplainer.studyYear && `· ${studyYearLabel(selectedExplainer.studyYear)}`}
+                </div>
+                <div className="explainer-preview-handles">
+                  {selectedExplainer.githubUsername && <span className="gh-tag">GitHub: @{selectedExplainer.githubUsername}</span>}
+                  {selectedExplainer.leetcodeUsername && <span className="lc-tag">LeetCode: @{selectedExplainer.leetcodeUsername}</span>}
+                </div>
+              </div>
+            </div>
+
+            <div className="explainer-preview-footer">
+              <small>
+                ✓ Submitted {new Date(selectedExplainer.submittedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST · Verified Solution Commit
+              </small>
+            </div>
+          </div>
+
+          <div className="explainer-modal-actions">
+            <button
+              type="button"
+              className="button button-green"
+              onClick={handleDownloadExplainerImage}
+              disabled={imageExporting}
+            >
+              <Icon name="download" size={14}/> {imageExporting ? 'Generating Image…' : 'Download Share Image (PNG)'}
+            </button>
+            <button
+              type="button"
+              className="button button-dark"
+              onClick={handleCopyExplainerImage}
+              disabled={imageExporting}
+            >
+              <Icon name="copy" size={14}/> {copiedNotice ? '✓ Copied to Clipboard!' : 'Copy Card Image'}
+            </button>
+            <button
+              type="button"
+              className="button button-quiet"
+              onClick={pickAnotherExplainer}
+              disabled={todaySubmissionsData.submissions?.length <= 1}
+              title="Pick another member from today's attempts"
+            >
+              <Icon name="dice" size={14}/> Pick Another
+            </button>
+          </div>
+        </section>
+      </div>
+    )}
 
     {resetLink && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResetLink(null); }}><section className="auth-modal reset-link-modal" role="dialog" aria-modal="true" aria-labelledby="reset-link-title"><button className="modal-close" onClick={() => setResetLink(null)} aria-label="Close">×</button><div className="eyebrow"><span className="eyebrow-line"/>ONE-TIME PASSWORD RESET</div><h2 id="reset-link-title">Reset link for {resetLink.name}<span>.</span></h2><p className="auth-lede">This link expires at {new Date(resetLink.expiresAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} India time and works once. Share it directly with the member. The server stores only a hash.</p><label className="reset-link-field">RESET URL<input value={resetLink.url} readOnly onFocus={(event) => event.target.select()}/></label><button className="button button-dark auth-submit" onClick={copyResetLink}>Copy one-time link <Icon name="arrow" size={14}/></button></section></div>}
 

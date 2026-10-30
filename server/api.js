@@ -673,6 +673,27 @@ async function updateAssignment(db, user, assignmentId, body) {
   return { id: String(id), dateKey: assignment.dateKey, questionId, invalidatedSubmissions: affected.modifiedCount };
 }
 
+async function deleteAssignment(db, user, assignmentId) {
+  requireRole(user, 'lead', 'admin');
+  if (!ObjectId.isValid(assignmentId)) throw new HttpError(404, 'Assignment not found.');
+  const id = new ObjectId(assignmentId);
+  const assignment = await db.collection('assignments').findOne({ _id: id });
+  if (!assignment) throw new HttpError(404, 'Assignment not found.');
+  if (assignment.dateKey < dayKey() && user.role !== 'admin') {
+    throw new HttpError(400, 'Only today’s or upcoming assignments can be deleted.');
+  }
+  await db.collection('assignments').deleteOne({ _id: id });
+  const affected = await db.collection('submissions').deleteMany({ assignmentId: id });
+  await recordAdminActivity(
+    db,
+    user,
+    'assignment_deleted',
+    { id, label: `${assignment.dateKey} · LC ${assignment.questionId}` },
+    { questionId: assignment.questionId, dateKey: assignment.dateKey, deletedSubmissions: affected.deletedCount }
+  );
+  return { ok: true, deleted: true, id: String(id), dateKey: assignment.dateKey, questionId: assignment.questionId };
+}
+
 async function listSubmissions(db, req, user, url) {
   const isReview = url.pathname === '/api/admin/submissions';
   if (isReview) requireRole(user, 'lead', 'admin');
@@ -859,15 +880,19 @@ async function listMembers(db, url) {
   })), pagination: pageMeta(page, pageSize, total), counts: { pending, approved } };
 }
 
-async function listDirectory(db, url) {
+async function listDirectory(db, url, viewer = null) {
   const query = String(url.searchParams.get('q') || '').trim().slice(0, 80);
   const department = String(url.searchParams.get('department') || '').trim().slice(0, 80);
   const studyYear = String(url.searchParams.get('year') || '');
   const filters = [approvedUserFilter()];
+  const isAdmin = viewer?.role === 'admin';
+
   if (query) {
     const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escaped, 'i');
-    filters.push({ $or: [{ name: regex }, { department: regex }, { githubUsername: regex }, { leetcodeUsername: regex }] });
+    const orFields = [{ name: regex }, { department: regex }, { githubUsername: regex }];
+    if (isAdmin) orFields.push({ leetcodeUsername: regex });
+    filters.push({ $or: orFields });
   }
   if (department) filters.push({ department: new RegExp(`^${department.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, 'i') });
   if (studyYear) {
@@ -884,12 +909,21 @@ async function listDirectory(db, url) {
     db.collection('users').find(approvedUserFilter(), { projection: { department: 1 } }).toArray(),
   ]);
   return {
-    members: members.map((member) => ({
-      id: String(member._id), name: member.name, department: member.department, studyYear: member.studyYear || '',
-      githubUsername: member.githubUsername || '', leetcodeUsername: member.leetcodeUsername || '', role: member.role || 'member',
-      avatarStyle: AVATAR_STYLES.has(member.avatarStyle) ? member.avatarStyle : 'critters',
-      avatarSeed: String(member.avatarSeed || member._id),
-    })),
+    members: members.map((member) => {
+      const isSelf = viewer && String(member._id) === String(viewer._id);
+      const canSeeLeetcode = isAdmin || isSelf;
+      return {
+        id: String(member._id),
+        name: member.name,
+        department: member.department,
+        studyYear: member.studyYear || '',
+        githubUsername: member.githubUsername || '',
+        leetcodeUsername: canSeeLeetcode ? (member.leetcodeUsername || '') : '',
+        role: member.role || 'member',
+        avatarStyle: AVATAR_STYLES.has(member.avatarStyle) ? member.avatarStyle : 'critters',
+        avatarSeed: String(member.avatarSeed || member._id),
+      };
+    }),
     departments: [...new Set(departments.map((member) => String(member.department || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)),
     pagination: pageMeta(page, pageSize, total),
   };
@@ -897,6 +931,11 @@ async function listDirectory(db, url) {
 
 async function getMemberLeetcodeStats(db, req, viewer, memberId) {
   if (!ObjectId.isValid(memberId)) throw new HttpError(404, 'Member not found.');
+  const isSelf = String(viewer._id) === String(memberId);
+  const isAdmin = viewer.role === 'admin';
+  if (!isAdmin && !isSelf) {
+    throw new HttpError(403, 'Only administrators can view other members’ LeetCode statistics.');
+  }
   const target = await db.collection('users').findOne(approvedUserFilter({ _id: new ObjectId(memberId) }), {
     projection: { leetcodeUsername: 1, leetcodeStats: 1 },
   });
@@ -1096,7 +1135,7 @@ export async function handleApiNode(req, res, options = {}) {
     const user = await requireUser(req, db);
     const memberStatsMatch = url.pathname.match(/^\/api\/members\/([a-f0-9]{24})\/leetcode-stats$/i);
     if (memberStatsMatch && method === 'GET') return json(res, 200, await getMemberLeetcodeStats(db, req, user, memberStatsMatch[1]));
-    if (url.pathname === '/api/members' && method === 'GET') return json(res, 200, await listDirectory(db, url));
+    if (url.pathname === '/api/members' && method === 'GET') return json(res, 200, await listDirectory(db, url, user));
     if (url.pathname === '/api/questions' && method === 'GET') {
       return json(res, 200, { questions: curriculum.questions, topics: curriculum.topics });
     }
@@ -1123,6 +1162,9 @@ export async function handleApiNode(req, res, options = {}) {
     const assignmentMatch = url.pathname.match(/^\/api\/admin\/assignments\/([a-f0-9]{24})$/i);
     if (assignmentMatch && method === 'PATCH') {
       return json(res, 200, { assignment: await updateAssignment(db, user, assignmentMatch[1], await readBody(req)) });
+    }
+    if (assignmentMatch && method === 'DELETE') {
+      return json(res, 200, await deleteAssignment(db, user, assignmentMatch[1]));
     }
     if (url.pathname === '/api/admin/submissions' && method === 'GET') {
       return json(res, 200, await listSubmissions(db, req, user, url));

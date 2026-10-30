@@ -395,7 +395,15 @@ test('member directory requires an approved login, filters profiles, paginates, 
     assert.equal(member.studyYear, 'second-year');
     assert.equal(Object.hasOwn(member, 'email'), false);
     assert.equal(Object.hasOwn(member, 'progress'), false);
+    // General user cannot see other members' LeetCode usernames:
+    assert.equal(member.leetcodeUsername, '');
   }
+  // But an admin can see members' LeetCode usernames:
+  const adminViewer = await seedAdmin(db);
+  const adminDirectory = await call(db, '/members?department=Computer%20Science&year=second-year&page=1&pageSize=2', { cookie: adminViewer.cookie });
+  assert.equal(adminDirectory.response.status, 200);
+  assert.equal(adminDirectory.data.members[0].leetcodeUsername, 'leet-id');
+
   const lastPage = await call(db, '/members?department=Computer%20Science&year=second-year&page=2&pageSize=2', { cookie: viewer.cookie });
   assert.equal(lastPage.data.members.length, 1);
   const escapedSearch = await call(db, '/members?q=Directory%20Student%201', { cookie: viewer.cookie });
@@ -405,16 +413,24 @@ test('member directory requires an approved login, filters profiles, paginates, 
   assert.equal(invalidYear.response.status, 400);
 });
 
-test('LeetCode profile statistics are fetched on demand and cached for subsequent member views', async () => {
+test('LeetCode profile statistics are restricted to admins, fetched on demand and cached for subsequent member views', async () => {
   const db = new FakeDatabase();
-  const viewer = await seedUser(db, { name: 'Stats Viewer', email: 'stats-viewer@abes.ac.in', username: 'stats-viewer' });
+  const regularViewer = await seedUser(db, { name: 'Regular Viewer', email: 'regular-viewer@abes.ac.in', username: 'regular-viewer' });
+  const adminViewer = await seedAdmin(db);
   const member = await seedUser(db, { name: 'Stats Member', email: 'stats-member@abes.ac.in', username: 'stats-member', leetcodeUsername: 'stats-member-lc' });
   leetcodePayload = { data: { matchedUser: { username: 'stats-member-lc', submitStats: {
     acSubmissionNum: [{ difficulty: 'All', count: 24 }, { difficulty: 'Easy', count: 10 }, { difficulty: 'Medium', count: 11 }, { difficulty: 'Hard', count: 3 }],
     totalSubmissionNum: [{ difficulty: 'All', count: 37 }, { difficulty: 'Easy', count: 14 }, { difficulty: 'Medium', count: 17 }, { difficulty: 'Hard', count: 6 }],
   } } } };
   const path = `/members/${member.user._id}/leetcode-stats`;
-  const first = await call(db, path, { cookie: viewer.cookie });
+
+  // Regular member cannot view other member's LeetCode stats
+  const denied = await call(db, path, { cookie: regularViewer.cookie });
+  assert.equal(denied.response.status, 403);
+  assert.match(denied.data.error, /administrators can view other members’ LeetCode statistics/i);
+
+  // Admin can view member's LeetCode stats
+  const first = await call(db, path, { cookie: adminViewer.cookie });
   assert.equal(first.response.status, 200);
   assert.equal(first.data.available, true);
   assert.equal(first.data.stats.solvedCount, 24);
@@ -423,7 +439,7 @@ test('LeetCode profile statistics are fetched on demand and cached for subsequen
   assert.equal(first.data.cached, false);
   assert.equal(leetcodeFetchCount, 1);
 
-  const cached = await call(db, path, { cookie: viewer.cookie });
+  const cached = await call(db, path, { cookie: adminViewer.cookie });
   assert.equal(cached.data.available, true);
   assert.equal(cached.data.cached, true);
   assert.equal(leetcodeFetchCount, 1);
@@ -754,4 +770,53 @@ test('leads and admins can inspect today question attempts and export as CSV', a
   assert.match(csvRes.response.headers.get('content-type'), /text\/csv/);
   assert.match(csvRes.text, /Attempt Student/);
   assert.match(csvRes.text, /Technical/);
+});
+
+test('leads and admins can delete today question and associated submissions', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const student = await seedUser(db, { name: 'Delete Tester', email: 'del-test@abes.ac.in', username: 'del-test' });
+  const indiaToday = new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+
+  // 1. Admin publishes assignment
+  const assignmentRes = await call(db, '/admin/assignments', { method: 'POST', cookie: admin.cookie, body: { dateKey: indiaToday, questionId: 217 } });
+  assert.equal(assignmentRes.response.status, 201);
+  const assignmentId = assignmentRes.data.assignment.id;
+
+  // 2. Member submits
+  await db.collection('submissions').insertOne({
+    assignmentId: new ObjectId(assignmentId),
+    userId: student.user._id,
+    questionId: 217,
+    status: 'accepted',
+    points: 1,
+    commitUrl: 'https://github.com/del-test/repo/commit/1234567890abcdef',
+    solutionPath: '217/solution.txt',
+    submittedAt: new Date(),
+  });
+
+  // Verify club today returns the assignment
+  const clubToday = await call(db, '/club/today', { cookie: student.cookie });
+  assert.equal(clubToday.data.assignment.questionId, 217);
+
+  // 3. Regular member cannot delete assignment
+  const memberDelete = await call(db, `/admin/assignments/${assignmentId}`, { method: 'DELETE', cookie: student.cookie });
+  assert.equal(memberDelete.response.status, 403);
+
+  // 4. Admin deletes assignment
+  const adminDelete = await call(db, `/admin/assignments/${assignmentId}`, { method: 'DELETE', cookie: admin.cookie });
+  assert.equal(adminDelete.response.status, 200);
+  assert.equal(adminDelete.data.deleted, true);
+
+  // 5. Club today now returns null assignment
+  const clubTodayAfter = await call(db, '/club/today', { cookie: student.cookie });
+  assert.equal(clubTodayAfter.data.assignment, null);
+
+  // 6. Submissions for deleted assignment are cleaned up
+  const remainingSubs = await db.collection('submissions').find({ assignmentId: new ObjectId(assignmentId) }).toArray();
+  assert.equal(remainingSubs.length, 0);
+
+  // 7. Activity logged
+  const activity = await call(db, '/admin/activity', { cookie: admin.cookie });
+  assert.equal(activity.data.activity.some((item) => item.action === 'assignment_deleted'), true);
 });
