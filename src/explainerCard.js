@@ -12,21 +12,21 @@ function studyYearLabel(value) {
 }
 
 function safeRoundRect(ctx, x, y, width, height, radius) {
+  ctx.beginPath();
   if (typeof ctx.roundRect === 'function') {
     ctx.roundRect(x, y, width, height, radius);
-    return;
+  } else {
+    ctx.moveTo(x + radius, y);
+    ctx.lineTo(x + width - radius, y);
+    ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
+    ctx.lineTo(x + width, y + height - radius);
+    ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
+    ctx.lineTo(x + radius, y + height);
+    ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
+    ctx.lineTo(x, y + radius);
+    ctx.quadraticCurveTo(x, y, x + radius, y);
+    ctx.closePath();
   }
-  ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
 }
 
 export async function renderExplainerCardCanvas({ explainer, question, dateKey }) {
@@ -38,10 +38,10 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey }
   canvas.height = height;
   const ctx = canvas.getContext('2d');
 
-  // 1. Background Gradient
+  // 1. Solid Dark Background
   const bgGrad = ctx.createLinearGradient(0, 0, width, height);
   bgGrad.addColorStop(0, '#06131f');
-  bgGrad.addColorStop(0.5, '#0a1c2d');
+  bgGrad.addColorStop(0.5, '#0a1d30');
   bgGrad.addColorStop(1, '#050f19');
   ctx.fillStyle = bgGrad;
   ctx.fillRect(0, 0, width, height);
@@ -49,14 +49,14 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey }
   // Subtle decorative atmospheric caustics
   ctx.save();
   const glowGrad = ctx.createRadialGradient(width * 0.85, height * 0.15, 20, width * 0.85, height * 0.15, 450);
-  glowGrad.addColorStop(0, 'rgba(56, 189, 248, 0.18)');
-  glowGrad.addColorStop(0.6, 'rgba(14, 165, 233, 0.05)');
+  glowGrad.addColorStop(0, 'rgba(56, 189, 248, 0.16)');
+  glowGrad.addColorStop(0.6, 'rgba(14, 165, 233, 0.04)');
   glowGrad.addColorStop(1, 'transparent');
   ctx.fillStyle = glowGrad;
   ctx.fillRect(0, 0, width, height);
 
   const glowBottom = ctx.createRadialGradient(width * 0.15, height * 0.85, 20, width * 0.15, height * 0.85, 380);
-  glowBottom.addColorStop(0, 'rgba(45, 212, 191, 0.14)');
+  glowBottom.addColorStop(0, 'rgba(45, 212, 191, 0.12)');
   glowBottom.addColorStop(1, 'transparent');
   ctx.fillStyle = glowBottom;
   ctx.fillRect(0, 0, width, height);
@@ -74,26 +74,28 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey }
   ctx.save();
   // Eyebrow badge
   ctx.fillStyle = '#38bdf8';
-  ctx.font = '700 13px "Space Grotesk", -apple-system, sans-serif';
+  ctx.font = '700 13px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.letterSpacing = '1.5px';
   ctx.fillText('ABES TECHNOVATION CLUB  ·  DSAVATION', 60, 68);
 
   // Main Heading
   ctx.fillStyle = '#ffffff';
-  ctx.font = '700 32px "Space Grotesk", -apple-system, sans-serif';
-  ctx.fillText('TODAY\'S SOLUTION EXPLAINER', 60, 108);
+  ctx.font = '800 34px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText("TODAY'S SOLUTION EXPLAINER", 60, 108);
 
   // Date Tag Pill (Right side of header)
   const dateStr = dateKey || new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata' }).format(new Date());
-  ctx.fillStyle = 'rgba(56, 189, 248, 0.12)';
-  safeRoundRect(ctx, width - 240, 60, 180, 36, 18);
+  ctx.fillStyle = '#10273c';
+  safeRoundRect(ctx, width - 240, 58, 180, 38, 19);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
-  ctx.lineWidth = 1;
+  ctx.strokeStyle = '#38bdf8';
+  ctx.lineWidth = 1.5;
   ctx.stroke();
-  ctx.fillStyle = '#bae6fd';
-  ctx.font = '600 14px "DM Sans", -apple-system, sans-serif';
+
+  ctx.fillStyle = '#ffffff';
+  ctx.font = '700 14px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText(`📅 ${dateStr}`, width - 150, 83);
+  ctx.fillText(`📅 ${dateStr}`, width - 150, 82);
   ctx.textAlign = 'left';
   ctx.restore();
 
@@ -101,36 +103,42 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey }
   ctx.save();
   const qY = 132;
   const qHeight = 90;
-  ctx.fillStyle = 'rgba(12, 28, 42, 0.85)';
+  ctx.fillStyle = '#0c2032';
   safeRoundRect(ctx, 60, qY, width - 120, qHeight, 14);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(30, 62, 90, 0.8)';
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.35)';
   ctx.lineWidth = 1.5;
   ctx.stroke();
 
   ctx.fillStyle = '#7dd3fc';
-  ctx.font = '700 11px "JetBrains Mono", monospace';
-  ctx.fillText('QUESTION OF THE DAY', 84, qY + 30);
+  ctx.font = '700 12px monospace, system-ui, sans-serif';
+  ctx.fillText("TODAY'S QUESTION OF THE DAY", 84, qY + 30);
 
   const qId = question?.id || explainer.questionId || '—';
   const qTitle = question?.title || explainer.questionTitle || 'Curriculum Problem';
   ctx.fillStyle = '#ffffff';
-  ctx.font = '700 20px "Space Grotesk", -apple-system, sans-serif';
-  ctx.fillText(`LC #${qId} · ${qTitle}`, 84, qY + 62);
+  ctx.font = '800 22px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(`LC #${qId} · ${qTitle}`, 84, qY + 63);
 
   if (question?.difficulty) {
     const diff = question.difficulty;
-    const diffColor = diff.toLowerCase() === 'easy' ? '#10b981' : diff.toLowerCase() === 'medium' ? '#f59e0b' : '#ef4444';
-    ctx.fillStyle = `${diffColor}22`;
-    safeRoundRect(ctx, width - 200, qY + 28, 100, 32, 16);
+    const isEasy = diff.toLowerCase() === 'easy';
+    const isMed = diff.toLowerCase() === 'medium';
+    const diffBg = isEasy ? 'rgba(16, 185, 129, 0.22)' : isMed ? 'rgba(245, 158, 11, 0.22)' : 'rgba(239, 68, 68, 0.22)';
+    const diffBorder = isEasy ? '#10b981' : isMed ? '#f59e0b' : '#ef4444';
+    const diffText = isEasy ? '#34d399' : isMed ? '#fbbf24' : '#f87171';
+
+    ctx.fillStyle = diffBg;
+    safeRoundRect(ctx, width - 200, qY + 28, 100, 34, 17);
     ctx.fill();
-    ctx.strokeStyle = diffColor;
-    ctx.lineWidth = 1;
+    ctx.strokeStyle = diffBorder;
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.fillStyle = diffColor;
-    ctx.font = '700 13px "Space Grotesk", -apple-system, sans-serif';
+
+    ctx.fillStyle = diffText;
+    ctx.font = '800 13px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText(diff.toUpperCase(), width - 150, qY + 49);
+    ctx.fillText(diff.toUpperCase(), width - 150, qY + 50);
     ctx.textAlign = 'left';
   }
   ctx.restore();
@@ -140,12 +148,12 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey }
   const sY = 240;
   const sHeight = 310;
   const spotlightGrad = ctx.createLinearGradient(60, sY, width - 60, sY + sHeight);
-  spotlightGrad.addColorStop(0, 'rgba(15, 38, 58, 0.9)');
-  spotlightGrad.addColorStop(1, 'rgba(9, 24, 38, 0.95)');
+  spotlightGrad.addColorStop(0, '#0d243a');
+  spotlightGrad.addColorStop(1, '#091a2a');
   ctx.fillStyle = spotlightGrad;
   safeRoundRect(ctx, 60, sY, width - 120, sHeight, 18);
   ctx.fill();
-  ctx.strokeStyle = 'rgba(56, 189, 248, 0.45)';
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.55)';
   ctx.lineWidth = 2;
   ctx.stroke();
 
@@ -189,21 +197,21 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey }
     ctx.arc(avatarCenterX, avatarCenterY, avatarR, 0, Math.PI * 2);
     ctx.fill();
     ctx.fillStyle = '#ffffff';
-    ctx.font = '700 38px "Space Grotesk", sans-serif';
+    ctx.font = '800 42px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
     const initial = (explainer.name || 'M')[0].toUpperCase();
-    ctx.fillText(initial, avatarCenterX, avatarCenterY + 14);
+    ctx.fillText(initial, avatarCenterX, avatarCenterY + 15);
     ctx.restore();
   }
 
   // Neon Avatar Ring
   ctx.save();
   ctx.strokeStyle = '#38bdf8';
-  ctx.lineWidth = 3;
-  ctx.shadowColor = 'rgba(56, 189, 248, 0.5)';
-  ctx.shadowBlur = 14;
+  ctx.lineWidth = 3.5;
+  ctx.shadowColor = 'rgba(56, 189, 248, 0.6)';
+  ctx.shadowBlur = 16;
   ctx.beginPath();
-  ctx.arc(avatarCenterX, avatarCenterY, avatarR + 4, 0, Math.PI * 2);
+  ctx.arc(avatarCenterX, avatarCenterY, avatarR + 5, 0, Math.PI * 2);
   ctx.stroke();
   ctx.restore();
 
@@ -212,74 +220,71 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey }
   ctx.save();
 
   // Spotlight Tag Badge
-  ctx.fillStyle = 'rgba(249, 115, 22, 0.15)';
-  safeRoundRect(ctx, textX, sY + 36, 260, 28, 14);
+  ctx.fillStyle = 'rgba(249, 115, 22, 0.22)';
+  safeRoundRect(ctx, textX, sY + 32, 270, 30, 15);
   ctx.fill();
   ctx.strokeStyle = '#f97316';
-  ctx.lineWidth = 1;
+  ctx.lineWidth = 1.5;
   ctx.stroke();
   ctx.fillStyle = '#fb923c';
-  ctx.font = '700 11px "JetBrains Mono", monospace';
-  ctx.fillText('🎉 SELECTED SOLUTION EXPLAINER', textX + 16, sY + 54);
+  ctx.font = '800 12px monospace, system-ui, sans-serif';
+  ctx.fillText('🎉 SELECTED SOLUTION EXPLAINER', textX + 16, sY + 52);
 
-  // Full Name
+  // Full Name - Bright Bold White
   ctx.fillStyle = '#ffffff';
-  ctx.font = '700 34px "Space Grotesk", -apple-system, sans-serif';
-  ctx.fillText(explainer.name || 'Member', textX, sY + 104);
+  ctx.font = '800 36px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(explainer.name || 'Member', textX, sY + 106);
 
-  // Department and Study Year
+  // Department and Study Year - High Contrast Crisp Text
   const yearText = studyYearLabel(explainer.studyYear);
   const deptYear = [explainer.department || 'Club Member', yearText].filter(Boolean).join('  ·  ');
-  ctx.fillStyle = '#94a3b8';
-  ctx.font = '500 17px "DM Sans", -apple-system, sans-serif';
-  ctx.fillText(deptYear, textX, sY + 138);
+  ctx.fillStyle = '#e2e8f0';
+  ctx.font = '600 19px system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif';
+  ctx.fillText(deptYear, textX, sY + 140);
 
-  // Social Handles Row
-  let handleX = textX;
+  // GitHub Handle Badge (Note: LeetCode handle is strictly excluded per privacy request)
+  let nextY = sY + 165;
   if (explainer.githubUsername) {
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.1)';
-    safeRoundRect(ctx, handleX, sY + 162, 175, 34, 8);
+    ctx.fillStyle = 'rgba(56, 189, 248, 0.16)';
+    safeRoundRect(ctx, textX, nextY, 230, 36, 10);
     ctx.fill();
-    ctx.strokeStyle = 'rgba(56, 189, 248, 0.3)';
+    ctx.strokeStyle = '#38bdf8';
+    ctx.lineWidth = 1.5;
     ctx.stroke();
-    ctx.fillStyle = '#38bdf8';
-    ctx.font = '600 13px "JetBrains Mono", monospace';
-    ctx.fillText(`GitHub: @${explainer.githubUsername}`, handleX + 12, sY + 184);
-    handleX += 190;
-  }
-  if (explainer.leetcodeUsername) {
-    ctx.fillStyle = 'rgba(251, 146, 60, 0.1)';
-    safeRoundRect(ctx, handleX, sY + 162, 185, 34, 8);
-    ctx.fill();
-    ctx.strokeStyle = 'rgba(251, 146, 60, 0.3)';
-    ctx.stroke();
-    ctx.fillStyle = '#fb923c';
-    ctx.font = '600 13px "JetBrains Mono", monospace';
-    ctx.fillText(`LeetCode: @${explainer.leetcodeUsername}`, handleX + 12, sY + 184);
+    ctx.fillStyle = '#7dd3fc';
+    ctx.font = '700 14px monospace, system-ui, sans-serif';
+    ctx.fillText(`GitHub: @${explainer.githubUsername}`, textX + 14, nextY + 23);
+    nextY += 48;
+  } else {
+    nextY += 10;
   }
 
-  // Submission Status
+  // Submission Status - Luminous Green
   const subTimeStr = explainer.submittedAt ? new Date(explainer.submittedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '';
   ctx.fillStyle = '#34d399';
-  ctx.font = '600 14px "DM Sans", -apple-system, sans-serif';
-  ctx.fillText(`✓ Solution Attempt Accepted · Submitted at ${subTimeStr} IST`, textX, sY + 234);
+  ctx.font = '700 15px system-ui, -apple-system, sans-serif';
+  ctx.fillText(`✓ Solution Attempt Accepted · Submitted at ${subTimeStr} IST`, textX, nextY + 16);
 
-  // Group instructions note
-  ctx.fillStyle = '#cbd5e1';
-  ctx.font = 'italic 13px "DM Sans", -apple-system, sans-serif';
-  ctx.fillText('Please share your code walkthrough, approach and complexity insights in today\'s club session!', textX, sY + 266);
+  // Group instructions note - Crisp Off-White
+  ctx.fillStyle = '#f1f5f9';
+  ctx.font = 'italic 14px system-ui, -apple-system, sans-serif';
+  ctx.fillText("Please share your code walkthrough, approach and complexity insights in today's club session!", textX, nextY + 44);
   ctx.restore();
 
-  // 5. Footer Bar
+  // 5. Footer Bar - Clear and Legible
   ctx.save();
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.04)';
-  safeRoundRect(ctx, 60, height - 85, width - 120, 42, 10);
+  ctx.fillStyle = '#0a1a28';
+  safeRoundRect(ctx, 60, height - 85, width - 120, 44, 10);
   ctx.fill();
-  ctx.fillStyle = '#64748b';
-  ctx.font = '500 13px "Space Grotesk", -apple-system, sans-serif';
-  ctx.fillText('DSAvation  ·  ABES Engineering College  ·  Technovation Club', 84, height - 59);
+  ctx.strokeStyle = 'rgba(56, 189, 248, 0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+
+  ctx.fillStyle = '#cbd5e1';
+  ctx.font = '600 14px system-ui, -apple-system, sans-serif';
+  ctx.fillText('DSAvation  ·  ABES Engineering College  ·  Technovation Club', 84, height - 58);
   ctx.textAlign = 'right';
-  ctx.fillText('Randomly selected among today\'s submitters', width - 84, height - 59);
+  ctx.fillText("Randomly selected among today's submitters", width - 84, height - 58);
   ctx.restore();
 
   return canvas;

@@ -1440,7 +1440,6 @@ function App() {
                 </div>
                 <div className="explainer-preview-handles">
                   {selectedExplainer.githubUsername && <span className="gh-tag">GitHub: @{selectedExplainer.githubUsername}</span>}
-                  {selectedExplainer.leetcodeUsername && <span className="lc-tag">LeetCode: @{selectedExplainer.leetcodeUsername}</span>}
                 </div>
               </div>
             </div>
