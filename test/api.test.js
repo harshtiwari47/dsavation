@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { after, before, beforeEach, test } from 'node:test';
 import bcrypt from 'bcryptjs';
 import { ObjectId } from 'mongodb';
-import { handleApiFetch, isAssignmentSolutionPath, isOnAssignmentDay, parsePersonalCommitUrl } from '../server/api.js';
+import { handleApiFetch, isAssignmentSolutionPath, isOnAssignmentDay, parsePersonalCommitUrl, resolveCommitInput } from '../server/api.js';
 
 const indiaDay = (date = new Date()) => new Intl.DateTimeFormat('sv-SE', { timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit' }).format(date);
 const dateAtIndiaNoon = (dateKey) => new Date(`${dateKey}T12:00:00+05:30`);
@@ -212,7 +212,11 @@ before(() => {
       return new Response(JSON.stringify({ id: 4321, login: oauthGithubUsername }), { status: 200 });
     }
     if (url.hostname === 'api.github.com' && url.pathname.startsWith('/users/')) {
-      const login = decodeURIComponent(url.pathname.split('/').pop());
+      const parts = url.pathname.split('/');
+      if (parts[parts.length - 1] === 'repos') {
+        return new Response(JSON.stringify([{ name: 'dsa-solutions', full_name: 'student-gh/dsa-solutions' }]), { status: 200 });
+      }
+      const login = decodeURIComponent(parts.pop());
       return new Response(JSON.stringify({ id: 987, login }), { status: 200 });
     }
     if (url.hostname === 'api.github.com' && url.pathname.includes('/git/trees/')) {
@@ -221,7 +225,7 @@ before(() => {
       return new Response(JSON.stringify({ tree: tree || [], truncated: false }), { status: tree ? 200 : 404 });
     }
     const sha = url.pathname.split('/').pop();
-    const commit = commits.get(sha);
+    const commit = commits.get(sha) || [...commits.entries()].find(([k]) => k.startsWith(sha))?.[1];
     return new Response(JSON.stringify(commit || { message: 'Not Found' }), { status: commit ? 200 : 404 });
   };
 });
@@ -584,6 +588,60 @@ test('same-day renamed or edited solution.txt is accepted when it is non-empty',
   } });
   assert.equal(editedSubmission.response.status, 201);
   assert.equal(editedSubmission.data.submission.points, 1);
+});
+
+test('submitting solutions via short commit code or full URL automatically discovers repository and awards points', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const student = await seedUser(db, { name: 'Commit Code Solver', email: 'code@abes.ac.in', username: 'student-gh' });
+  const assigned = await call(db, '/admin/assignments', { method: 'POST', cookie: admin.cookie, body: { dateKey: indiaDay(), questionId: 217 } });
+  const assignmentId = assigned.data.assignment.id;
+
+  const fullSha = '76c3f955e0a1de4701dbca40d5f4dab870b0d5ea';
+  const shortSha = '76c3f95';
+  commits.set(fullSha, commitFixture({ sha: fullSha, questionId: 217, username: 'student-gh' }));
+
+  // 1. Submit using just short commit code '76c3f95'
+  const subShort = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: student.cookie,
+    body: { assignmentId, commitUrl: shortSha }
+  });
+  assert.equal(subShort.response.status, 201);
+  assert.equal(subShort.data.submission.status, 'accepted');
+  assert.equal(subShort.data.submission.points, 1);
+  assert.equal(subShort.data.submission.commitUrl, `https://github.com/student-gh/dsa-solutions/commit/${fullSha}`);
+
+  const storedSubmission = await db.collection('submissions').findOne({ userId: student.user._id });
+  assert.equal(storedSubmission.commitSha, fullSha);
+  assert.equal(storedSubmission.repository, 'student-gh/dsa-solutions');
+
+  // Check that user's lastRepository is remembered
+  const updatedUser = await db.collection('users').findOne({ _id: student.user._id });
+  assert.equal(updatedUser.lastRepository, 'dsa-solutions');
+
+  // 2. Unit test resolveCommitInput directly with invalid formats and non-existent commits
+  await assert.rejects(
+    () => resolveCommitInput(db, student.user, ''),
+    /Enter a GitHub commit hash/
+  );
+  await assert.rejects(
+    () => resolveCommitInput(db, student.user, 'invalid#hash!'),
+    /Enter a valid GitHub commit hash/
+  );
+  await assert.rejects(
+    () => resolveCommitInput(db, student.user, 'fffffff'),
+    /was not found in your recent public GitHub repositories/
+  );
+  await assert.rejects(
+    () => resolveCommitInput(db, student.user, 'https://github.com/otheruser/dsa/commit/76c3f955e0a1de4701dbca40d5f4dab870b0d5ea'),
+    /Use a repository owned by your linked GitHub account/
+  );
+
+  // 3. Shorthand formats: repo/commit/sha or repo@sha
+  const resolvedRepoSha = await resolveCommitInput(db, student.user, 'dsa-solutions@76c3f95');
+  assert.equal(resolvedRepoSha.repository, 'dsa-solutions');
+  assert.equal(resolvedRepoSha.sha, '76c3f95');
 });
 
 test('admin reset links store only a hash, expire, work once, and revoke sessions', async () => {

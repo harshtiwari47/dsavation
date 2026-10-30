@@ -515,11 +515,12 @@ async function makeSubmission(db, req, user, body) {
   }
   const existing = await db.collection('submissions').findOne({ assignmentId: assignment._id, userId: user._id });
   if (existing && existing.status !== 'invalidated') throw new HttpError(409, 'You already submitted for today’s assignment.');
-  const parsed = parsePersonalCommitUrl(body.commitUrl);
-  if (!parsed) throw new HttpError(400, 'Paste a direct GitHub commit URL like https://github.com/YOUR-USERNAME/YOUR-REPO/commit/FULL_SHA.');
+  
+  const rawInput = body.commitUrl || body.commitCode || body.commitSha || '';
+  const { owner, repository, sha, commitData } = await resolveCommitInput(db, user, rawInput);
   const username = String(user.githubUsername || '').toLowerCase();
-  if (parsed.owner.toLowerCase() !== username) throw new HttpError(403, 'Use a repository owned by your linked GitHub account.');
-  const commit = await githubJson(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/commits/${encodeURIComponent(parsed.sha)}`, process.env.GITHUB_TOKEN);
+  if (owner.toLowerCase() !== username) throw new HttpError(403, 'Use a repository owned by your linked GitHub account.');
+  const commit = commitData || await githubJson(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/commits/${encodeURIComponent(sha)}`, process.env.GITHUB_TOKEN);
   const author = String(commit.author?.login || '').toLowerCase();
   const committer = String(commit.committer?.login || '').toLowerCase();
   if (author !== username || (committer !== username && committer !== 'web-flow')) {
@@ -532,7 +533,7 @@ async function makeSubmission(db, req, user, body) {
   }
   const matchingFiles = (commit.files || []).filter((file) => file.status !== 'removed' && isAssignmentSolutionPath(file.filename, assignment.questionId));
   if (!matchingFiles.length) throw new HttpError(400, `This commit must create or change ${assignment.questionId}/solution.txt.`);
-  const tree = await githubJson(`/repos/${encodeURIComponent(parsed.owner)}/${encodeURIComponent(parsed.repository)}/git/trees/${encodeURIComponent(commit.commit.tree.sha)}?recursive=1`, process.env.GITHUB_TOKEN);
+  const tree = await githubJson(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/git/trees/${encodeURIComponent(commit.commit.tree.sha)}?recursive=1`, process.env.GITHUB_TOKEN);
   const sizeByPath = new Map((tree.tree || []).filter((item) => item.type === 'blob').map((item) => [item.path, Number(item.size)]));
   const matchingFile = matchingFiles.find((file) => Number.isFinite(sizeByPath.get(file.filename)) && sizeByPath.get(file.filename) > 0);
   const solutionSizeBytes = matchingFile ? sizeByPath.get(matchingFile.filename) : 0;
@@ -540,13 +541,14 @@ async function makeSubmission(db, req, user, body) {
   const now = new Date();
   const submission = {
     assignmentId: assignment._id, userId: user._id, questionId: assignment.questionId,
-    repository: `${parsed.owner}/${parsed.repository}`, commitSha: commit.sha,
-    commitUrl: commit.html_url || `https://github.com/${parsed.owner}/${parsed.repository}/commit/${commit.sha}`,
+    repository: `${owner}/${repository}`, commitSha: commit.sha,
+    commitUrl: commit.html_url || `https://github.com/${owner}/${repository}/commit/${commit.sha}`,
     solutionPath: matchingFile.filename, solutionSizeBytes, commitDate: new Date(commitDate), submittedAt: now,
     status: 'accepted', points: 1, authorLogin: commit.author.login, committerLogin: commit.committer.login,
     verifiedPusher: true, verificationSource: 'github-commit-api', reviewedAt: now,
     reviewedBy: null, reviewNote: '', activeSlot: true,
   };
+  await db.collection('users').updateOne({ _id: user._id }, { $set: { lastRepository: repository } });
   if (existing) {
     const previousAttempt = {
       commitUrl: existing.commitUrl, commitSha: existing.commitSha,
@@ -560,6 +562,121 @@ async function makeSubmission(db, req, user, body) {
   }
   const result = await db.collection('submissions').insertOne(submission);
   return { ...submission, _id: result.insertedId, id: String(result.insertedId) };
+}
+
+export async function resolveCommitInput(db, user, rawInput) {
+  const input = String(rawInput || '').trim();
+  if (!input) {
+    throw new HttpError(400, 'Enter a GitHub commit hash (e.g. 76c3f95) or full commit URL.');
+  }
+
+  const username = String(user.githubUsername || '').toLowerCase();
+
+  // 1. Direct full commit URL or loose URL with owner/repo
+  let parsed = parsePersonalCommitUrl(input);
+
+  if (!parsed) {
+    const repoAtSha = input.match(/^([A-Za-z0-9_.-]+)[@:]([a-f0-9]{7,40})$/i);
+    if (repoAtSha) {
+      parsed = { owner: username, repository: repoAtSha[1], sha: repoAtSha[2] };
+    } else if (input.includes('/')) {
+      let normalized = input;
+      if (!/^https?:\/\//i.test(normalized)) {
+        if (normalized.startsWith('github.com/')) {
+          normalized = `https://${normalized}`;
+        } else if (normalized.split('/').length === 3 && normalized.includes('/commit/')) {
+          normalized = `https://github.com/${username}/${normalized}`;
+        } else {
+          normalized = `https://github.com/${normalized}`;
+        }
+      }
+      parsed = parsePersonalCommitUrl(normalized);
+    }
+  }
+
+  if (parsed) {
+    if (parsed.owner.toLowerCase() !== username) {
+      throw new HttpError(403, 'Use a repository owned by your linked GitHub account.');
+    }
+    return { owner: parsed.owner, repository: parsed.repository, sha: parsed.sha };
+  }
+
+  // 2. Standalone commit hash / code (7 to 40 hex characters)
+  if (/^[a-f0-9]{7,40}$/i.test(input)) {
+    const sha = input.toLowerCase();
+
+    // Check candidate repositories first (lastRepository, latest submission)
+    const candidates = [];
+    if (user.lastRepository) {
+      candidates.push(user.lastRepository);
+    }
+
+    const lastSub = await db.collection('submissions').findOne(
+      { userId: user._id, repository: { $exists: true } },
+      { sort: { submittedAt: -1 } }
+    );
+    if (lastSub?.repository) {
+      const repoName = lastSub.repository.includes('/') ? lastSub.repository.split('/')[1] : lastSub.repository;
+      if (!candidates.includes(repoName)) {
+        candidates.push(repoName);
+      }
+    }
+
+    for (const repoName of candidates) {
+      try {
+        const commitCheck = await githubJson(
+          `/repos/${encodeURIComponent(username)}/${encodeURIComponent(repoName)}/commits/${encodeURIComponent(sha)}`,
+          process.env.GITHUB_TOKEN
+        );
+        if (commitCheck && (commitCheck.sha || commitCheck.commit)) {
+          return { owner: username, repository: repoName, sha: commitCheck.sha || sha, commitData: commitCheck };
+        }
+      } catch {
+        // Not in this candidate repo, continue
+      }
+    }
+
+    // If not found in known repositories, search user's recent public repositories (most recently pushed first)
+    try {
+      const repos = await githubJson(
+        `/users/${encodeURIComponent(username)}/repos?sort=pushed&per_page=12`,
+        process.env.GITHUB_TOKEN
+      );
+      if (Array.isArray(repos)) {
+        for (const r of repos) {
+          const repoName = r.name;
+          if (candidates.includes(repoName)) continue;
+          try {
+            const commitCheck = await githubJson(
+              `/repos/${encodeURIComponent(username)}/${encodeURIComponent(repoName)}/commits/${encodeURIComponent(sha)}`,
+              process.env.GITHUB_TOKEN
+            );
+            if (commitCheck && (commitCheck.sha || commitCheck.commit)) {
+              await db.collection('users').updateOne(
+                { _id: user._id },
+                { $set: { lastRepository: repoName } }
+              );
+              return { owner: username, repository: repoName, sha: commitCheck.sha || sha, commitData: commitCheck };
+            }
+          } catch {
+            // Not in this repo
+          }
+        }
+      }
+    } catch {
+      // Repos listing unavailable
+    }
+
+    throw new HttpError(
+      404,
+      `Commit "${input}" was not found in your recent public GitHub repositories. Please ensure your commit is pushed to your public repository, or enter the full commit URL.`
+    );
+  }
+
+  throw new HttpError(
+    400,
+    'Enter a valid GitHub commit hash (e.g. 76c3f95) or full commit URL like https://github.com/YOUR-USERNAME/YOUR-REPO/commit/FULL_SHA.'
+  );
 }
 
 export function parsePersonalCommitUrl(rawUrl) {
