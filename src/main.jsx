@@ -1,4 +1,5 @@
 import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
 import { AVATAR_STYLES, createAvatarDataUri, createAvatarSeeds } from './avatar.js';
@@ -439,7 +440,7 @@ function App() {
   const [submissions, setSubmissions] = useState([]);
   const [pending, setPending] = useState([]);
   const [pendingPagination, setPendingPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
-  const [todaySubmissionsData, setTodaySubmissionsData] = useState({ totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [], questionId: null, questionTitle: '' });
+  const [todaySubmissionsData, setTodaySubmissionsData] = useState({ totalAttempted: 0, totalNotAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [], notAttempted: [], questionId: null, questionTitle: '' });
   const [todaySubmissionsBusy, setTodaySubmissionsBusy] = useState(false);
   const [members, setMembers] = useState([]);
   const [membersPagination, setMembersPagination] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
@@ -481,6 +482,10 @@ function App() {
   const [memberFilter, setMemberFilter] = useState('pending');
   const [memberQuery, setMemberQuery] = useState('');
   const [publicPreferenceBusy, setPublicPreferenceBusy] = useState(false);
+  const [exportModalOpen, setExportModalOpen] = useState(false);
+  const [exportTarget, setExportTarget] = useState('attempted');
+  const [exportStudyYear, setExportStudyYear] = useState('all');
+  const [exportDepartment, setExportDepartment] = useState('all');
 
   useEffect(() => {
     if (!account) return;
@@ -695,38 +700,65 @@ function App() {
     }
   }
 
-  function exportTodayCsv() {
-    if (!todaySubmissionsData.submissions?.length) {
-      setNotice('No submissions recorded for today to export.');
+  const exportPool = useMemo(() => {
+    let pool = [];
+    if (exportTarget === 'not_attempted') {
+      pool = todaySubmissionsData.notAttempted || [];
+    } else if (exportTarget === 'all') {
+      pool = [...(todaySubmissionsData.submissions || []), ...(todaySubmissionsData.notAttempted || [])];
+    } else {
+      pool = todaySubmissionsData.submissions || [];
+    }
+    if (exportStudyYear !== 'all') {
+      pool = pool.filter((s) => s.studyYear === exportStudyYear);
+    }
+    if (exportDepartment !== 'all') {
+      pool = pool.filter((s) => s.department === exportDepartment);
+    }
+    return pool;
+  }, [exportTarget, exportStudyYear, exportDepartment, todaySubmissionsData]);
+
+  const matchingExportCount = exportPool.length;
+
+  function executeExportCsv() {
+    if (!exportPool.length) {
+      setNotice('No members match the selected filter criteria.');
       return;
     }
-    const studyYearNames = { 'first-year': 'First year', 'second-year': 'Second year', 'third-year': 'Third year', 'fourth-year': 'Fourth year', passed: 'Passed out' };
     const escapeCsv = (str) => `"${String(str ?? '').replace(/"/g, '""')}"`;
-    const headers = ['Name', 'Email', 'Club Department', 'Year of Study', 'GitHub Username', 'LeetCode Username', 'Question ID', 'Status', 'Points', 'Commit URL', 'Submitted At (IST)'];
-    const rows = todaySubmissionsData.submissions.map((s) => [
-      escapeCsv(s.name),
-      escapeCsv(s.email),
-      escapeCsv(s.department),
-      escapeCsv(studyYearNames[s.studyYear] || s.studyYear),
-      escapeCsv(s.githubUsername),
-      escapeCsv(s.leetcodeUsername),
-      s.questionId || todaySubmissionsData.questionId || '',
-      s.status || '',
-      s.points ?? '',
-      escapeCsv(s.commitUrl),
-      escapeCsv(new Date(s.submittedAt).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })),
-    ]);
+    // LeetCode Username is removed as requested
+    const headers = ['Name', 'Email', 'Club Department', 'Year of Study', 'GitHub Username', 'Question ID', 'Status', 'Points', 'Commit URL', 'Submitted At (IST)'];
+    const rows = exportPool.map((s) => {
+      const formattedStatus = s.status === 'not_attempted'
+        ? 'Not Attempted'
+        : (s.status ? (s.status.charAt(0).toUpperCase() + s.status.slice(1)) : 'Not Attempted');
+      return [
+        escapeCsv(s.name),
+        escapeCsv(s.email),
+        escapeCsv(s.department),
+        escapeCsv(studyYearLabel(s.studyYear) || s.studyYear || '—'),
+        escapeCsv(s.githubUsername || '—'),
+        s.questionId || todaySubmissionsData.questionId || club.assignment?.questionId || '—',
+        formattedStatus,
+        s.points ?? 0,
+        escapeCsv(s.commitUrl || '—'),
+        escapeCsv(s.submittedAt ? new Date(s.submittedAt).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—'),
+      ];
+    });
     const csvContent = [headers.join(','), ...rows.map((r) => r.join(','))].join('\r\n');
     const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', `dsavation-today-attempts-${todaySubmissionsData.dateKey || localDay()}.csv`);
+    const yearPart = exportStudyYear !== 'all' ? `-${exportStudyYear}` : '';
+    const deptPart = exportDepartment !== 'all' ? `-${exportDepartment.toLowerCase().replace(/[^a-z0-9]+/g, '-')}` : '';
+    link.setAttribute('download', `dsavation-${exportTarget}${yearPart}${deptPart}-${todaySubmissionsData.dateKey || localDay()}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
     URL.revokeObjectURL(url);
-    setNotice(`Exported ${todaySubmissionsData.submissions.length} attempted submissions to CSV.`);
+    setExportModalOpen(false);
+    setNotice(`Exported ${exportPool.length} member${exportPool.length === 1 ? '' : 's'} to CSV.`);
   }
 
   function handlePickRandomExplainer() {
@@ -1248,9 +1280,9 @@ function App() {
                 <button
                   type="button"
                   className="button button-quiet export-csv-btn"
-                  onClick={exportTodayCsv}
-                  disabled={!todaySubmissionsData.submissions?.length}
-                  title="Export today's attempts as CSV"
+                  onClick={() => setExportModalOpen(true)}
+                  disabled={!club.assignment && !todaySubmissionsData.questionId}
+                  title="Export today's question activity report as CSV"
                 >
                   <Icon name="download" size={14}/> <span>Export as .CSV</span>
                 </button>
@@ -1480,6 +1512,129 @@ function App() {
           </div>
         </section>
       </div>
+    )}
+
+    {exportModalOpen && typeof document !== 'undefined' && createPortal(
+      <div
+        className="modal-scrim"
+        role="presentation"
+        onMouseDown={(event) => { if (event.target === event.currentTarget) setExportModalOpen(false); }}
+      >
+        <section className="auth-modal export-csv-modal" role="dialog" aria-modal="true" aria-labelledby="export-csv-modal-title">
+          <button className="modal-close" onClick={() => setExportModalOpen(false)} aria-label="Close">×</button>
+          <div className="eyebrow"><span className="eyebrow-line"/>MODERATION · EXPORT REPORT</div>
+          <h2 id="export-csv-modal-title">Export Submissions as .CSV<span>.</span></h2>
+          <p className="auth-lede">
+            Export today's question activity to a spreadsheet. Choose who to export, filter by year of study or department, and download clean data (LeetCode IDs are removed).
+          </p>
+
+          <div className="export-modal-content">
+            <div className="export-field-group">
+              <label className="export-field-label">SELECT AUDIENCE TO EXPORT</label>
+              <div className="export-radio-cards" role="radiogroup" aria-label="Export audience">
+                <label className={`export-radio-card ${exportTarget === 'attempted' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="exportTarget"
+                    value="attempted"
+                    checked={exportTarget === 'attempted'}
+                    onChange={(e) => setExportTarget(e.target.value)}
+                  />
+                  <div className="export-radio-info">
+                    <strong>Attempted today's question</strong>
+                    <span>Members who submitted a solution ({todaySubmissionsData.submissions?.length || 0})</span>
+                  </div>
+                </label>
+
+                <label className={`export-radio-card ${exportTarget === 'not_attempted' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="exportTarget"
+                    value="not_attempted"
+                    checked={exportTarget === 'not_attempted'}
+                    onChange={(e) => setExportTarget(e.target.value)}
+                  />
+                  <div className="export-radio-info">
+                    <strong>Not attempted today's question</strong>
+                    <span>Approved members who haven't submitted today ({todaySubmissionsData.notAttempted?.length || 0})</span>
+                  </div>
+                </label>
+
+                <label className={`export-radio-card ${exportTarget === 'all' ? 'active' : ''}`}>
+                  <input
+                    type="radio"
+                    name="exportTarget"
+                    value="all"
+                    checked={exportTarget === 'all'}
+                    onChange={(e) => setExportTarget(e.target.value)}
+                  />
+                  <div className="export-radio-info">
+                    <strong>All club members</strong>
+                    <span>Everyone with their submission status ({(todaySubmissionsData.submissions?.length || 0) + (todaySubmissionsData.notAttempted?.length || 0)})</span>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <div className="export-filters-grid">
+              <label className="export-select-field">
+                <span>FILTER BY YEAR OF STUDY</span>
+                <select value={exportStudyYear} onChange={(e) => setExportStudyYear(e.target.value)}>
+                  <option value="all">All years of study</option>
+                  <option value="first-year">First year</option>
+                  <option value="second-year">Second year</option>
+                  <option value="third-year">Third year</option>
+                  <option value="fourth-year">Fourth year</option>
+                  <option value="passed">Passed out</option>
+                </select>
+              </label>
+
+              <label className="export-select-field">
+                <span>FILTER BY CLUB DEPARTMENT</span>
+                <select value={exportDepartment} onChange={(e) => setExportDepartment(e.target.value)}>
+                  <option value="all">All departments</option>
+                  {CLUB_DEPARTMENTS.map((dept) => (
+                    <option key={dept} value={dept}>{dept}</option>
+                  ))}
+                </select>
+              </label>
+            </div>
+
+            <div className="export-summary-box">
+              <div className="export-summary-main">
+                <Icon name="download" size={16}/>
+                <div>
+                  <strong>{matchingExportCount} member{matchingExportCount === 1 ? '' : 's'} selected</strong>
+                  <p>
+                    {matchingExportCount === 0
+                      ? 'No members match the current filter selection.'
+                      : `Will export ${exportTarget === 'not_attempted' ? 'unattempted' : exportTarget === 'attempted' ? 'attempted' : 'all'} members${exportStudyYear !== 'all' ? ` in ${studyYearLabel(exportStudyYear)}` : ''}${exportDepartment !== 'all' ? ` (${exportDepartment})` : ''}. LeetCode IDs are excluded.`}
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div className="export-modal-actions">
+              <button
+                type="button"
+                className="button button-quiet"
+                onClick={() => setExportModalOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="button button-green"
+                onClick={executeExportCsv}
+                disabled={matchingExportCount === 0}
+              >
+                <Icon name="download" size={14}/> <span>Download .CSV ({matchingExportCount})</span>
+              </button>
+            </div>
+          </div>
+        </section>
+      </div>,
+      document.body
     )}
 
     {resetLink && <div className="modal-scrim" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setResetLink(null); }}><section className="auth-modal reset-link-modal" role="dialog" aria-modal="true" aria-labelledby="reset-link-title"><button className="modal-close" onClick={() => setResetLink(null)} aria-label="Close">×</button><div className="eyebrow"><span className="eyebrow-line"/>ONE-TIME PASSWORD RESET</div><h2 id="reset-link-title">Reset link for {resetLink.name}<span>.</span></h2><p className="auth-lede">This link expires at {new Date(resetLink.expiresAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} India time and works once. Share it directly with the member. The server stores only a hash.</p><label className="reset-link-field">RESET URL<input value={resetLink.url} readOnly onFocus={(event) => event.target.select()}/></label><button className="button button-dark auth-submit" onClick={copyResetLink}>Copy one-time link <Icon name="arrow" size={14}/></button></section></div>}

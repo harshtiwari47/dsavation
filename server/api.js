@@ -868,7 +868,7 @@ async function getTodaySubmissions(db, req, user, url) {
   if (!assignment) {
     if (url.searchParams.get('format') === 'csv') {
       return {
-        csv: 'Name,Email,Club Department,Year of Study,GitHub Username,LeetCode Username,Question ID,Status,Points,Commit URL,Submitted At (IST)\r\n',
+        csv: 'Name,Email,Club Department,Year of Study,GitHub Username,Question ID,Status,Points,Commit URL,Submitted At (IST)\r\n',
         filename: `today-attempts-${dayKey()}.csv`,
       };
     }
@@ -876,9 +876,12 @@ async function getTodaySubmissions(db, req, user, url) {
       dateKey: dayKey(),
       assignment: null,
       totalAttempted: 0,
+      totalNotAttempted: 0,
+      totalApprovedMembers: 0,
       acceptedCount: 0,
       pendingCount: 0,
       submissions: [],
+      notAttempted: [],
     };
   }
 
@@ -887,11 +890,11 @@ async function getTodaySubmissions(db, req, user, url) {
     .sort({ submittedAt: -1 })
     .toArray();
 
-  const userIds = [...new Set(submissions.map((item) => String(item.userId)))].map((id) => new ObjectId(id));
-  const profiles = userIds.length ? await db.collection('users').find({ _id: { $in: userIds } }, {
-    projection: { name: 1, email: 1, department: 1, studyYear: 1, githubUsername: 1, leetcodeUsername: 1, avatarStyle: 1, avatarSeed: 1 },
-  }).toArray() : [];
-  const profileById = new Map(profiles.map((p) => [String(p._id), p]));
+  const allApproved = await db.collection('users').find(approvedUserFilter(), {
+    projection: { name: 1, email: 1, department: 1, studyYear: 1, githubUsername: 1, avatarStyle: 1, avatarSeed: 1 },
+  }).toArray();
+  const profileById = new Map(allApproved.map((p) => [String(p._id), p]));
+  const attemptedUserIdSet = new Set(submissions.map((item) => String(item.userId)));
 
   const rows = submissions.map((item) => {
     const profile = profileById.get(String(item.userId));
@@ -903,7 +906,6 @@ async function getTodaySubmissions(db, req, user, url) {
       department: profile?.department || '',
       studyYear: profile?.studyYear || '',
       githubUsername: profile?.githubUsername || item.authorLogin || '',
-      leetcodeUsername: profile?.leetcodeUsername || '',
       avatarStyle: AVATAR_STYLES.has(profile?.avatarStyle) ? profile.avatarStyle : 'critters',
       avatarSeed: String(profile?.avatarSeed || profile?._id || item.userId),
       commitUrl: item.commitUrl,
@@ -920,26 +922,70 @@ async function getTodaySubmissions(db, req, user, url) {
     };
   });
 
+  const notAttemptedRows = allApproved
+    .filter((u) => !attemptedUserIdSet.has(String(u._id)))
+    .map((u) => ({
+      id: String(u._id),
+      userId: String(u._id),
+      name: u.name || 'Member',
+      email: u.email || '',
+      department: u.department || '',
+      studyYear: u.studyYear || '',
+      githubUsername: u.githubUsername || '',
+      avatarStyle: AVATAR_STYLES.has(u.avatarStyle) ? u.avatarStyle : 'critters',
+      avatarSeed: String(u.avatarSeed || u._id),
+      commitUrl: '',
+      commitSha: '',
+      solutionPath: '',
+      solutionSizeBytes: 0,
+      submittedAt: null,
+      commitDate: null,
+      status: 'not_attempted',
+      points: 0,
+      verifiedPusher: false,
+      reviewNote: '',
+      questionId: assignment.questionId,
+    }));
+
   if (url.searchParams.get('format') === 'csv') {
     const studyYearNames = { 'first-year': 'First year', 'second-year': 'Second year', 'third-year': 'Third year', 'fourth-year': 'Fourth year', passed: 'Passed out' };
     const escapeCsv = (str) => `"${String(str ?? '').replace(/"/g, '""')}"`;
-    const header = ['Name', 'Email', 'Club Department', 'Year of Study', 'GitHub Username', 'LeetCode Username', 'Question ID', 'Status', 'Points', 'Commit URL', 'Submitted At (IST)'].join(',');
-    const bodyRows = rows.map((r) => [
+    const targetType = url.searchParams.get('type') || 'attempted';
+    const filterYear = url.searchParams.get('studyYear');
+    const filterDept = url.searchParams.get('department');
+
+    let exportRows = [];
+    if (targetType === 'not_attempted') {
+      exportRows = notAttemptedRows;
+    } else if (targetType === 'all') {
+      exportRows = [...rows, ...notAttemptedRows];
+    } else {
+      exportRows = rows;
+    }
+
+    if (filterYear && filterYear !== 'all') {
+      exportRows = exportRows.filter((r) => r.studyYear === filterYear);
+    }
+    if (filterDept && filterDept !== 'all') {
+      exportRows = exportRows.filter((r) => r.department === filterDept);
+    }
+
+    const header = ['Name', 'Email', 'Club Department', 'Year of Study', 'GitHub Username', 'Question ID', 'Status', 'Points', 'Commit URL', 'Submitted At (IST)'].join(',');
+    const bodyRows = exportRows.map((r) => [
       escapeCsv(r.name),
       escapeCsv(r.email),
       escapeCsv(r.department),
-      escapeCsv(studyYearNames[r.studyYear] || r.studyYear),
-      escapeCsv(r.githubUsername),
-      escapeCsv(r.leetcodeUsername),
+      escapeCsv(studyYearNames[r.studyYear] || r.studyYear || '—'),
+      escapeCsv(r.githubUsername || '—'),
       r.questionId,
-      r.status,
+      r.status === 'not_attempted' ? 'Not Attempted' : r.status,
       r.points,
-      escapeCsv(r.commitUrl),
-      escapeCsv(new Date(r.submittedAt).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' })),
+      escapeCsv(r.commitUrl || '—'),
+      escapeCsv(r.submittedAt ? new Date(r.submittedAt).toLocaleString('en-GB', { timeZone: 'Asia/Kolkata' }) : '—'),
     ].join(','));
     return {
       csv: [header, ...bodyRows].join('\r\n'),
-      filename: `today-attempts-${assignment.dateKey}.csv`,
+      filename: `today-${targetType}-${filterYear && filterYear !== 'all' ? `${filterYear}-` : ''}${assignment.dateKey}.csv`,
     };
   }
 
@@ -949,9 +995,12 @@ async function getTodaySubmissions(db, req, user, url) {
     questionId: assignment.questionId,
     questionTitle: questionById.get(assignment.questionId)?.title || `LeetCode #${assignment.questionId}`,
     totalAttempted: rows.length,
+    totalNotAttempted: notAttemptedRows.length,
+    totalApprovedMembers: allApproved.length,
     acceptedCount: rows.filter((r) => r.status === 'accepted').length,
     pendingCount: rows.filter((r) => r.status === 'pending').length,
     submissions: rows,
+    notAttempted: notAttemptedRows,
   };
 }
 

@@ -946,6 +946,140 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
 .explainer-preview-footer { color: #34d399; font-size: .46875rem; font-family: var(--mono); }
 .explainer-modal-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
 
+/* Export CSV Modal */
+.export-csv-modal {
+  max-width: 540px;
+  width: min(540px, 94vw);
+}
+.export-modal-content {
+  display: grid;
+  gap: 14px;
+  margin-top: 14px;
+}
+.export-field-group {
+  display: grid;
+  gap: 8px;
+}
+.export-field-label {
+  font: 700 0.46875rem var(--mono);
+  color: var(--muted);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.export-radio-cards {
+  display: grid;
+  gap: 7px;
+}
+.export-radio-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface-muted);
+  cursor: pointer;
+  transition: all 140ms ease;
+}
+.export-radio-card:hover {
+  border-color: var(--line-dark);
+}
+.export-radio-card.active {
+  border-color: var(--green);
+  background: rgba(30, 142, 62, 0.08);
+}
+.export-radio-card input[type="radio"] {
+  margin-top: 2px;
+  cursor: pointer;
+}
+.export-radio-info {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.export-radio-info strong {
+  font-size: 0.625rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+.export-radio-info span {
+  font-size: 0.5rem;
+  color: var(--muted);
+}
+.export-filters-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+}
+@media (max-width: 520px) {
+  .export-filters-grid {
+    grid-template-columns: 1fr;
+  }
+}
+.export-select-field {
+  display: grid;
+  gap: 5px;
+}
+.export-select-field span {
+  font: 700 0.46875rem var(--mono);
+  color: var(--muted);
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+}
+.export-select-field select {
+  height: 36px;
+  padding: 0 10px;
+  border: 1px solid var(--line-dark);
+  border-radius: 4px;
+  background: #fffefa;
+  color: #3a514d;
+  font-size: 0.625rem;
+}
+:root[data-theme="dark"] .export-select-field select {
+  background: #14201c;
+  color: #e5edea;
+  border-color: #354a44;
+}
+.export-summary-box {
+  padding: 11px 12px;
+  border-radius: 6px;
+  background: var(--surface-muted);
+  border: 1px solid var(--line);
+}
+.export-summary-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+.export-summary-main .icon {
+  color: var(--green);
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+.export-summary-main strong {
+  display: block;
+  font-size: 0.625rem;
+  color: var(--ink);
+  font-weight: 600;
+}
+.export-summary-main p {
+  margin: 3px 0 0;
+  font-size: 0.5rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+.export-modal-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 4px;
+}
+:root[data-theme="dark"] .export-radio-card.active {
+  background: rgba(30, 142, 62, 0.18);
+  border-color: var(--green);
+}
+
 .moderation-subsection { margin-top: 14px; }
 .moderation-subheading { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; font-size: .625rem; color: var(--ink); }
 .moderation-subheading strong { font-weight: 600; }

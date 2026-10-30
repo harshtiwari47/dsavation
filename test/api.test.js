@@ -822,13 +822,23 @@ test('leads and admins can inspect today question attempts and export as CSV', a
   assert.equal(todayRes.data.acceptedCount, 1);
   assert.equal(todayRes.data.submissions[0].name, 'Attempt Student');
   assert.equal(todayRes.data.submissions[0].department, 'Technical');
+  assert.ok(todayRes.data.totalNotAttempted >= 1);
+  assert.ok(todayRes.data.notAttempted.some((m) => m.name === 'Regular Member'));
 
-  // Query as CSV
+  // Query as CSV (attempted - default)
   const csvRes = await call(db, '/admin/today-submissions?format=csv', { cookie: admin.cookie });
   assert.equal(csvRes.response.status, 200);
   assert.match(csvRes.response.headers.get('content-type'), /text\/csv/);
   assert.match(csvRes.text, /Attempt Student/);
   assert.match(csvRes.text, /Technical/);
+  assert.doesNotMatch(csvRes.text, /LeetCode Username/);
+
+  // Query as CSV (not attempted)
+  const csvNotAttempted = await call(db, '/admin/today-submissions?format=csv&type=not_attempted', { cookie: admin.cookie });
+  assert.equal(csvNotAttempted.response.status, 200);
+  assert.match(csvNotAttempted.text, /Regular Member/);
+  assert.doesNotMatch(csvNotAttempted.text, /Attempt Student/);
+  assert.doesNotMatch(csvNotAttempted.text, /LeetCode Username/);
 });
 
 test('leads and admins can delete today question and associated submissions', async () => {
