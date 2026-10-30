@@ -475,6 +475,7 @@ test('personal-repo commits score automatically, admin adjustments and assignmen
   assert.equal(board.data.pagination.total, 2);
   assert.equal(board.data.leaderboard[0].githubUsername, 'student-gh');
   assert.equal(board.data.leaderboard[0].points, 1);
+  assert.equal(board.data.leaderboard[0].punctuality, 100);
   const scored = await call(db, '/admin/submissions?status=accepted&page=1&pageSize=10', { cookie: admin.cookie });
   assert.equal(scored.data.pagination.total, 1);
   const scoredId = scored.data.submissions[0].id;
@@ -877,4 +878,84 @@ test('leads and admins can delete today question and associated submissions', as
   // 7. Activity logged
   const activity = await call(db, '/admin/activity', { cookie: admin.cookie });
   assert.equal(activity.data.activity.some((item) => item.action === 'assignment_deleted'), true);
+});
+
+test('punctuality is 100% when one question is assigned, and accurately reflects concluded past assignments', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const today = indiaDay();
+
+  // Admin publishes Question of the Day first
+  const assigned = await call(db, '/admin/assignments', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: { dateKey: today, questionId: 217 }
+  });
+  const assignmentId = assigned.data.assignment.id;
+
+  // Student 1 registers AFTER the assignment was published on the same day
+  const student1 = await seedUser(db, {
+    name: 'Solver One',
+    email: 'solver1@abes.ac.in',
+    username: 'solver-one',
+    department: 'Technical',
+  });
+  // Student 2 registers but hasn't submitted yet
+  const student2 = await seedUser(db, {
+    name: 'Solver Two',
+    email: 'solver2@abes.ac.in',
+    username: 'solver-two',
+    department: 'Technical',
+  });
+
+  // Student 1 submits and is accepted
+  const fullSha = '76c3f955e0a1de4701dbca40d5f4dab870b0d5ea';
+  commits.set(fullSha, commitFixture({ sha: fullSha, questionId: 217, username: 'solver-one' }));
+  const sub = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: student1.cookie,
+    body: { assignmentId, commitUrl: `https://github.com/solver-one/dsa-solutions/commit/${fullSha}` }
+  });
+  assert.equal(sub.response.status, 201);
+
+  // Leaderboard check:
+  // With 1 question assigned so far, Solver One (1 pt) MUST have 100% punctuality (not 0%)
+  // Solver Two (0 pts, today still open) also has 100% punctuality
+  const board = await call(db, '/club/leaderboard?page=1&pageSize=10');
+  const s1Row = board.data.leaderboard.find((p) => p.githubUsername === 'solver-one');
+  const s2Row = board.data.leaderboard.find((p) => p.githubUsername === 'solver-two');
+
+  assert.ok(s1Row);
+  assert.equal(s1Row.points, 1);
+  assert.equal(s1Row.completed, 1);
+  assert.equal(s1Row.punctuality, 100);
+  assert.equal(s1Row.streak, 1);
+
+  assert.ok(s2Row);
+  assert.equal(s2Row.points, 0);
+  assert.equal(s2Row.punctuality, 100);
+
+  // Past assignment check:
+  // If an assignment was yesterday (2026-10-29) and was missed by Solver Two:
+  const yesterday = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date(Date.now() - 86400000));
+
+  await db.collection('assignments').insertOne({
+    _id: new ObjectId(),
+    dateKey: yesterday,
+    questionId: 1,
+    createdAt: new Date(Date.now() - 86400000),
+  });
+
+  // Set Solver Two's join date to 2 days ago so they were a member during yesterday's assignment
+  await db.collection('users').updateOne(
+    { _id: student2.user._id },
+    { $set: { createdAt: new Date(Date.now() - 2 * 86400000) } }
+  );
+
+  const updatedBoard = await call(db, '/club/leaderboard?page=1&pageSize=10');
+  const s2Updated = updatedBoard.data.leaderboard.find((p) => p.githubUsername === 'solver-two');
+  // Solver Two missed yesterday's concluded question (0 out of 1 past scheduled questions)
+  assert.equal(s2Updated.punctuality, 0);
 });
