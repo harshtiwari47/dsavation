@@ -121,12 +121,12 @@ export function initLiquidGlass() {
       '.progress-summary article',
       '.member-directory-card',
       '.login-prompt',
-      '.library-locked'
+      '.library-locked',
+      '.question-card'
     ];
     document.querySelectorAll(cardSelectors.join(', ')).forEach(bindCard);
 
     const rippleSelectors = [
-      '.question-card',
       '.button-dark',
       '.button-primary'
     ];

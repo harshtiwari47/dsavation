@@ -966,6 +966,7 @@ function App() {
     }
     const controller = new AbortController();
     let active = true;
+    const startTime = Date.now();
     setAppLoading(true);
     Promise.allSettled([
       loadQuestionLibrary(controller.signal).catch((error) => {
@@ -974,7 +975,12 @@ function App() {
       loadMemberData(account),
       loadClub(),
     ]).finally(() => {
-      if (active) setAppLoading(false);
+      const elapsed = Date.now() - startTime;
+      const minDisplayTime = 550;
+      const remaining = Math.max(0, minDisplayTime - elapsed);
+      setTimeout(() => {
+        if (active) setAppLoading(false);
+      }, remaining);
     });
     return () => {
       active = false;
@@ -1219,7 +1225,25 @@ function App() {
 
   return <div className="app-frame">
     <AtmosphereBackdrop />
-    {appLoading && <div className="global-loading" role="progressbar" aria-label="Loading DSAvation" aria-valuetext="Loading"><span /></div>}
+    {appLoading && (
+      <aside className="global-loader-hud" role="status" aria-live="polite" aria-label="Loading DSAvation">
+        <div className="global-loading" role="progressbar" aria-label="Loading DSAvation" aria-valuetext="Loading">
+          <span />
+        </div>
+        <div className="global-loader-card">
+          <img src="/loading-bot.png" alt="DSAvation Mascot Bot" className="global-loader-bot" />
+          <div className="global-loader-content">
+            <div className="global-loader-title">
+              <span className="global-loader-pulse-dot" />
+              <strong>Powering up circuits…</strong>
+            </div>
+            <p className="global-loader-msg">
+              DSAvation bot is waking up &amp; preparing your challenges ✨
+            </p>
+          </div>
+        </div>
+      </aside>
+    )}
     <header className="topbar">
       <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true"/><span>DSAvation</span></a>
       <nav className="main-nav" aria-label="Main navigation">
