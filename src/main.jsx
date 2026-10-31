@@ -1279,7 +1279,7 @@ function App() {
       </aside>
     )}
     <header className="topbar">
-      <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true"/><span>DSAvation</span></a>
+      <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><img className="brand-mark" src="/technovation-logo.png" alt="Technovation Logo"/><span>DSAvation</span></a>
       <nav className="main-nav" aria-label="Main navigation">
         <button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><IconifyIcon icon="bi:journal-bookmark" width={16} height={16}/>General</button>
         {account && <button className={view === 'members' ? 'active' : ''} onClick={() => navigate('members')}><Icon name="users" size={15}/>Members</button>}
