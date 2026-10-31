@@ -81,6 +81,7 @@ function Icon({ name, size = 17 }) {
     trophy: <><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/></>,
     filter: <><path d="M4 7h16M7 12h10M10 17h4"/><circle cx="7" cy="7" r="2"/><circle cx="16" cy="12" r="2"/></>,
     github: <><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.8A5.3 5.3 0 0 0 18.8 5a4.9 4.9 0 0 0-.1-3S17.5 1.7 15 3.4a13.5 13.5 0 0 0-7 0C5.5 1.7 4.3 2 4.3 2a4.9 4.9 0 0 0-.1 3A5.3 5.3 0 0 0 2.8 7.7c0 5.3 3.1 6.5 6.1 6.8A3.4 3.4 0 0 0 8 17.1V22"/></>,
+    leetcode: <path d="M13.483 0a1.374 1.374 0 0 0-.961.438L7.116 6.226l-3.854 4.126a5.266 5.266 0 0 0-1.209 2.104 5.35 5.35 0 0 0-.125.513 5.527 5.527 0 0 0 .062 2.362 5.83 5.83 0 0 0 .349 1.017 5.938 5.938 0 0 0 4.818 3.662 5.895 5.895 0 0 0 2.613-.34 5.9 5.9 0 0 0 2.062-1.258l3.87-4.143a1.196 1.196 0 0 0 0-1.666 1.144 1.144 0 0 0-1.637 0l-3.87 4.143a3.528 3.528 0 0 1-1.233.753 3.528 3.528 0 0 1-1.562.203 3.55 3.55 0 0 1-2.883-2.191 3.542 3.542 0 0 1-.209-.608 3.327 3.327 0 0 1-.038-1.413 3.15 3.15 0 0 1 .724-1.259l3.854-4.125 5.405-5.788a1.374 1.374 0 0 0-.961-2.337zm4.122 7.822a1.2 1.2 0 0 0-1.696.075l-4.908 5.248a1.2 1.2 0 0 0 .075 1.696 1.2 1.2 0 0 0 1.696-.075l4.908-5.248a1.2 1.2 0 0 0-.075-1.696z" fill="currentColor" stroke="none"/>,
     close: <><path d="m6 6 12 12M18 6 6 18"/></>,
     lock: <><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></>,
     logout: <><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></>,
@@ -488,6 +489,7 @@ function App() {
   const [resetError, setResetError] = useState('');
   const [profileBusy, setProfileBusy] = useState(false);
   const [commitUrl, setCommitUrl] = useState('');
+  const [submissionMethod, setSubmissionMethod] = useState('github');
   const [submissionHelpOpen, setSubmissionHelpOpen] = useState(false);
   const [submissionBusy, setSubmissionBusy] = useState(false);
   const [assignmentDate, setAssignmentDate] = useState(localDay());
@@ -1060,6 +1062,26 @@ function App() {
     finally { setSubmissionBusy(false); }
   }
 
+  async function submitLeetCodeSolution(event) {
+    if (event) event.preventDefault();
+    setSubmissionBusy(true);
+    setNotice('');
+    try {
+      const result = await api('/submissions', {
+        method: 'POST',
+        body: { assignmentId: club.assignment?.id, type: 'leetcode' },
+      });
+      setNotice(`LeetCode verified your solution! ${result.submission?.points ?? 1} point${(result.submission?.points ?? 1) === 1 ? '' : 's'} added to the club leaderboard.`);
+      await loadClub();
+      await loadHistoryPage(1);
+      await loadMemberData();
+    } catch (error) {
+      setNotice(error.message);
+    } finally {
+      setSubmissionBusy(false);
+    }
+  }
+
   async function publishAssignment(event) {
     event.preventDefault(); setAssignmentBusy(true); setNotice('');
     try {
@@ -1473,7 +1495,7 @@ function App() {
                     <span>{assignedQuestion.pattern}</span>
                   </div>
                   <p className="assignment-prompt">
-                    Use a public repository you own. During this assignment day, commit a non-empty <code>{assignedQuestion.id}/solution.txt</code>. It may contain code in any language; only this exact path is tracked. GitHub verifies your linked identity, file path, and commit date; a valid submission earns a point automatically.
+                    Submit today’s verified solution using either a <strong>GitHub commit</strong> or directly via <strong>LeetCode</strong>. A verified submission earns 1 point on the club leaderboard.
                   </p>
                   <div className="assignment-counts">
                     <div><strong>{club.submittedCount}</strong><span>SUBMITTED</span></div>
@@ -1488,45 +1510,117 @@ function App() {
                       <span>Sign in with an approved ABES account to submit a club solution.</span>
                       <button onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button>
                     </div>
-                  ) : !account.githubVerified ? (
-                    <div className="inline-callout">
-                      <Icon name="github" size={16} />
-                      <span>Connect the GitHub account you want to use; its verified username will replace the signup value.</span>
-                      <button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button>
-                    </div>
                   ) : submissions.some((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated') ? (
                     <div className="inline-callout submitted">
                       <Icon name="check" size={16} />
                       <span>Your submission for today is {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.status} · {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.points ?? 0} point(s).</span>
                     </div>
                   ) : (
-                    <form className="submission-form" onSubmit={submitClubSolution}>
-                      <div className="submission-form-heading">
-                        <label htmlFor="commit-url">GITHUB COMMIT CODE OR FULL URL</label>
-                        <button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}>
-                          <Icon name="info" size={15} />
-                        </button>
+                    <div className="submission-box-wrap">
+                      <div className="submission-method-tabs" role="radiogroup" aria-label="Submission method">
+                        <label className={`submission-method-tab ${submissionMethod === 'github' ? 'active' : ''}`}>
+                          <input
+                            type="radio"
+                            name="submissionMethod"
+                            value="github"
+                            checked={submissionMethod === 'github'}
+                            onChange={() => setSubmissionMethod('github')}
+                          />
+                          <Icon name="github" size={15} />
+                          <span>GitHub Commit</span>
+                        </label>
+                        <label className={`submission-method-tab ${submissionMethod === 'leetcode' ? 'active' : ''}`}>
+                          <input
+                            type="radio"
+                            name="submissionMethod"
+                            value="leetcode"
+                            checked={submissionMethod === 'leetcode'}
+                            onChange={() => setSubmissionMethod('leetcode')}
+                          />
+                          <Icon name="leetcode" size={15} />
+                          <span>LeetCode Direct</span>
+                        </label>
                       </div>
-                      {submissionHelpOpen && (
-                        <div className="submission-help" id="submission-help">
-                          <strong>Before you submit</strong>
-                          <ol>
-                            <li>Create or use a public repository that you own under <code>@{account.githubUsername}</code>.</li>
-                            <li>Create or update exactly <code>{assignedQuestion.id}/solution.txt</code> directly inside the question folder. The file can contain any language, but must have at least one byte.</li>
-                            <li>Commit and push it during today’s assignment date. The GitHub author must match your linked account; commits made in GitHub's web editor use its web-flow committer and are accepted.</li>
-                            <li>Enter either your commit code/hash (e.g. <code>76c3f95</code>) or your full commit URL (e.g. <code>https://github.com/{account.githubUsername}/YOUR-REPO/commit/FULL_SHA</code>).</li>
-                          </ol>
-                          <p>Only the first valid submission for today earns a point. Admins can adjust points if needed.</p>
-                        </div>
+
+                      {submissionMethod === 'github' ? (
+                        !account.githubVerified ? (
+                          <div className="inline-callout">
+                            <Icon name="github" size={16} />
+                            <span>Connect the GitHub account you want to use; its verified username will replace the signup value.</span>
+                            <button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button>
+                          </div>
+                        ) : (
+                          <form className="submission-form" onSubmit={submitClubSolution}>
+                            <div className="submission-form-heading">
+                              <label htmlFor="commit-url">GITHUB COMMIT CODE OR FULL URL</label>
+                              <button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}>
+                                <Icon name="info" size={15} />
+                              </button>
+                            </div>
+                            {submissionHelpOpen && (
+                              <div className="submission-help" id="submission-help">
+                                <strong>Before you submit</strong>
+                                <ol>
+                                  <li>Create or use a public repository that you own under <code>@{account.githubUsername}</code>.</li>
+                                  <li>Create or update exactly <code>{assignedQuestion.id}/solution.txt</code> directly inside the question folder. The file can contain any language, but must have at least one byte.</li>
+                                  <li>Commit and push it during today’s assignment date. The GitHub author must match your linked account; commits made in GitHub's web editor use its web-flow committer and are accepted.</li>
+                                  <li>Enter either your commit code/hash (e.g. <code>76c3f95</code>) or your full commit URL (e.g. <code>https://github.com/{account.githubUsername}/YOUR-REPO/commit/FULL_SHA</code>).</li>
+                                </ol>
+                                <p>Only the first valid submission for today earns a point. Admins can adjust points if needed.</p>
+                              </div>
+                            )}
+                            <div className="submission-input-row">
+                              <input id="commit-url" type="text" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder={`e.g. 76c3f95 or https://github.com/${account.githubUsername}/REPO/commit/FULL_SHA`} />
+                              <button className="button button-dark" disabled={submissionBusy}>
+                                {submissionBusy ? 'Verifying…' : 'Verify and submit'} <Icon name="arrow" size={14} />
+                              </button>
+                            </div>
+                            <small>Enter a commit hash (e.g. <code>76c3f95</code>) or full commit URL. Required changed file: <code>{assignedQuestion.id}/solution.txt</code> (at least one byte). The linked GitHub account must own the repository.</small>
+                          </form>
+                        )
+                      ) : (
+                        !account.leetcodeUsername ? (
+                          <div className="inline-callout">
+                            <Icon name="info" size={16} />
+                            <span>Your LeetCode username is not added yet. Add it in your Account profile to submit directly.</span>
+                            <button type="button" onClick={() => navigate('progress')}>Go to Account</button>
+                          </div>
+                        ) : (
+                          <div className="leetcode-direct-box">
+                            <div className="leetcode-direct-meta">
+                              <span className="leetcode-user-tag">
+                                <Icon name="leetcode" size={15} />
+                                LeetCode: <strong>@{account.leetcodeUsername}</strong>
+                              </span>
+                              <span className="leetcode-target-tag">
+                                Target: <strong>{assignedQuestion.title}</strong> (LC #{assignedQuestion.id})
+                              </span>
+                            </div>
+                            <p>
+                              Solve <strong>{assignedQuestion.title}</strong> on LeetCode under <strong>@{account.leetcodeUsername}</strong> and obtain an <strong>Accepted</strong> status today ({club.assignment.dateKey} IST). Once submitted on LeetCode, click below to verify directly and award your club point.
+                            </p>
+                            <div className="leetcode-direct-actions">
+                              <button
+                                type="button"
+                                className="leetcode-submit-button"
+                                disabled={submissionBusy}
+                                onClick={submitLeetCodeSolution}
+                              >
+                                {submissionBusy ? 'Verifying on LeetCode…' : <>Submit with LeetCode <Icon name="arrow" size={14} /></>}
+                              </button>
+                              <a
+                                className="button button-quiet button-sm"
+                                href={`https://leetcode.com/problems/${assignedQuestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`}
+                                target="_blank"
+                                rel="noreferrer"
+                              >
+                                Open on LeetCode <Icon name="external" size={13} />
+                              </a>
+                            </div>
+                          </div>
+                        )
                       )}
-                      <div className="submission-input-row">
-                        <input id="commit-url" type="text" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder={`e.g. 76c3f95 or https://github.com/${account.githubUsername}/REPO/commit/FULL_SHA`} />
-                        <button className="button button-dark" disabled={submissionBusy}>
-                          {submissionBusy ? 'Verifying…' : 'Verify and submit'} <Icon name="arrow" size={14} />
-                        </button>
-                      </div>
-                      <small>Enter a commit hash (e.g. <code>76c3f95</code>) or full commit URL. Required changed file: <code>{assignedQuestion.id}/solution.txt</code> (at least one byte). The linked GitHub account must own the repository.</small>
-                    </form>
+                    </div>
                   )}
                 </>
               ) : (
@@ -1706,9 +1800,9 @@ function App() {
                                 target="_blank"
                                 rel="noreferrer"
                                 className="button button-quiet button-sm daily-commit-link"
-                                title="View submission commit"
+                                title={person.submissionType === 'leetcode' ? 'Open verified LeetCode problem' : 'View submission commit'}
                               >
-                                <span>View commit</span> <Icon name="external" size={12}/>
+                                <span>{person.submissionType === 'leetcode' ? 'LeetCode' : 'View commit'}</span> <Icon name="external" size={12}/>
                               </a>
                             )}
                           </div>

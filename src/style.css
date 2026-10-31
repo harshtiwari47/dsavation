@@ -1530,6 +1530,221 @@ h1, h2, h3, p { margin-top: 0; }
   border-color: rgba(74, 222, 128, 0.35);
 }
 
+/* Submission Method Selector Tabs */
+.submission-box-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 10px;
+}
+
+.submission-method-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 6px 0 4px;
+}
+
+.submission-method-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 18px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(20, 60, 42, 0.22);
+  background: rgba(255, 255, 255, 0.7);
+  color: #103825;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  user-select: none;
+}
+
+.submission-method-tab input[type="radio"] {
+  appearance: none;
+  -webkit-appearance: none;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  border: 2px solid rgba(20, 60, 42, 0.4);
+  background: transparent;
+  margin: 0;
+  display: grid;
+  place-content: center;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.submission-method-tab input[type="radio"]::before {
+  content: "";
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  transform: scale(0);
+  transition: transform 0.15s ease-in-out;
+  background-color: #059669;
+}
+
+.submission-method-tab input[type="radio"]:checked::before {
+  transform: scale(1);
+}
+
+.submission-method-tab input[type="radio"]:checked {
+  border-color: #059669;
+}
+
+.submission-method-tab:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(20, 60, 42, 0.45);
+}
+
+.submission-method-tab.active {
+  background: #ffffff;
+  border-color: #059669;
+  color: #064e3b;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.16);
+}
+
+:root[data-theme="dark"] .submission-method-tab {
+  border-color: rgba(74, 222, 128, 0.28);
+  background: rgba(13, 34, 24, 0.75);
+  color: #a7f3d0;
+}
+
+:root[data-theme="dark"] .submission-method-tab input[type="radio"] {
+  border-color: rgba(74, 222, 128, 0.5);
+}
+
+:root[data-theme="dark"] .submission-method-tab input[type="radio"]::before {
+  background-color: #34d399;
+}
+
+:root[data-theme="dark"] .submission-method-tab input[type="radio"]:checked {
+  border-color: #34d399;
+}
+
+:root[data-theme="dark"] .submission-method-tab:hover {
+  background: rgba(18, 48, 34, 0.9);
+  border-color: rgba(74, 222, 128, 0.5);
+}
+
+:root[data-theme="dark"] .submission-method-tab.active {
+  background: rgba(20, 52, 38, 0.95);
+  border-color: #34d399;
+  color: #ecfdf5;
+  box-shadow: 0 0 14px rgba(52, 211, 153, 0.2);
+}
+
+/* LeetCode Direct Box */
+.leetcode-direct-box {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1.5px solid rgba(20, 60, 42, 0.2);
+  border-radius: 14px;
+  padding: 18px 20px;
+  box-shadow: 0 4px 16px rgba(16, 50, 34, 0.06);
+}
+
+:root[data-theme="dark"] .leetcode-direct-box {
+  background: rgba(10, 26, 18, 0.9);
+  border-color: rgba(74, 222, 128, 0.25);
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.25);
+}
+
+.leetcode-direct-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.leetcode-user-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #103825;
+  background: rgba(16, 185, 129, 0.12);
+  padding: 5px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(16, 185, 129, 0.28);
+}
+
+:root[data-theme="dark"] .leetcode-user-tag {
+  color: #a7f3d0;
+  background: rgba(52, 211, 153, 0.14);
+  border-color: rgba(52, 211, 153, 0.3);
+}
+
+.leetcode-target-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.84rem;
+  color: #24523c;
+}
+
+:root[data-theme="dark"] .leetcode-target-tag {
+  color: #6ee7b7;
+}
+
+.leetcode-direct-box p {
+  margin: 0;
+  font-size: 0.89rem;
+  line-height: 1.55;
+  color: #1a3c2c;
+}
+
+:root[data-theme="dark"] .leetcode-direct-box p {
+  color: #d1fae5;
+}
+
+.leetcode-direct-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-top: 4px;
+}
+
+.leetcode-submit-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 10px 22px;
+  font-size: 0.92rem;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.35);
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.leetcode-submit-button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(16, 185, 129, 0.45);
+  background: linear-gradient(135deg, #34d399 0%, #059669 100%);
+}
+
+.leetcode-submit-button:disabled {
+  opacity: 0.65;
+  cursor: not-allowed;
+  transform: none;
+}
+
+:root[data-theme="dark"] .leetcode-submit-button {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #041f12;
+}
+
 .personal-card.liquid-glass,
 .personal-card.water-glass-card {
   border-color: rgba(30, 106, 80, 0.22);

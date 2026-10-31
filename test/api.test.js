@@ -13,6 +13,7 @@ let originalAdminEmails;
 let originalSecureCookie;
 let oauthGithubUsername = 'canonical-github-user';
 let leetcodePayload;
+let leetcodeRecentPayload;
 let leetcodeFetchCount = 0;
 
 function equalValue(left, right) {
@@ -199,10 +200,14 @@ before(() => {
   originalSecureCookie = process.env.SESSION_COOKIE_SECURE;
   process.env.ADMIN_EMAILS = 'admin@abes.ac.in';
   process.env.SESSION_COOKIE_SECURE = 'false';
-  globalThis.fetch = async (input) => {
+  globalThis.fetch = async (input, init) => {
     const url = new URL(String(input));
     if (url.hostname === 'leetcode.com' && url.pathname === '/graphql/') {
       leetcodeFetchCount += 1;
+      const bodyStr = String(init?.body || '');
+      if (bodyStr.includes('recentSubmissionList')) {
+        return new Response(JSON.stringify(leetcodeRecentPayload || { data: { recentSubmissionList: [] } }), { status: 200 });
+      }
       return new Response(JSON.stringify(leetcodePayload || { data: { matchedUser: null } }), { status: 200 });
     }
     if (url.hostname === 'github.com' && url.pathname === '/login/oauth/access_token') {
@@ -238,7 +243,7 @@ after(() => {
   else process.env.SESSION_COOKIE_SECURE = originalSecureCookie;
 });
 
-beforeEach(() => { commits.clear(); commitTrees.clear(); leetcodePayload = null; leetcodeFetchCount = 0; });
+beforeEach(() => { commits.clear(); commitTrees.clear(); leetcodePayload = null; leetcodeRecentPayload = null; leetcodeFetchCount = 0; });
 
 test('commit links, solution paths, and India assignment dates reject malformed or nested values', () => {
   assert.deepEqual(parsePersonalCommitUrl('https://github.com/alex/dsa/commit/abcdef0123456789'), { owner: 'alex', repository: 'dsa', sha: 'abcdef0123456789' });
@@ -1045,4 +1050,128 @@ test('explainer selection prioritizes second-year students, locks for today, and
   assert.equal(clubToday.data.assignment.explainer.name, 'Sophomore Alice');
   assert.equal(clubToday.data.dailyLeaderboard.length, 2);
   assert.equal(clubToday.data.dailyLeaderboard[0].rank, 1);
+});
+
+test('submitting solutions directly via LeetCode verifies titleSlug, statusDisplay, and India date', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const todayKey = indiaDay();
+
+  // Create today's assignment (LC 217: Contains Duplicate)
+  const assignRes = await call(db, '/admin/assignments', {
+    method: 'POST',
+    cookie: admin.cookie,
+    body: { dateKey: todayKey, questionId: 217 },
+  });
+  assert.equal(assignRes.response.status, 201);
+  const assignmentId = assignRes.data.assignment.id;
+
+  // Member with no leetcodeUsername
+  const memberNoLc = await seedUser(db, { name: 'No LC Member', email: 'nolc@abes.ac.in', username: 'nolc-gh', leetcodeUsername: '' });
+  const failNoLc = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: memberNoLc.cookie,
+    body: { assignmentId, type: 'leetcode' },
+  });
+  assert.equal(failNoLc.response.status, 400);
+  assert.match(failNoLc.data.error, /add your leetcode username/i);
+
+  // Member with leetcodeUsername
+  const member = await seedUser(db, { name: 'LC Member', email: 'lcmember@abes.ac.in', username: 'lcmember-gh', leetcodeUsername: 'lcmember_lc' });
+
+  // 1. When LeetCode returns no submissions
+  leetcodeRecentPayload = { data: { recentSubmissionList: [] } };
+  const failEmpty = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: member.cookie,
+    body: { assignmentId, type: 'leetcode' },
+  });
+  assert.equal(failEmpty.response.status, 400);
+  assert.match(failEmpty.data.error, /no accepted submission found/i);
+
+  // 2. When LeetCode returns Wrong Answer today
+  const noonEpochSec = Math.floor(dateAtIndiaNoon(todayKey).getTime() / 1000);
+  leetcodeRecentPayload = {
+    data: {
+      recentSubmissionList: [
+        {
+          title: 'Contains Duplicate',
+          titleSlug: 'contains-duplicate',
+          timestamp: String(noonEpochSec),
+          statusDisplay: 'Wrong Answer',
+          lang: 'python3',
+        },
+      ],
+    },
+  };
+  const failWrong = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: member.cookie,
+    body: { assignmentId, type: 'leetcode' },
+  });
+  assert.equal(failWrong.response.status, 400);
+  assert.match(failWrong.data.error, /wrong answer/i);
+
+  // 3. When LeetCode returns Accepted submission from yesterday
+  const yesterdayEpochSec = noonEpochSec - 24 * 60 * 60;
+  leetcodeRecentPayload = {
+    data: {
+      recentSubmissionList: [
+        {
+          title: 'Contains Duplicate',
+          titleSlug: 'contains-duplicate',
+          timestamp: String(yesterdayEpochSec),
+          statusDisplay: 'Accepted',
+          lang: 'cpp',
+        },
+      ],
+    },
+  };
+  const failOld = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: member.cookie,
+    body: { assignmentId, type: 'leetcode' },
+  });
+  assert.equal(failOld.response.status, 400);
+  assert.match(failOld.data.error, /from .+, but none today/i);
+
+  // 4. When LeetCode returns Accepted submission for today
+  leetcodeRecentPayload = {
+    data: {
+      recentSubmissionList: [
+        {
+          title: 'Contains Duplicate',
+          titleSlug: 'contains-duplicate',
+          timestamp: String(noonEpochSec),
+          statusDisplay: 'Accepted',
+          lang: 'cpp',
+        },
+      ],
+    },
+  };
+  const success = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: member.cookie,
+    body: { assignmentId, type: 'leetcode' },
+  });
+  assert.equal(success.response.status, 201);
+  assert.equal(success.data.submission.status, 'accepted');
+  assert.equal(success.data.submission.points, 1);
+  assert.match(success.data.submission.solutionPath, /LeetCode: @lcmember_lc \(cpp\)/);
+
+  // 5. Subsequent submission should reject duplicate
+  const duplicate = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: member.cookie,
+    body: { assignmentId, type: 'leetcode' },
+  });
+  assert.equal(duplicate.response.status, 409);
+  assert.match(duplicate.data.error, /already submitted/i);
+
+  // 6. Check club today leaderboard includes this member
+  const clubToday = await call(db, '/club/today', { cookie: member.cookie });
+  assert.equal(clubToday.data.acceptedCount, 1);
+  assert.equal(clubToday.data.dailyLeaderboard.length, 1);
+  assert.equal(clubToday.data.dailyLeaderboard[0].name, 'LC Member');
+  assert.equal(clubToday.data.dailyLeaderboard[0].submissionType, 'leetcode');
 });

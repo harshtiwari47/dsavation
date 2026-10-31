@@ -59,6 +59,14 @@ export function isOnAssignmentDay(value, dateKey) {
   return Number.isFinite(date.getTime()) && dayKey(date) === dateKey;
 }
 
+export function slugifyTitle(title) {
+  return String(title || '')
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
+
 function cookieSecure(req) {
   return process.env.SESSION_COOKIE_SECURE === 'true' ||
     process.env.VERCEL === '1' || req.headers['x-forwarded-proto'] === 'https';
@@ -537,6 +545,7 @@ async function getClubToday(db) {
       points: item.points ?? 1,
       submittedAt: item.submittedAt,
       commitUrl: item.commitUrl,
+      submissionType: item.submissionMethod || (item.verificationSource === 'leetcode-api' ? 'leetcode' : 'github'),
     };
   });
   return {
@@ -556,48 +565,174 @@ async function getClubToday(db) {
 }
 
 async function makeSubmission(db, req, user, body) {
-  if (!user.githubVerifiedAt) throw new HttpError(403, 'Link your verified GitHub account before submitting a club solution.');
-  await allowRequest(db, req, `submission-${user._id}`, 5, 60 * 60 * 1000);
+  const isLeetCode = body.type === 'leetcode' || body.method === 'leetcode' || body.submissionMethod === 'leetcode';
+
+  if (!isLeetCode && !user.githubVerifiedAt) {
+    throw new HttpError(403, 'Link your verified GitHub account before submitting a club solution.');
+  }
+  if (isLeetCode && !String(user.leetcodeUsername || '').trim()) {
+    throw new HttpError(400, 'Add your LeetCode username in your Account settings before submitting directly via LeetCode.');
+  }
+
   const assignment = await getTodayAssignment(db);
   if (!assignment || String(assignment._id) !== String(body.assignmentId || '')) {
     throw new HttpError(409, 'Submissions are only open for today’s published Question of the Day.');
   }
   const existing = await db.collection('submissions').findOne({ assignmentId: assignment._id, userId: user._id });
   if (existing && existing.status !== 'invalidated') throw new HttpError(409, 'You already submitted for today’s assignment.');
-  
-  const rawInput = body.commitUrl || body.commitCode || body.commitSha || '';
-  const { owner, repository, sha, commitData } = await resolveCommitInput(db, user, rawInput);
-  const username = String(user.githubUsername || '').toLowerCase();
-  if (owner.toLowerCase() !== username) throw new HttpError(403, 'Use a repository owned by your linked GitHub account.');
-  const commit = commitData || await githubJson(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/commits/${encodeURIComponent(sha)}`, process.env.GITHUB_TOKEN);
-  const author = String(commit.author?.login || '').toLowerCase();
-  const committer = String(commit.committer?.login || '').toLowerCase();
-  if (author !== username || (committer !== username && committer !== 'web-flow')) {
-    throw new HttpError(403, 'GitHub could not confirm that the commit author is your linked account.');
+
+  let submission;
+  if (isLeetCode) {
+    const leetcodeUser = String(user.leetcodeUsername || '').trim();
+    await allowRequest(db, req, `submission-leetcode-${user._id}`, 15, 60 * 60 * 1000);
+
+    const query = `query recentSubmissions($username: String!, $limit: Int) {
+      recentSubmissionList(username: $username, limit: $limit) {
+        title
+        titleSlug
+        timestamp
+        statusDisplay
+        lang
+      }
+    }`;
+
+    let response;
+    try {
+      response = await fetch('https://leetcode.com/graphql/', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json',
+          'Content-Type': 'application/json',
+          Referer: `https://leetcode.com/${encodeURIComponent(leetcodeUser)}/`,
+          'User-Agent': 'DSAvation-Club-Directory',
+        },
+        body: JSON.stringify({ query, variables: { username: leetcodeUser, limit: 20 } }),
+        signal: AbortSignal.timeout(10000),
+      });
+    } catch {
+      throw new HttpError(502, 'Could not connect to LeetCode public API. Please try again in a few moments.');
+    }
+    if (!response.ok) {
+      throw new HttpError(502, 'LeetCode public API returned an error. Please try again.');
+    }
+    const payload = await response.json().catch(() => ({}));
+    const submissionList = payload?.data?.recentSubmissionList;
+    if (!Array.isArray(submissionList)) {
+      throw new HttpError(502, 'Could not retrieve recent submissions from LeetCode. Verify your LeetCode username and try again.');
+    }
+
+    const assignedQuestion = questionById.get(Number(assignment.questionId));
+    const targetSlug = slugifyTitle(assignedQuestion?.title || '');
+    const targetTitle = String(assignedQuestion?.title || '').trim().toLowerCase();
+
+    const isMatch = (item) => {
+      const slug = String(item.titleSlug || '').toLowerCase().trim();
+      const title = String(item.title || '').toLowerCase().trim();
+      return (
+        slug === targetSlug ||
+        title === targetTitle ||
+        slugifyTitle(title) === targetSlug ||
+        slug.replace(/-/g, '') === targetSlug.replace(/-/g, '')
+      );
+    };
+
+    const acceptedToday = submissionList.filter((item) => {
+      if (!isMatch(item)) return false;
+      if (item.statusDisplay !== 'Accepted') return false;
+      const ts = Number(item.timestamp);
+      const date = new Date(ts > 1e11 ? ts : ts * 1000);
+      return isOnAssignmentDay(date, assignment.dateKey);
+    });
+
+    if (!acceptedToday.length) {
+      const anyToday = submissionList.find((item) => {
+        if (!isMatch(item)) return false;
+        const ts = Number(item.timestamp);
+        const date = new Date(ts > 1e11 ? ts : ts * 1000);
+        return isOnAssignmentDay(date, assignment.dateKey);
+      });
+      if (anyToday && anyToday.statusDisplay !== 'Accepted') {
+        throw new HttpError(400, `Your recent submission for "${assignedQuestion?.title || 'today’s question'}" on LeetCode has status "${anyToday.statusDisplay}". An "Accepted" submission is required.`);
+      }
+      const anyAccepted = submissionList.find((item) => isMatch(item) && item.statusDisplay === 'Accepted');
+      if (anyAccepted) {
+        const pastDateStr = new Intl.DateTimeFormat('en-GB', { timeZone: TZ, day: 'numeric', month: 'short', year: 'numeric' }).format(new Date(Number(anyAccepted.timestamp) * 1000));
+        throw new HttpError(400, `Found an accepted submission for "${assignedQuestion?.title || 'today’s question'}" on your LeetCode account from ${pastDateStr}, but none today (${assignment.dateKey} IST). Please submit a fresh accepted solution on LeetCode today.`);
+      }
+      throw new HttpError(400, `No accepted submission found for "${assignedQuestion?.title || 'today’s question'}" on LeetCode account @${leetcodeUser} today (${assignment.dateKey} IST). Solve and submit the problem on LeetCode, then click submit again.`);
+    }
+
+    const bestMatch = acceptedToday[0];
+    const bestDate = new Date(Number(bestMatch.timestamp) > 1e11 ? Number(bestMatch.timestamp) : Number(bestMatch.timestamp) * 1000);
+    const now = new Date();
+    submission = {
+      assignmentId: assignment._id,
+      userId: user._id,
+      questionId: assignment.questionId,
+      repository: `leetcode/@${leetcodeUser}`,
+      commitSha: `lc-${bestMatch.timestamp}`,
+      commitUrl: `https://leetcode.com/problems/${bestMatch.titleSlug || targetSlug}/`,
+      solutionPath: `LeetCode: @${leetcodeUser} (${bestMatch.lang || 'code'})`,
+      solutionSizeBytes: 1,
+      commitDate: bestDate,
+      submittedAt: now,
+      status: 'accepted',
+      points: 1,
+      authorLogin: leetcodeUser,
+      committerLogin: leetcodeUser,
+      verifiedPusher: true,
+      verificationSource: 'leetcode-api',
+      submissionMethod: 'leetcode',
+      reviewedAt: now,
+      reviewedBy: null,
+      reviewNote: `Verified via LeetCode public API (${bestMatch.lang || 'code'})`,
+      activeSlot: true,
+      leetcodeDetails: {
+        title: bestMatch.title,
+        titleSlug: bestMatch.titleSlug,
+        lang: bestMatch.lang,
+        timestamp: bestMatch.timestamp,
+      },
+    };
+  } else {
+    if (!user.githubVerifiedAt) throw new HttpError(403, 'Link your verified GitHub account before submitting a club solution.');
+    await allowRequest(db, req, `submission-${user._id}`, 5, 60 * 60 * 1000);
+
+    const rawInput = body.commitUrl || body.commitCode || body.commitSha || '';
+    const { owner, repository, sha, commitData } = await resolveCommitInput(db, user, rawInput);
+    const username = String(user.githubUsername || '').toLowerCase();
+    if (owner.toLowerCase() !== username) throw new HttpError(403, 'Use a repository owned by your linked GitHub account.');
+    const commit = commitData || await githubJson(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/commits/${encodeURIComponent(sha)}`, process.env.GITHUB_TOKEN);
+    const author = String(commit.author?.login || '').toLowerCase();
+    const committer = String(commit.committer?.login || '').toLowerCase();
+    if (author !== username || (committer !== username && committer !== 'web-flow')) {
+      throw new HttpError(403, 'GitHub could not confirm that the commit author is your linked account.');
+    }
+    const commitDate = commit.commit?.committer?.date;
+    const authorDate = commit.commit?.author?.date;
+    if (!isOnAssignmentDay(commitDate, assignment.dateKey) || !isOnAssignmentDay(authorDate, assignment.dateKey)) {
+      throw new HttpError(400, 'The file must be created and committed during the assignment day in Asia/Kolkata.');
+    }
+    const matchingFiles = (commit.files || []).filter((file) => file.status !== 'removed' && isAssignmentSolutionPath(file.filename, assignment.questionId));
+    if (!matchingFiles.length) throw new HttpError(400, `This commit must create or change ${assignment.questionId}/solution.txt.`);
+    const tree = await githubJson(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/git/trees/${encodeURIComponent(commit.commit.tree.sha)}?recursive=1`, process.env.GITHUB_TOKEN);
+    const sizeByPath = new Map((tree.tree || []).filter((item) => item.type === 'blob').map((item) => [item.path, Number(item.size)]));
+    const matchingFile = matchingFiles.find((file) => Number.isFinite(sizeByPath.get(file.filename)) && sizeByPath.get(file.filename) > 0);
+    const solutionSizeBytes = matchingFile ? sizeByPath.get(matchingFile.filename) : 0;
+    if (!matchingFile) throw new HttpError(400, `${assignment.questionId}/solution.txt must contain at least one byte at this commit.`);
+    const now = new Date();
+    submission = {
+      assignmentId: assignment._id, userId: user._id, questionId: assignment.questionId,
+      repository: `${owner}/${repository}`, commitSha: commit.sha,
+      commitUrl: commit.html_url || `https://github.com/${owner}/${repository}/commit/${commit.sha}`,
+      solutionPath: matchingFile.filename, solutionSizeBytes, commitDate: new Date(commitDate), submittedAt: now,
+      status: 'accepted', points: 1, authorLogin: commit.author.login, committerLogin: commit.committer.login,
+      verifiedPusher: true, verificationSource: 'github-commit-api', submissionMethod: 'github', reviewedAt: now,
+      reviewedBy: null, reviewNote: '', activeSlot: true,
+    };
+    await db.collection('users').updateOne({ _id: user._id }, { $set: { lastRepository: repository } });
   }
-  const commitDate = commit.commit?.committer?.date;
-  const authorDate = commit.commit?.author?.date;
-  if (!isOnAssignmentDay(commitDate, assignment.dateKey) || !isOnAssignmentDay(authorDate, assignment.dateKey)) {
-    throw new HttpError(400, 'The file must be created and committed during the assignment day in Asia/Kolkata.');
-  }
-  const matchingFiles = (commit.files || []).filter((file) => file.status !== 'removed' && isAssignmentSolutionPath(file.filename, assignment.questionId));
-  if (!matchingFiles.length) throw new HttpError(400, `This commit must create or change ${assignment.questionId}/solution.txt.`);
-  const tree = await githubJson(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/git/trees/${encodeURIComponent(commit.commit.tree.sha)}?recursive=1`, process.env.GITHUB_TOKEN);
-  const sizeByPath = new Map((tree.tree || []).filter((item) => item.type === 'blob').map((item) => [item.path, Number(item.size)]));
-  const matchingFile = matchingFiles.find((file) => Number.isFinite(sizeByPath.get(file.filename)) && sizeByPath.get(file.filename) > 0);
-  const solutionSizeBytes = matchingFile ? sizeByPath.get(matchingFile.filename) : 0;
-  if (!matchingFile) throw new HttpError(400, `${assignment.questionId}/solution.txt must contain at least one byte at this commit.`);
-  const now = new Date();
-  const submission = {
-    assignmentId: assignment._id, userId: user._id, questionId: assignment.questionId,
-    repository: `${owner}/${repository}`, commitSha: commit.sha,
-    commitUrl: commit.html_url || `https://github.com/${owner}/${repository}/commit/${commit.sha}`,
-    solutionPath: matchingFile.filename, solutionSizeBytes, commitDate: new Date(commitDate), submittedAt: now,
-    status: 'accepted', points: 1, authorLogin: commit.author.login, committerLogin: commit.committer.login,
-    verifiedPusher: true, verificationSource: 'github-commit-api', reviewedAt: now,
-    reviewedBy: null, reviewNote: '', activeSlot: true,
-  };
-  await db.collection('users').updateOne({ _id: user._id }, { $set: { lastRepository: repository } });
+
   if (existing) {
     const previousAttempt = {
       commitUrl: existing.commitUrl, commitSha: existing.commitSha,
@@ -900,6 +1035,7 @@ async function listSubmissions(db, req, user, url) {
     id: String(item._id), status: item.status, points: item.points ?? (item.status === 'accepted' ? 1 : 0), commitUrl: item.commitUrl, solutionPath: item.solutionPath, submittedAt: item.submittedAt,
     commitDate: item.commitDate, reviewNote: item.reviewNote,
     verifiedPusher: Boolean(item.verifiedPusher), verificationSource: item.verificationSource || 'commit-link',
+    submissionMethod: item.submissionMethod || (item.verificationSource === 'leetcode-api' ? 'leetcode' : 'github'),
     member: (() => { const profile = profileById.get(String(item.userId)); return profile ? {
       name: profile.name, department: profile.department, githubUsername: profile.githubUsername,
     } : null; })(),
@@ -964,6 +1100,7 @@ async function getTodaySubmissions(db, req, user, url) {
       status: item.status,
       points: item.points ?? (item.status === 'accepted' ? 1 : 0),
       verifiedPusher: Boolean(item.verifiedPusher),
+      submissionMethod: item.submissionMethod || (item.verificationSource === 'leetcode-api' ? 'leetcode' : 'github'),
       reviewNote: item.reviewNote || '',
       questionId: assignment.questionId,
     };
