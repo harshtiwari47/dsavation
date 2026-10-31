@@ -491,7 +491,7 @@ function App() {
   const [resetError, setResetError] = useState('');
   const [profileBusy, setProfileBusy] = useState(false);
   const [commitUrl, setCommitUrl] = useState('');
-  const [accountSubmissionMethod, setAccountSubmissionMethod] = useState(() => account?.defaultSubmissionMethod || 'github');
+  const [accountSubmissionMethod, setAccountSubmissionMethod] = useState(() => (account?.explicitSubmissionMethod ? account?.defaultSubmissionMethod : 'github') || 'github');
   const [submissionHelpOpen, setSubmissionHelpOpen] = useState(false);
   const [submissionBusy, setSubmissionBusy] = useState(false);
   const [assignmentDate, setAssignmentDate] = useState(localDay());
@@ -522,10 +522,12 @@ function App() {
     setAvatarDraftSeed(isCustom ? (customUrl || seed) : seed);
     setAvatarDraftCustomUrl(customUrl || '');
     setAvatarChoices(choices);
-    if (account.defaultSubmissionMethod) {
+    if (account.explicitSubmissionMethod && account.defaultSubmissionMethod) {
       setAccountSubmissionMethod(account.defaultSubmissionMethod);
+    } else {
+      setAccountSubmissionMethod('github');
     }
-  }, [account?.id, account?.defaultSubmissionMethod]);
+  }, [account?.id, account?.defaultSubmissionMethod, account?.explicitSubmissionMethod]);
 
   const byId = useMemo(() => new Map(questions.map((question) => [question.id, question])), [questions]);
   const patterns = useMemo(() => [...new Set(questions.map((item) => item.pattern))].sort((a, b) => a.localeCompare(b)), [questions]);
@@ -1415,29 +1417,6 @@ function App() {
               <span className="account-pref-label">DEFAULT SUBMISSION METHOD</span>
               <div className="account-radio-group" role="radiogroup" aria-label="Default submission method">
                 <label
-                  className={`account-radio-card ${accountSubmissionMethod === 'leetcode' ? 'selected' : ''}`}
-                  onClick={() => setAccountSubmissionMethod('leetcode')}
-                >
-                  <input
-                    type="radio"
-                    name="defaultSubmissionMethod"
-                    value="leetcode"
-                    checked={accountSubmissionMethod === 'leetcode'}
-                    onChange={() => setAccountSubmissionMethod('leetcode')}
-                    className="account-radio-input"
-                  />
-                  <div className="account-radio-indicator" aria-hidden="true">
-                    <span className="account-radio-dot" />
-                  </div>
-                  <div className="account-radio-icon">
-                    <IconifyIcon icon="bxl:leetcode" width={20} height={20}/>
-                  </div>
-                  <div className="account-radio-text">
-                    <strong>LeetCode Direct</strong>
-                    <span>Automatically verify your accepted LeetCode submissions for today</span>
-                  </div>
-                </label>
-                <label
                   className={`account-radio-card ${accountSubmissionMethod === 'github' ? 'selected' : ''}`}
                   onClick={() => setAccountSubmissionMethod('github')}
                 >
@@ -1458,6 +1437,29 @@ function App() {
                   <div className="account-radio-text">
                     <strong>GitHub Commit</strong>
                     <span>Submit a commit code or full URL from your personal solutions repo</span>
+                  </div>
+                </label>
+                <label
+                  className={`account-radio-card ${accountSubmissionMethod === 'leetcode' ? 'selected' : ''}`}
+                  onClick={() => setAccountSubmissionMethod('leetcode')}
+                >
+                  <input
+                    type="radio"
+                    name="defaultSubmissionMethod"
+                    value="leetcode"
+                    checked={accountSubmissionMethod === 'leetcode'}
+                    onChange={() => setAccountSubmissionMethod('leetcode')}
+                    className="account-radio-input"
+                  />
+                  <div className="account-radio-indicator" aria-hidden="true">
+                    <span className="account-radio-dot" />
+                  </div>
+                  <div className="account-radio-icon">
+                    <IconifyIcon icon="bxl:leetcode" width={20} height={20}/>
+                  </div>
+                  <div className="account-radio-text">
+                    <strong>LeetCode Direct</strong>
+                    <span>Automatically verify your accepted LeetCode submissions for today</span>
                   </div>
                 </label>
               </div>

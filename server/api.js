@@ -168,6 +168,7 @@ function formatAvatar(user, fallbackId) {
 function account(user) {
   if (!user) return null;
   const avatar = formatAvatar(user);
+  const explicit = Boolean(user.explicitSubmissionMethod);
   return {
     id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
     email: user.email, githubUsername: user.githubUsername || '', leetcodeUsername: user.leetcodeUsername || '',
@@ -176,7 +177,8 @@ function account(user) {
     avatarUrl: avatar.avatarUrl,
     githubVerified: Boolean(user.githubVerifiedAt), role: user.role || 'member',
     showPublic: Boolean(user.showPublic), createdAt: user.createdAt,
-    defaultSubmissionMethod: user.defaultSubmissionMethod || 'github',
+    explicitSubmissionMethod: explicit,
+    defaultSubmissionMethod: explicit ? (user.defaultSubmissionMethod || 'github') : 'github',
   };
 }
 
@@ -415,13 +417,15 @@ async function updateProfile(db, req, user, body) {
     avatarUrl = '';
   }
   let defaultSubmissionMethod = user.defaultSubmissionMethod || 'github';
+  let explicitSubmissionMethod = Boolean(user.explicitSubmissionMethod);
   if (body.defaultSubmissionMethod !== undefined) {
     if (!['leetcode', 'github'].includes(body.defaultSubmissionMethod)) {
       throw new HttpError(400, 'Choose a valid default submission method (leetcode or github).');
     }
     defaultSubmissionMethod = body.defaultSubmissionMethod;
+    explicitSubmissionMethod = true;
   }
-  const update = { name, department, studyYear, leetcodeUsername, defaultSubmissionMethod, avatarStyle, avatarSeed, avatarUrl, updatedAt: new Date() };
+  const update = { name, department, studyYear, leetcodeUsername, defaultSubmissionMethod, explicitSubmissionMethod, avatarStyle, avatarSeed, avatarUrl, updatedAt: new Date() };
   const unset = {};
   if (!githubUsername) {
     Object.assign(update, { githubUsername: '' });
