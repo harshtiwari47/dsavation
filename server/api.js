@@ -296,7 +296,7 @@ async function signup(db, req, res, body) {
   const user = {
     name, department, studyYear, email, passwordHash: await bcrypt.hash(password, 12), leetcodeUsername,
     githubUsername: gh.login, githubUserLower, githubId: gh.id,
-    githubVerifiedAt: null, showPublic: body.showPublic === true,
+    githubVerifiedAt: null, showPublic: body.showPublic !== false,
     approvalStatus: administrator ? 'approved' : 'pending',
     approvedAt: administrator ? now : null, approvedBy: administrator ? 'ADMIN_EMAILS' : null,
     role: administrator ? 'admin' : 'member', createdAt: now, updatedAt: now,
@@ -506,29 +506,52 @@ async function getTodayAssignment(db) {
 
 async function getClubToday(db) {
   const assignment = await getTodayAssignment(db);
-  if (!assignment) return { dateKey: dayKey(), assignment: null, submittedCount: 0, acceptedCount: 0, participants: [] };
+  if (!assignment) return { dateKey: dayKey(), assignment: null, submittedCount: 0, acceptedCount: 0, participants: [], dailyLeaderboard: [] };
   const submissions = await db.collection('submissions').find({ assignmentId: assignment._id }).sort({ submittedAt: 1 }).toArray();
   const userIds = [...new Set(submissions.map((item) => String(item.userId)))].map((id) => new ObjectId(id));
   const profiles = userIds.length ? await db.collection('users').find(approvedUserFilter({ _id: { $in: userIds } }), {
-    projection: { name: 1, department: 1, showPublic: 1, githubUsername: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
+    projection: { name: 1, department: 1, studyYear: 1, showPublic: 1, githubUsername: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
   }).toArray() : [];
   const profileById = new Map(profiles.map((profile) => [String(profile._id), profile]));
   const activeSubmissions = submissions.filter((item) => item.status !== 'invalidated' && profileById.has(String(item.userId)));
   const participants = activeSubmissions.filter((item) => item.status === 'accepted').flatMap((item) => {
     const profile = profileById.get(String(item.userId));
     return profile ? [{
-      name: profile.showPublic ? profile.name : profile.githubUsername ? `@${profile.githubUsername}` : 'ABES member',
-      department: profile.showPublic ? profile.department : '',
+      name: profile.name,
+      department: profile.department,
       githubUsername: profile.githubUsername,
       ...formatAvatar(profile),
     }] : [];
   });
+  const dailyLeaderboard = activeSubmissions.filter((item) => item.status === 'accepted').map((item, index) => {
+    const profile = profileById.get(String(item.userId));
+    return {
+      rank: index + 1,
+      id: String(item._id),
+      userId: String(item.userId),
+      name: profile?.name || item.authorLogin || 'Member',
+      department: profile?.department || '',
+      studyYear: profile?.studyYear || '',
+      githubUsername: profile?.githubUsername || item.authorLogin || '',
+      ...formatAvatar(profile, item.userId),
+      points: item.points ?? 1,
+      submittedAt: item.submittedAt,
+      commitUrl: item.commitUrl,
+    };
+  });
   return {
     dateKey: dayKey(),
-    assignment: { id: String(assignment._id), questionId: assignment.questionId, dateKey: assignment.dateKey, createdByName: assignment.createdByName },
+    assignment: {
+      id: String(assignment._id),
+      questionId: assignment.questionId,
+      dateKey: assignment.dateKey,
+      createdByName: assignment.createdByName,
+      explainer: assignment.explainer || null,
+    },
     submittedCount: activeSubmissions.length,
     acceptedCount: activeSubmissions.filter((item) => item.status === 'accepted').length,
     participants,
+    dailyLeaderboard,
   };
 }
 
@@ -1015,6 +1038,13 @@ async function getTodaySubmissions(db, req, user, url) {
   return {
     dateKey: assignment.dateKey,
     assignmentId: String(assignment._id),
+    assignment: {
+      id: String(assignment._id),
+      questionId: assignment.questionId,
+      dateKey: assignment.dateKey,
+      createdByName: assignment.createdByName,
+      explainer: assignment.explainer || null,
+    },
     questionId: assignment.questionId,
     questionTitle: questionById.get(assignment.questionId)?.title || `LeetCode #${assignment.questionId}`,
     totalAttempted: rows.length,
@@ -1024,7 +1054,122 @@ async function getTodaySubmissions(db, req, user, url) {
     pendingCount: rows.filter((r) => r.status === 'pending').length,
     submissions: rows,
     notAttempted: notAttemptedRows,
+    explainer: assignment.explainer || null,
   };
+}
+
+async function pickTodayExplainer(db, user) {
+  requireRole(user, 'lead', 'admin');
+  const assignment = await getTodayAssignment(db);
+  if (!assignment) {
+    throw new HttpError(400, 'No Question of the Day is published for today.');
+  }
+
+  // 1. If already selected for today, return the locked explainer!
+  if (assignment.explainer) {
+    return { explainer: assignment.explainer, isExisting: true };
+  }
+
+  // 2. Query today's submissions (non-invalidated)
+  const submissions = await db.collection('submissions')
+    .find({ assignmentId: assignment._id, status: { $ne: 'invalidated' } })
+    .sort({ submittedAt: 1 })
+    .toArray();
+
+  if (!submissions.length) {
+    throw new HttpError(400, 'No members have attempted today’s question yet.');
+  }
+
+  const userIds = [...new Set(submissions.map((s) => String(s.userId)))].map((id) => new ObjectId(id));
+  const profiles = await db.collection('users').find(approvedUserFilter({ _id: { $in: userIds } }), {
+    projection: { name: 1, email: 1, department: 1, studyYear: 1, githubUsername: 1, leetcodeUsername: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
+  }).toArray();
+  const profileById = new Map(profiles.map((p) => [String(p._id), p]));
+
+  const candidates = submissions.map((sub) => {
+    const profile = profileById.get(String(sub.userId));
+    return {
+      userId: String(sub.userId),
+      submissionId: String(sub._id),
+      name: profile?.name || sub.authorLogin || 'Member',
+      email: profile?.email || '',
+      department: profile?.department || '',
+      studyYear: profile?.studyYear || '',
+      githubUsername: profile?.githubUsername || sub.authorLogin || '',
+      leetcodeUsername: profile?.leetcodeUsername || '',
+      ...formatAvatar(profile, sub.userId),
+      submittedAt: sub.submittedAt,
+      status: sub.status,
+      points: sub.points ?? (sub.status === 'accepted' ? 1 : 0),
+      commitUrl: sub.commitUrl,
+      questionId: assignment.questionId,
+    };
+  }).filter((c) => profileById.has(c.userId));
+
+  if (!candidates.length) {
+    throw new HttpError(400, 'No eligible members found among today’s submitters.');
+  }
+
+  const acceptedCandidates = candidates.filter((c) => c.status === 'accepted');
+  const pool = acceptedCandidates.length > 0 ? acceptedCandidates : candidates;
+
+  // Past assignments where an explainer was selected
+  const pastAssignments = await db.collection('assignments')
+    .find({ explainerUserId: { $exists: true, $ne: null } }, { projection: { explainerUserId: 1 } })
+    .toArray();
+  const pastExplainerIds = new Set(pastAssignments.map((a) => String(a.explainerUserId)));
+
+  // "dont repeat same person until you cover all second year student"
+  const secondYearUnpicked = pool.filter((c) => c.studyYear === 'second-year' && !pastExplainerIds.has(c.userId));
+
+  let chosen;
+  if (secondYearUnpicked.length > 0) {
+    chosen = secondYearUnpicked[Math.floor(Math.random() * secondYearUnpicked.length)];
+  } else {
+    // If all second-years among today's submitters were picked in the past, or none submitted:
+    const othersUnpicked = pool.filter((c) => !pastExplainerIds.has(c.userId));
+    if (othersUnpicked.length > 0) {
+      chosen = othersUnpicked[Math.floor(Math.random() * othersUnpicked.length)];
+    } else {
+      // Everyone has been picked in the past: prioritize second-years if present, otherwise any
+      const allSecondYears = pool.filter((c) => c.studyYear === 'second-year');
+      const fallbackPool = allSecondYears.length > 0 ? allSecondYears : pool;
+      chosen = fallbackPool[Math.floor(Math.random() * fallbackPool.length)];
+    }
+  }
+
+  const explainer = {
+    id: chosen.userId,
+    userId: chosen.userId,
+    name: chosen.name,
+    email: chosen.email,
+    department: chosen.department,
+    studyYear: chosen.studyYear,
+    githubUsername: chosen.githubUsername,
+    leetcodeUsername: chosen.leetcodeUsername,
+    avatarStyle: chosen.avatarStyle,
+    avatarSeed: chosen.avatarSeed,
+    avatarUrl: chosen.avatarUrl,
+    submittedAt: chosen.submittedAt,
+    status: chosen.status,
+    points: chosen.points,
+    commitUrl: chosen.commitUrl,
+    questionId: assignment.questionId,
+    pickedAt: new Date(),
+  };
+
+  await db.collection('assignments').updateOne(
+    { _id: assignment._id },
+    { $set: { explainerUserId: new ObjectId(chosen.userId), explainer } }
+  );
+
+  await recordAdminActivity(db, user, 'explainer_selected', { id: assignment._id, label: assignment.dateKey }, {
+    explainerUserId: chosen.userId,
+    explainerName: chosen.name,
+    studyYear: chosen.studyYear,
+  });
+
+  return { explainer, isNew: true };
 }
 
 async function reviewSubmission(db, user, submissionId, body) {
@@ -1388,6 +1533,9 @@ export async function handleApiNode(req, res, options = {}) {
         });
       }
       return json(res, 200, result);
+    }
+    if (url.pathname === '/api/admin/pick-explainer' && method === 'POST') {
+      return json(res, 200, await pickTodayExplainer(db, user));
     }
     const reviewMatch = url.pathname.match(/^\/api\/admin\/submissions\/([a-f0-9]{24})$/i);
     if (reviewMatch && method === 'PATCH') {

@@ -981,3 +981,68 @@ test('punctuality is 100% when one question is assigned, and accurately reflects
   // Solver Two missed yesterday's concluded question (0 out of 1 past scheduled questions)
   assert.equal(s2Updated.punctuality, 0);
 });
+
+test('explainer selection prioritizes second-year students, locks for today, and avoids repeating', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedAdmin(db);
+  const memberNonAdmin = await seedUser(db, { name: 'Normal Guy', email: 'norm@abes.ac.in', username: 'norm-user' });
+
+  // 1. Regular member cannot call pick-explainer
+  const denied = await call(db, '/admin/pick-explainer', { method: 'POST', cookie: memberNonAdmin.cookie });
+  assert.equal(denied.response.status, 403);
+
+  // 2. Publish assignment for today
+  const indiaToday = new Intl.DateTimeFormat('sv-SE', {
+    timeZone: 'Asia/Kolkata', year: 'numeric', month: '2-digit', day: '2-digit'
+  }).format(new Date());
+
+  const assignRes = await call(db, '/admin/assignments', { method: 'POST', cookie: admin.cookie, body: { dateKey: indiaToday, questionId: 217 } });
+  const assignmentId = assignRes.data.assignment.id;
+
+  // Create 3 submitters:
+  // - Third year student
+  // - Second year student A
+  // - Second year student B
+  const thirdYearStudent = await seedUser(db, { name: 'Senior Guy', email: 'senior@abes.ac.in', username: 'senior-dev', studyYear: 'third-year' });
+  const secondYearA = await seedUser(db, { name: 'Sophomore Alice', email: 'alice@abes.ac.in', username: 'alice-2nd', studyYear: 'second-year' });
+  const secondYearB = await seedUser(db, { name: 'Sophomore Bob', email: 'bob@abes.ac.in', username: 'bob-2nd', studyYear: 'second-year' });
+
+  // Submissions for today
+  await db.collection('submissions').insertOne({
+    assignmentId: new ObjectId(assignmentId),
+    userId: thirdYearStudent.user._id,
+    questionId: 217,
+    status: 'accepted',
+    points: 1,
+    commitUrl: 'https://github.com/senior-dev/repo/commit/1111111',
+    submittedAt: new Date(),
+  });
+  await db.collection('submissions').insertOne({
+    assignmentId: new ObjectId(assignmentId),
+    userId: secondYearA.user._id,
+    questionId: 217,
+    status: 'accepted',
+    points: 1,
+    commitUrl: 'https://github.com/alice-2nd/repo/commit/2222222',
+    submittedAt: new Date(),
+  });
+
+  // Pick explainer today: must pick secondYearA over thirdYearStudent!
+  const pick1 = await call(db, '/admin/pick-explainer', { method: 'POST', cookie: admin.cookie });
+  assert.equal(pick1.response.status, 200);
+  assert.equal(pick1.data.isNew, true);
+  assert.equal(pick1.data.explainer.name, 'Sophomore Alice');
+  assert.equal(pick1.data.explainer.studyYear, 'second-year');
+
+  // Calling again for today: must return the exact same explainer (locked)!
+  const pickRepeat = await call(db, '/admin/pick-explainer', { method: 'POST', cookie: admin.cookie });
+  assert.equal(pickRepeat.response.status, 200);
+  assert.equal(pickRepeat.data.isExisting, true);
+  assert.equal(pickRepeat.data.explainer.name, 'Sophomore Alice');
+
+  // Verify getClubToday returns this explainer and dailyLeaderboard
+  const clubToday = await call(db, '/club/today', { cookie: admin.cookie });
+  assert.equal(clubToday.data.assignment.explainer.name, 'Sophomore Alice');
+  assert.equal(clubToday.data.dailyLeaderboard.length, 2);
+  assert.equal(clubToday.data.dailyLeaderboard[0].rank, 1);
+});

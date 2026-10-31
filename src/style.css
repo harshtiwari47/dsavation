@@ -832,11 +832,12 @@ h1, h2, h3, p { margin-top: 0; }
 .page-heading { margin: 2px 0 26px; display: flex; align-items: end; justify-content: space-between; gap: 25px; }
 .page-heading h1 { margin-bottom: 7px; }
 .page-heading p { max-width: 620px; margin: 0; color: #567470; font-size: 0.75rem; line-height: 1.6; }
-.metric-card, .club-date-badge { min-width: 135px; padding: 14px 16px; display: grid; gap: 4px; border-radius: 12px; }
+.metric-card { min-width: 135px; padding: 14px 16px; display: grid; gap: 4px; border-radius: 12px; }
 .metric-card strong { color: var(--green); font: 600 1.8125rem var(--display); }
-.metric-card span, .club-date-badge span { color: #63817e; font: 0.5rem var(--mono); letter-spacing: .7px; }
-.club-date-badge { min-width: 145px; text-align: right; }
-.club-date-badge strong { color: #3b5450; font: 0.6875rem var(--mono); }
+.metric-card span { color: #63817e; font: 0.5rem var(--mono); letter-spacing: .7px; }
+.club-date-badge { padding: 10px 16px; display: inline-flex; align-items: center; gap: 8px; border-radius: 12px; }
+.club-date-badge svg { color: var(--green); flex-shrink: 0; }
+.club-date-badge strong { color: #3b5450; font: 600 0.8125rem var(--mono); }
 .progress-summary { margin-bottom: 37px; display: grid; grid-template-columns: repeat(5, 1fr); gap: 14px; }
 .progress-summary article { min-height: 100px; padding: 16px; display: grid; align-content: space-between; border-radius: 12px; }
 .progress-summary article span { color: #63817e; font: 0.5rem var(--mono); letter-spacing: .6px; }
@@ -1246,6 +1247,20 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
 .reset-link-field input { width: 100%; height: 38px; padding: 0 9px; border: 1px solid var(--line-dark); border-radius: 4px; color: var(--ink); background: var(--surface); font-size: 0.5625rem; }
 .reset-link-modal .auth-submit { width: 100%; }
 .live-tag { padding: 4px 6px; border-radius: 3px; color: #418358; background: #e9f1e8; font: 0.5rem var(--mono); letter-spacing: .5px; }
+.leaderboard-scope-toggle { display: flex; gap: 4px; background: var(--surface-2, #f3f5f2); padding: 3px; border-radius: 8px; border: 1px solid #e3e7e4; margin: 6px 0 12px; }
+.scope-toggle-btn { flex: 1; border: none; background: transparent; color: #63817e; font: 600 0.625rem var(--mono); padding: 5px 10px; border-radius: 6px; cursor: pointer; transition: all 0.15s ease; text-align: center; }
+.scope-toggle-btn:hover { color: #35443a; }
+.scope-toggle-btn.active { background: #ffffff; color: #2d5a3c; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); }
+.daily-leaderboard-row { min-width: 0; min-height: 49px; display: flex; align-items: center; gap: 8px; border-top: 1px solid #eff0eb; }
+.daily-leader-actions { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.daily-commit-link { font-size: 0.5625rem !important; padding: 3px 8px !important; height: auto !important; min-height: 24px !important; border-radius: 6px !important; }
+.moderation-tools-panel { display: flex; flex-direction: column; gap: 12px; }
+.explainer-locked-banner { margin-top: 6px; padding: 12px 14px; border-radius: 10px; background: #f4f8f4; border: 1px solid #d8e5d9; display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.explainer-banner-info { display: flex; align-items: center; gap: 12px; }
+.explainer-banner-badge { font: 600 0.5rem var(--mono); color: #3b8754; display: flex; align-items: center; gap: 5px; margin-bottom: 2px; }
+.explainer-banner-info strong { display: block; font-size: 0.8125rem; color: #253328; }
+.explainer-banner-info p { margin: 0; font-size: 0.6875rem; color: #63817e; }
+.explainer-view-card-btn { font-size: 0.625rem !important; padding: 5px 10px !important; border-radius: 6px !important; }
 .leaderboard-note { margin: -4px 0 11px; color: #63817e; font-size: 0.5625rem; line-height: 1.5; }
 .leaderboard-list { display: grid; }
 .leaderboard-row { min-width: 0; min-height: 49px; display: flex; align-items: center; gap: 8px; border-top: 1px solid #eff0eb; }
@@ -2001,8 +2016,17 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
 :root[data-theme="dark"] .member-row,
 :root[data-theme="dark"] .dashboard-member-row,
 :root[data-theme="dark"] .leaderboard-row,
+:root[data-theme="dark"] .daily-leaderboard-row,
 :root[data-theme="dark"] .history-row,
 :root[data-theme="dark"] .my-submission { border-color: #2d3931; }
+:root[data-theme="dark"] .leaderboard-scope-toggle { background: #1b241e; border-color: #2d3931; }
+:root[data-theme="dark"] .scope-toggle-btn { color: #8daea8; }
+:root[data-theme="dark"] .scope-toggle-btn:hover { color: #d9e6dc; }
+:root[data-theme="dark"] .scope-toggle-btn.active { background: #27372c; color: #7ee09e; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3); }
+:root[data-theme="dark"] .explainer-locked-banner { background: #1c2921; border-color: #2b4233; }
+:root[data-theme="dark"] .explainer-banner-badge { color: #7ee09e; }
+:root[data-theme="dark"] .explainer-banner-info strong { color: #e2ebe3; }
+:root[data-theme="dark"] .explainer-banner-info p { color: #9abdb8; }
 :root[data-theme="dark"] .submission-info { color: #9abdb8; background: #202a23; }
 :root[data-theme="dark"] .approval-notice,
 :root[data-theme="dark"] .system-banner { color: #e0c486; border-color: #4a4028; background: #2b261b; }
