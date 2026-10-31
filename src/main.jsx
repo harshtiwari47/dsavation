@@ -1227,6 +1227,7 @@ function App() {
     <AtmosphereBackdrop />
     {appLoading && (
       <aside className="global-loader-hud" role="status" aria-live="polite" aria-label="Loading DSAvation">
+        <div className="global-loader-scrim" />
         <div className="global-loading" role="progressbar" aria-label="Loading DSAvation" aria-valuetext="Loading">
           <span />
         </div>
@@ -1294,8 +1295,56 @@ function App() {
       </section>
 
       <section className="overview-grid" aria-label="Club and personal overview">
-        <article className="overview-card today-card"><div className="card-kicker"><span className="live-dot"/>QUESTION OF THE DAY <span className="card-count">01</span></div>
-          {!account ? <div className="empty-assignment"><h2>Sign in to view today’s question</h2><p>Approved members can see the daily question and track their practice.</p></div> : assignedQuestion ? <><div className="today-date">{club.assignment.dateKey} <span>·</span> {assignedQuestion.topic}</div><h2>{assignedQuestion.title}</h2><div className="today-details"><Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill><span>LeetCode #{assignedQuestion.id}</span><span>Day {assignedQuestion.day} / 220</span></div><div className="club-participation"><strong>{club.acceptedCount}</strong><span>accepted club submissions</span><span className="participation-divider"/><span>{club.submittedCount} submitted</span><button className="text-button" onClick={() => navigate('club')}>View challenge <Icon name="arrow" size={14}/></button></div></> : <div className="empty-assignment"><h2>No question assigned today</h2><p>Club leads can publish the next Question of the Day. Holidays and break days do not count as missed practice.</p></div>}
+        <article className="overview-card today-card">
+          <div className="card-fluid-mesh" aria-hidden="true">
+            <span className="fluid-blob fluid-blob-1" />
+            <span className="fluid-blob fluid-blob-2" />
+            <span className="fluid-blob fluid-blob-3" />
+            <span className="fluid-shimmer-sweep" />
+          </div>
+          <div className="today-card-content">
+            <div className="card-kicker">
+              <span className="live-dot" />
+              <span>QUESTION OF THE DAY</span>
+              <span className="card-count">01</span>
+            </div>
+            {!account ? (
+              <div className="empty-assignment">
+                <h2>Sign in to view today’s question</h2>
+                <p>Approved members can see the daily question and track their practice.</p>
+              </div>
+            ) : assignedQuestion ? (
+              <>
+                <div className="today-date">
+                  <span>{club.assignment.dateKey}</span>
+                  <span className="date-sep">·</span>
+                  <span className="topic-name">{assignedQuestion.topic}</span>
+                </div>
+                <h2>{assignedQuestion.title}</h2>
+                <div className="today-details">
+                  <Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill>
+                  <span className="meta-badge">LeetCode #{assignedQuestion.id}</span>
+                  <span className="meta-badge">Day {assignedQuestion.day} / 220</span>
+                </div>
+                <div className="club-participation">
+                  <div className="participation-stat">
+                    <strong>{club.acceptedCount}</strong>
+                    <span>accepted</span>
+                  </div>
+                  <span className="participation-divider" />
+                  <span className="participation-sub">{club.submittedCount} submitted</span>
+                  <button className="challenge-link-btn" onClick={() => navigate('club')}>
+                    View challenge <Icon name="arrow" size={13} />
+                  </button>
+                </div>
+              </>
+            ) : (
+              <div className="empty-assignment">
+                <h2>No question assigned today</h2>
+                <p>Club leads can publish the next Question of the Day. Holidays and break days do not count as missed practice.</p>
+              </div>
+            )}
+          </div>
         </article>
         <article className="overview-card personal-card"><div className="card-kicker">YOUR PRIVATE TRACKER <span className="card-count">02</span></div><div className="personal-stat"><strong>{account ? solvedCount : '—'}</strong><span><b>{account ? `${Math.round((solvedCount / 220) * 100)}%` : 'Personal'}</b><br/>{account ? 'of the 220 questions tracked' : 'progress stays private'}</span></div><div className="personal-track"><i style={{ width: `${account ? Math.min(100, solvedCount / 220 * 100) : 0}%` }}/></div><p>{account ? 'Your manual checkmarks are visible only to you. They never add club points.' : 'Sign in to save which questions you have solved.'}</p><button className="text-button" onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}>{account ? 'Open my progress' : 'Sign in to track'} <Icon name="arrow" size={14}/></button></article>
         <article className="overview-card community-card"><div className="card-kicker"><Icon name="users" size={14}/> CLUB PARTICIPATION <span className="card-count">03</span></div><div className="community-figure"><strong>{club.acceptedCount}</strong><span>members accepted today</span></div>{club.participants?.length ? <div className="participant-list">{club.participants.slice(0, 4).map((person) => <span className="participant" key={`${person.githubUsername}-${person.name}`}><MemberAvatar person={person} label=""/>{person.name.split(' ')[0]}</span>)}{club.participants.length > 4 && <span className="participant-more">+{club.participants.length - 4}</span>}</div> : <p className="privacy-note">Approved members with accepted club submissions appear here; personal checkmarks stay private.</p>}<button className="text-button" onClick={() => navigate('club')}>See the scoreboard <Icon name="arrow" size={14}/></button></article>
@@ -1393,9 +1442,99 @@ function App() {
       <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>SHARED CLUB CHALLENGE</div><h1>Show up. Ship a solution<span>.</span></h1><p>Only reviewed submissions to a published Question of the Day count toward these standings.</p></div><div className="club-date-badge"><IconifyIcon icon="griddy-icons:calendar-date" width={18} height={18}/><strong>{club.dateKey || localDay()}</strong></div></div>
       {account ? <div className="club-grid">
         <div className="club-main-column">
-          <section className="panel qotd-panel"><div className="panel-header"><div><div className="eyebrow"><span className="eyebrow-line"/>TODAY'S ASSIGNMENT</div><h2>{assignedQuestion ? assignedQuestion.title : 'No assignment today'}</h2></div><div className="panel-heading-actions">{assignedQuestion && <Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill>}{isLeader && editingTodayAssignment && club.assignment && <button type="button" className="button button-danger delete-today-btn" onClick={deleteTodayAssignment} disabled={assignmentBusy} title="Delete today’s published question"><Icon name="trash" size={13}/> <span>Delete today's question</span></button>}</div></div>
-            {assignedQuestion ? <><div className="assignment-meta"><span>{club.assignment.dateKey}</span><span>{assignedQuestion.topic}</span><span>LeetCode #{assignedQuestion.id}</span><span>{assignedQuestion.pattern}</span></div><p className="assignment-prompt">Use a public repository you own. During this assignment day, commit a non-empty <code>{assignedQuestion.id}/solution.txt</code>. It may contain code in any language; only this exact path is tracked. GitHub verifies your linked identity, file path, and commit date; a valid submission earns a point automatically.</p><div className="assignment-counts"><div><strong>{club.submittedCount}</strong><span>SUBMITTED</span></div><div><strong>{club.acceptedCount}</strong><span>ACCEPTED</span></div><a href={`https://leetcode.com/problems/${assignedQuestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`} target="_blank" rel="noreferrer">Open problem <Icon name="external" size={14}/></a></div>
-              {!account ? <div className="inline-callout"><Icon name="lock" size={16}/><span>Sign in with an approved ABES account to submit a club solution.</span><button onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button></div> : !account.githubVerified ? <div className="inline-callout"><Icon name="github" size={16}/><span>Connect the GitHub account you want to use; its verified username will replace the signup value.</span><button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button></div> : submissions.some((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated') ? <div className="inline-callout submitted"><Icon name="check" size={16}/><span>Your submission for today is {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.status} · {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.points ?? 0} point(s).</span></div> : <form className="submission-form" onSubmit={submitClubSolution}><div className="submission-form-heading"><label htmlFor="commit-url">GITHUB COMMIT CODE OR FULL URL</label><button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}><Icon name="info" size={15}/></button></div>{submissionHelpOpen && <div className="submission-help" id="submission-help"><strong>Before you submit</strong><ol><li>Create or use a public repository that you own under <code>@{account.githubUsername}</code>.</li><li>Create or update exactly <code>{assignedQuestion.id}/solution.txt</code> directly inside the question folder. The file can contain any language, but must have at least one byte.</li><li>Commit and push it during today’s assignment date. The GitHub author must match your linked account; commits made in GitHub's web editor use its web-flow committer and are accepted.</li><li>Enter either your commit code/hash (e.g. <code>76c3f95</code>) or your full commit URL (e.g. <code>https://github.com/{account.githubUsername}/YOUR-REPO/commit/FULL_SHA</code>).</li></ol><p>Only the first valid submission for today earns a point. Admins can adjust points if needed.</p></div>}<div className="submission-input-row"><input id="commit-url" type="text" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder={`e.g. 76c3f95 or https://github.com/${account.githubUsername}/REPO/commit/FULL_SHA`}/><button className="button button-dark" disabled={submissionBusy}>{submissionBusy ? 'Verifying…' : 'Verify and submit'} <Icon name="arrow" size={14}/></button></div><small>Enter a commit hash (e.g. <code>76c3f95</code>) or full commit URL. Required changed file: <code>{assignedQuestion.id}/solution.txt</code> (at least one byte). The linked GitHub account must own the repository.</small></form>}</> : <div className="no-assignment-note"><p>A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from punctuality calculations.</p></div>}
+          <section className="panel qotd-panel">
+            <div className="card-fluid-mesh" aria-hidden="true">
+              <span className="fluid-blob fluid-blob-1" />
+              <span className="fluid-blob fluid-blob-2" />
+              <span className="fluid-blob fluid-blob-3" />
+              <span className="fluid-shimmer-sweep" />
+            </div>
+            <div className="qotd-panel-content">
+              <div className="panel-header">
+                <div>
+                  <div className="eyebrow"><span className="eyebrow-line" />TODAY'S ASSIGNMENT</div>
+                  <h2>{assignedQuestion ? assignedQuestion.title : 'No assignment today'}</h2>
+                </div>
+                <div className="panel-heading-actions">
+                  {assignedQuestion && <Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill>}
+                  {isLeader && editingTodayAssignment && club.assignment && (
+                    <button type="button" className="button button-danger delete-today-btn" onClick={deleteTodayAssignment} disabled={assignmentBusy} title="Delete today’s published question">
+                      <Icon name="trash" size={13} /> <span>Delete today's question</span>
+                    </button>
+                  )}
+                </div>
+              </div>
+              {assignedQuestion ? (
+                <>
+                  <div className="assignment-meta">
+                    <span>{club.assignment.dateKey}</span>
+                    <span>{assignedQuestion.topic}</span>
+                    <span>LeetCode #{assignedQuestion.id}</span>
+                    <span>{assignedQuestion.pattern}</span>
+                  </div>
+                  <p className="assignment-prompt">
+                    Use a public repository you own. During this assignment day, commit a non-empty <code>{assignedQuestion.id}/solution.txt</code>. It may contain code in any language; only this exact path is tracked. GitHub verifies your linked identity, file path, and commit date; a valid submission earns a point automatically.
+                  </p>
+                  <div className="assignment-counts">
+                    <div><strong>{club.submittedCount}</strong><span>SUBMITTED</span></div>
+                    <div><strong>{club.acceptedCount}</strong><span>ACCEPTED</span></div>
+                    <a href={`https://leetcode.com/problems/${assignedQuestion.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}/`} target="_blank" rel="noreferrer">
+                      Open problem <Icon name="external" size={14} />
+                    </a>
+                  </div>
+                  {!account ? (
+                    <div className="inline-callout">
+                      <Icon name="lock" size={16} />
+                      <span>Sign in with an approved ABES account to submit a club solution.</span>
+                      <button onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in</button>
+                    </div>
+                  ) : !account.githubVerified ? (
+                    <div className="inline-callout">
+                      <Icon name="github" size={16} />
+                      <span>Connect the GitHub account you want to use; its verified username will replace the signup value.</span>
+                      <button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button>
+                    </div>
+                  ) : submissions.some((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated') ? (
+                    <div className="inline-callout submitted">
+                      <Icon name="check" size={16} />
+                      <span>Your submission for today is {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.status} · {submissions.find((item) => item.assignment?.dateKey === club.assignment.dateKey && item.status !== 'invalidated')?.points ?? 0} point(s).</span>
+                    </div>
+                  ) : (
+                    <form className="submission-form" onSubmit={submitClubSolution}>
+                      <div className="submission-form-heading">
+                        <label htmlFor="commit-url">GITHUB COMMIT CODE OR FULL URL</label>
+                        <button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}>
+                          <Icon name="info" size={15} />
+                        </button>
+                      </div>
+                      {submissionHelpOpen && (
+                        <div className="submission-help" id="submission-help">
+                          <strong>Before you submit</strong>
+                          <ol>
+                            <li>Create or use a public repository that you own under <code>@{account.githubUsername}</code>.</li>
+                            <li>Create or update exactly <code>{assignedQuestion.id}/solution.txt</code> directly inside the question folder. The file can contain any language, but must have at least one byte.</li>
+                            <li>Commit and push it during today’s assignment date. The GitHub author must match your linked account; commits made in GitHub's web editor use its web-flow committer and are accepted.</li>
+                            <li>Enter either your commit code/hash (e.g. <code>76c3f95</code>) or your full commit URL (e.g. <code>https://github.com/{account.githubUsername}/YOUR-REPO/commit/FULL_SHA</code>).</li>
+                          </ol>
+                          <p>Only the first valid submission for today earns a point. Admins can adjust points if needed.</p>
+                        </div>
+                      )}
+                      <div className="submission-input-row">
+                        <input id="commit-url" type="text" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder={`e.g. 76c3f95 or https://github.com/${account.githubUsername}/REPO/commit/FULL_SHA`} />
+                        <button className="button button-dark" disabled={submissionBusy}>
+                          {submissionBusy ? 'Verifying…' : 'Verify and submit'} <Icon name="arrow" size={14} />
+                        </button>
+                      </div>
+                      <small>Enter a commit hash (e.g. <code>76c3f95</code>) or full commit URL. Required changed file: <code>{assignedQuestion.id}/solution.txt</code> (at least one byte). The linked GitHub account must own the repository.</small>
+                    </form>
+                  )}
+                </>
+              ) : (
+                <div className="no-assignment-note">
+                  <p>A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from punctuality calculations.</p>
+                </div>
+              )}
+            </div>
           </section>
 
           {account && <section className="panel profile-panel"><div className="profile-head"><MemberAvatar person={account} className="large" label=""/><div><h3>{account.name}</h3><p>Club Department: {account.department} <span>·</span> @{account.githubUsername || 'GitHub not linked'}</p></div><Pill tone={account.role === 'member' ? 'neutral' : 'green'}>{account.role}</Pill></div></section>}

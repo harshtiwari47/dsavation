@@ -64,15 +64,29 @@ button:disabled { cursor: not-allowed; opacity: .58; }
 svg { flex: none; }
 .app-frame { min-height: 100vh; position: relative; overflow-x: hidden; }
 
-/* Global Loading HUD with Mascot Bot & Neon Cyan Glow */
+/* Global Loading HUD with Mascot Bot & Neon Cyan Glow (Centered Modal) */
 .global-loader-hud {
   position: fixed;
-  inset: 0 0 auto;
+  inset: 0;
   z-index: 9999;
   pointer-events: none;
   display: flex;
-  flex-direction: column;
   align-items: center;
+  justify-content: center;
+}
+
+.global-loader-scrim {
+  position: absolute;
+  inset: 0;
+  background: rgba(5, 10, 16, 0.48);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: loader-scrim-fade 0.28s ease-out forwards;
+}
+
+@keyframes loader-scrim-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
 }
 
 .global-loading {
@@ -86,6 +100,7 @@ svg { flex: none; }
   pointer-events: none;
   background: rgba(14, 165, 233, 0.18);
   box-shadow: 0 1px 10px rgba(56, 189, 248, 0.4);
+  z-index: 2;
 }
 
 .global-loading span {
@@ -101,40 +116,42 @@ svg { flex: none; }
 @keyframes global-load-sweep { to { transform: translateX(330%); } }
 
 .global-loader-card {
-  margin-top: 14px;
+  position: relative;
+  z-index: 3;
   display: flex;
   align-items: center;
-  gap: 12px;
-  padding: 6px 18px 6px 8px;
-  border-radius: 999px;
-  background: rgba(10, 21, 33, 0.9);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1.5px solid rgba(56, 189, 248, 0.45);
+  gap: 16px;
+  padding: 16px 24px 16px 16px;
+  border-radius: 20px;
+  background: rgba(8, 14, 23, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1.5px solid rgba(56, 189, 248, 0.5);
   box-shadow: 
-    0 12px 32px -4px rgba(0, 0, 0, 0.5),
-    0 0 24px 2px rgba(56, 189, 248, 0.28),
+    0 20px 50px -10px rgba(0, 0, 0, 0.8),
+    0 0 35px 2px rgba(56, 189, 248, 0.35),
     inset 0 1px 1px 0 rgba(255, 255, 255, 0.25);
-  animation: loader-card-slide-down 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  animation: loader-card-center-pop 0.35s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+  max-width: min(480px, calc(100vw - 32px));
 }
 
-@keyframes loader-card-slide-down {
-  0% { transform: translateY(-20px) scale(0.94); opacity: 0; }
-  100% { transform: translateY(0) scale(1); opacity: 1; }
+@keyframes loader-card-center-pop {
+  0% { transform: scale(0.85); opacity: 0; }
+  100% { transform: scale(1); opacity: 1; }
 }
 
 .global-loader-bot {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   object-fit: contain;
   flex-shrink: 0;
-  filter: drop-shadow(0 0 10px rgba(56, 189, 248, 0.6));
-  animation: bot-head-bob 2s ease-in-out infinite;
+  filter: drop-shadow(0 0 14px rgba(56, 189, 248, 0.7));
+  animation: bot-head-bob 2.2s ease-in-out infinite;
 }
 
 @keyframes bot-head-bob {
   0%, 100% { transform: translateY(0) rotate(0deg); }
-  50% { transform: translateY(-3px) rotate(1.5deg); }
+  50% { transform: translateY(-4px) rotate(2deg); }
 }
 
 .global-loader-content {
@@ -547,34 +564,41 @@ h1, h2, h3, p { margin-top: 0; }
   z-index: 2;
 }
 
-/* Layer 1: Continuous Smooth Water Stream Flowing Across Glass */
+/* Layer 1: Continuous Smooth Traveling Water Shimmer Flowing Across Glass */
 .liquid-glass::before,
 .water-glass-card::before {
   content: '';
   position: absolute;
-  inset: -50%;
-  width: 200%;
-  height: 200%;
+  top: -20%;
+  bottom: -20%;
+  left: 0;
+  width: 55%;
   pointer-events: none;
-  z-index: 0;
+  z-index: 1;
   background: linear-gradient(
-    115deg,
+    105deg,
     transparent 0%,
-    transparent 36%,
-    rgba(56, 189, 248, 0.05) 42%,
-    rgba(46, 107, 84, 0.08) 46%,
-    rgba(14, 165, 233, 0.16) 49%,
-    rgba(255, 255, 255, 0.95) 50%,
-    rgba(14, 165, 233, 0.16) 51%,
-    rgba(46, 107, 84, 0.08) 54%,
-    rgba(56, 189, 248, 0.05) 58%,
-    transparent 64%,
+    rgba(14, 165, 233, 0.05) 20%,
+    rgba(14, 165, 233, 0.22) 42%,
+    rgba(56, 189, 248, 0.38) 50%,
+    rgba(16, 185, 129, 0.32) 55%,
+    rgba(14, 165, 233, 0.20) 62%,
+    rgba(14, 165, 233, 0.05) 80%,
     transparent 100%
   );
-  background-size: 200% 200%;
-  animation: smooth-water-flow 11s cubic-bezier(0.4, 0, 0.2, 1) infinite;
-  opacity: 0.85;
+  transform: translateX(-160%) skewX(-20deg);
+  animation: card-shimmer-sweep 4.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  opacity: 0.95;
   transition: opacity 0.4s ease;
+}
+
+@keyframes card-shimmer-sweep {
+  0% {
+    transform: translateX(-160%) skewX(-20deg);
+  }
+  65%, 100% {
+    transform: translateX(280%) skewX(-20deg);
+  }
 }
 
 /* Layer 2: Gentle Blue Water Ripple Pool following Pointer */
@@ -674,45 +698,598 @@ h1, h2, h3, p { margin-top: 0; }
   opacity: 1;
 }
 
-/* Smooth Water Stream Drift Keyframes */
-@keyframes smooth-water-flow {
-  0% {
-    transform: translate3d(-20%, -20%, 0) rotate(0deg);
-  }
-  50% {
-    transform: translate3d(10%, 10%, 0) rotate(1.5deg);
-  }
-  100% {
-    transform: translate3d(-20%, -20%, 0) rotate(0deg);
-  }
-}
-
 .overview-grid { display: grid; grid-template-columns: 1.5fr .95fr 1fr; gap: 14px; margin-bottom: 45px; }
 .overview-card { min-width: 0; min-height: 170px; padding: 20px 21px; position: relative; overflow: hidden; }
 
-/* Today's Card - Emerald Fresh Water Glow */
-.today-card.liquid-glass,
-.today-card.water-glass-card {
-  background: linear-gradient(
-    140deg,
-    rgba(238, 246, 238, 0.92) 0%,
-    rgba(226, 240, 226, 0.8) 100%
-  );
-  border-color: rgba(76, 153, 109, 0.35);
+/* ==========================================================================
+   DYNAMIC FLUID BACKGROUND & BLACK CARD REDESIGN FOR QOTD & TODAY'S ASSIGNMENT
+   Deep obsidian black background in both light & dark mode.
+   Continuous fluid bioluminescent mesh moving organically without hovering.
+   ========================================================================== */
+
+.today-card,
+.qotd-panel {
+  position: relative;
+  isolation: isolate;
+  background: #070b10 !important;
+  border: 1.5px solid rgba(56, 189, 248, 0.32) !important;
+  border-radius: 18px !important;
+  color: #f8fafc !important;
+  overflow: hidden;
   box-shadow: 
-    0 10px 28px -6px rgba(30, 106, 80, 0.1),
-    0 3px 8px -2px rgba(30, 106, 80, 0.04),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.95),
-    inset 0 -1px 2px 0 rgba(30, 106, 80, 0.08);
+    0 16px 40px -10px rgba(0, 0, 0, 0.8),
+    0 0 25px -4px rgba(14, 165, 233, 0.22),
+    inset 0 1px 1px 0 rgba(255, 255, 255, 0.18) !important;
+  transition: border-color 0.35s ease, box-shadow 0.35s ease;
 }
 
-.today-card.liquid-glass:hover,
-.today-card.water-glass-card:hover {
-  border-color: rgba(56, 189, 248, 0.5);
+.today-card:hover,
+.qotd-panel:hover {
+  border-color: rgba(0, 240, 255, 0.55) !important;
   box-shadow: 
-    0 16px 40px -8px rgba(14, 165, 233, 0.2),
-    0 0 20px -4px rgba(56, 189, 248, 0.18),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 1);
+    0 22px 50px -10px rgba(0, 0, 0, 0.9),
+    0 0 35px 0 rgba(0, 240, 255, 0.3),
+    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.28) !important;
+}
+
+/* Disable standard generic glass pseudo-elements so fluid mesh takes precedence */
+.today-card.liquid-glass::before,
+.today-card.water-glass-card::before,
+.qotd-panel.liquid-glass::before,
+.qotd-panel.water-glass-card::before {
+  display: none !important;
+}
+
+/* Fluid Mesh Container */
+.card-fluid-mesh {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Fluid Mesh Vignette Overlay - Keeps text razor-sharp & legible */
+.card-fluid-mesh::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at 75% 25%, rgba(7, 11, 16, 0.45) 0%, rgba(7, 11, 16, 0.88) 85%);
+  pointer-events: none;
+  z-index: 2;
+}
+
+/* Dynamic Fluid Blobs - Soft, glowing & continuous without hovering */
+.fluid-blob {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  mix-blend-mode: screen;
+  filter: blur(48px);
+  -webkit-filter: blur(48px);
+  opacity: 0.68;
+  will-change: transform;
+}
+
+.fluid-blob-1 {
+  width: 280px;
+  height: 280px;
+  top: -50px;
+  left: -40px;
+  background: radial-gradient(circle, rgba(14, 165, 233, 0.85) 0%, rgba(56, 189, 248, 0.4) 45%, transparent 70%);
+  animation: fluid-orbit-1 9s ease-in-out infinite alternate;
+}
+
+.fluid-blob-2 {
+  width: 260px;
+  height: 260px;
+  bottom: -60px;
+  right: -40px;
+  background: radial-gradient(circle, rgba(16, 185, 129, 0.75) 0%, rgba(52, 211, 153, 0.35) 45%, transparent 70%);
+  animation: fluid-orbit-2 11s ease-in-out infinite alternate;
+}
+
+.fluid-blob-3 {
+  width: 240px;
+  height: 240px;
+  top: 35%;
+  left: 40%;
+  background: radial-gradient(circle, rgba(99, 102, 241, 0.65) 0%, rgba(14, 165, 233, 0.28) 50%, transparent 70%);
+  animation: fluid-orbit-3 10s ease-in-out infinite alternate;
+}
+
+/* Refractive fluid sweep traveling across the mesh continuously */
+.fluid-shimmer-sweep {
+  position: absolute;
+  inset: -60%;
+  width: 220%;
+  height: 220%;
+  pointer-events: none;
+  z-index: 1;
+  background: linear-gradient(
+    115deg,
+    transparent 0%,
+    transparent 40%,
+    rgba(56, 189, 248, 0.08) 46%,
+    rgba(255, 255, 255, 0.22) 50%,
+    rgba(52, 211, 153, 0.12) 54%,
+    transparent 60%,
+    transparent 100%
+  );
+  transform: translateX(-120%) skewX(-20deg);
+  animation: fluid-glass-sweep 5.5s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  opacity: 0.85;
+}
+
+@keyframes fluid-orbit-1 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(55px, 30px, 0) scale(1.15); }
+  100% { transform: translate3d(20px, 60px, 0) scale(0.92); }
+}
+
+@keyframes fluid-orbit-2 {
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(-45px, -35px, 0) scale(1.18); }
+  100% { transform: translate3d(-25px, 20px, 0) scale(0.9); }
+}
+
+@keyframes fluid-orbit-3 {
+  0% { transform: translate3d(0, 0, 0) scale(0.92); }
+  50% { transform: translate3d(-35px, 25px, 0) scale(1.2); }
+  100% { transform: translate3d(40px, -30px, 0) scale(1.04); }
+}
+
+@keyframes fluid-glass-sweep {
+  0% { transform: translateX(-140%) skewX(-20deg); }
+  60%, 100% { transform: translateX(180%) skewX(-20deg); }
+}
+
+/* Ensure contents sit in z-index 2 above fluid mesh */
+.today-card-content,
+.qotd-panel-content {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Spacing and typography for Question of the Day card */
+.today-card {
+  padding: 24px 26px !important;
+  min-height: 220px;
+}
+
+.today-card .card-kicker {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #7dd3fc !important;
+  font: 700 0.5625rem var(--mono);
+  letter-spacing: 1.2px;
+}
+
+.today-card .live-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #00f0ff;
+  box-shadow: 0 0 8px #00f0ff;
+  animation: pulse-cyan-dot 1.2s ease-in-out infinite;
+}
+
+.today-card .card-count {
+  margin-left: auto;
+  color: rgba(148, 163, 184, 0.7);
+  font: 600 0.5625rem var(--mono);
+}
+
+.today-card .today-date {
+  margin: 14px 0 6px;
+  color: #94a3b8;
+  font: 500 0.625rem var(--mono);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.today-card .today-date .date-sep {
+  color: #38bdf8;
+}
+
+.today-card .today-date .topic-name {
+  color: #a5f3fc;
+  font-weight: 600;
+}
+
+.today-card h2 {
+  margin: 0 0 12px;
+  color: #f8fafc !important;
+  font: 700 1.25rem/1.25 var(--display);
+  letter-spacing: -0.4px;
+}
+
+.today-card .today-details {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
+.today-card .today-details .meta-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 8px;
+  border-radius: 6px;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: #cbd5e1;
+  font: 500 0.5625rem var(--mono);
+}
+
+.today-card .club-participation {
+  margin-top: auto;
+  padding: 10px 14px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.65);
+  border: 1px solid rgba(56, 189, 248, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.today-card .club-participation .participation-stat {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.today-card .club-participation strong {
+  color: #38bdf8;
+  font: 700 1.1875rem var(--display);
+}
+
+.today-card .club-participation span {
+  color: #94a3b8;
+  font-size: 0.625rem;
+}
+
+.today-card .participation-divider {
+  width: 1px;
+  height: 18px;
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.today-card .challenge-link-btn {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  font: 600 0.625rem var(--mono);
+  transition: all 0.2s ease;
+}
+
+.today-card .challenge-link-btn:hover {
+  background: rgba(56, 189, 248, 0.25);
+  color: #f0f9ff;
+  border-color: rgba(56, 189, 248, 0.5);
+  transform: translateX(2px);
+}
+
+.today-card .empty-assignment {
+  padding: 20px 0;
+}
+
+.today-card .empty-assignment h2 {
+  color: #f8fafc !important;
+  font-size: 1.125rem;
+}
+
+.today-card .empty-assignment p {
+  color: #94a3b8;
+  font-size: 0.6875rem;
+  line-height: 1.6;
+}
+
+/* Spacing and typography for Club Challenge: TODAY'S ASSIGNMENT Panel */
+.qotd-panel {
+  padding: 28px 30px !important;
+}
+
+.qotd-panel .panel-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 6px;
+}
+
+.qotd-panel .panel-header .eyebrow {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  color: #38bdf8;
+  font: 700 0.5625rem var(--mono);
+  letter-spacing: 1px;
+}
+
+.qotd-panel .panel-header .eyebrow-line {
+  width: 14px;
+  height: 2px;
+  background: #38bdf8;
+  box-shadow: 0 0 6px #38bdf8;
+}
+
+.qotd-panel .panel-header h2 {
+  margin: 6px 0 0;
+  color: #f8fafc !important;
+  font: 700 1.4375rem/1.2 var(--display);
+  letter-spacing: -0.4px;
+}
+
+.qotd-panel .assignment-meta {
+  margin-top: 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.qotd-panel .assignment-meta span {
+  padding: 5px 11px;
+  border-radius: 6px;
+  background: rgba(15, 23, 42, 0.75);
+  border: 1px solid rgba(56, 189, 248, 0.22);
+  color: #cbd5e1;
+  font: 500 0.625rem var(--mono);
+}
+
+.qotd-panel .assignment-prompt {
+  margin: 16px 0 0;
+  color: #94a3b8;
+  font-size: 0.6875rem;
+  line-height: 1.7;
+}
+
+.qotd-panel .assignment-prompt code {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font: 0.625rem var(--mono);
+}
+
+.qotd-panel .assignment-counts {
+  margin-top: 18px;
+  padding: 14px 18px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  background: rgba(15, 23, 42, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 12px;
+}
+
+.qotd-panel .assignment-counts div {
+  display: grid;
+  gap: 2px;
+}
+
+.qotd-panel .assignment-counts strong {
+  color: #f8fafc;
+  font: 700 1.25rem var(--display);
+}
+
+.qotd-panel .assignment-counts span {
+  color: #64748b;
+  font: 600 0.5rem var(--mono);
+  letter-spacing: 0.6px;
+}
+
+.qotd-panel .assignment-counts a {
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 14px;
+  border-radius: 8px;
+  color: #00f0ff;
+  background: rgba(0, 240, 255, 0.1);
+  border: 1px solid rgba(0, 240, 255, 0.3);
+  font: 600 0.625rem var(--mono);
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.15);
+  transition: all 0.2s ease;
+}
+
+.qotd-panel .assignment-counts a:hover {
+  background: rgba(0, 240, 255, 0.22);
+  border-color: rgba(0, 240, 255, 0.6);
+  box-shadow: 0 0 18px rgba(0, 240, 255, 0.35);
+  transform: translateY(-1px);
+}
+
+.qotd-panel .submission-form {
+  margin-top: 20px;
+}
+
+.qotd-panel .submission-form-heading {
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.qotd-panel .submission-form-heading label {
+  color: #94a3b8;
+  font: 600 0.5625rem var(--mono);
+  letter-spacing: 0.8px;
+}
+
+.qotd-panel .submission-info {
+  width: 22px;
+  height: 22px;
+  display: inline-grid;
+  place-items: center;
+  border-radius: 50%;
+  color: #7dd3fc;
+  background: rgba(56, 189, 248, 0.12);
+  border: 1px solid rgba(56, 189, 248, 0.3);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.qotd-panel .submission-info:hover,
+.qotd-panel .submission-info[aria-expanded="true"] {
+  background: rgba(56, 189, 248, 0.25);
+  color: #00f0ff;
+  border-color: rgba(0, 240, 255, 0.6);
+}
+
+.qotd-panel .submission-help {
+  margin: 0 0 14px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: rgba(11, 19, 30, 0.9);
+  border: 1px solid rgba(56, 189, 248, 0.28);
+  color: #cbd5e1;
+  font-size: 0.625rem;
+  line-height: 1.6;
+}
+
+.qotd-panel .submission-help strong {
+  color: #38bdf8;
+  font: 700 0.6875rem var(--display);
+}
+
+.qotd-panel .submission-help code {
+  color: #38bdf8;
+  background: rgba(56, 189, 248, 0.12);
+  padding: 1px 4px;
+  border-radius: 3px;
+}
+
+.qotd-panel .submission-input-row {
+  display: flex;
+  gap: 10px;
+}
+
+.qotd-panel .submission-input-row input {
+  flex: 1;
+  height: 40px;
+  padding: 0 14px;
+  border-radius: 8px;
+  background: rgba(15, 23, 42, 0.85);
+  border: 1.5px solid rgba(56, 189, 248, 0.3);
+  color: #f8fafc;
+  font: 500 0.6875rem var(--mono);
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+}
+
+.qotd-panel .submission-input-row input:focus {
+  border-color: #00f0ff;
+  box-shadow: 0 0 12px rgba(0, 240, 255, 0.3);
+  outline: none;
+}
+
+.qotd-panel .submission-input-row input::placeholder {
+  color: rgba(148, 163, 184, 0.5);
+}
+
+.qotd-panel .submission-input-row button {
+  height: 40px;
+  padding: 0 18px;
+  border-radius: 8px;
+  background: linear-gradient(135deg, #0284c7 0%, #00f0ff 100%);
+  color: #031525;
+  font: 700 0.6875rem var(--mono);
+  border: none;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 0 16px rgba(0, 240, 255, 0.35);
+  transition: all 0.2s ease;
+}
+
+.qotd-panel .submission-input-row button:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 0 22px rgba(0, 240, 255, 0.6);
+}
+
+.qotd-panel .submission-form small {
+  display: block;
+  margin-top: 10px;
+  color: #64748b;
+  font-size: 0.5625rem;
+  line-height: 1.6;
+}
+
+.qotd-panel .submission-form small code {
+  color: #38bdf8;
+}
+
+.qotd-panel .inline-callout {
+  margin-top: 16px;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: rgba(15, 23, 42, 0.7);
+  border: 1px solid rgba(56, 189, 248, 0.25);
+  color: #cbd5e1;
+  font-size: 0.625rem;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.qotd-panel .inline-callout.submitted {
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.4);
+  background: rgba(6, 78, 59, 0.25);
+}
+
+.qotd-panel .inline-callout button {
+  margin-left: auto;
+  padding: 6px 12px;
+  border-radius: 6px;
+  color: #00f0ff;
+  background: rgba(0, 240, 255, 0.12);
+  border: 1px solid rgba(0, 240, 255, 0.35);
+  font: 600 0.625rem var(--mono);
+}
+
+.today-card .pill,
+.qotd-panel .pill {
+  font-weight: 700;
+  border-radius: 6px;
+  padding: 4px 9px;
+  font-size: 0.5625rem;
+}
+
+.today-card .pill.easy,
+.qotd-panel .pill.easy {
+  color: #34d399 !important;
+  background: rgba(16, 185, 129, 0.18) !important;
+  border: 1px solid rgba(52, 211, 153, 0.4) !important;
+}
+
+.today-card .pill.medium,
+.qotd-panel .pill.medium {
+  color: #fbbf24 !important;
+  background: rgba(245, 158, 11, 0.18) !important;
+  border: 1px solid rgba(251, 191, 36, 0.4) !important;
+}
+
+.today-card .pill.hard,
+.qotd-panel .pill.hard {
+  color: #f87171 !important;
+  background: rgba(239, 68, 68, 0.18) !important;
+  border: 1px solid rgba(248, 113, 113, 0.4) !important;
 }
 
 .personal-card.liquid-glass,
@@ -1863,16 +2440,16 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
 :root[data-theme="dark"] .liquid-glass::before,
 :root[data-theme="dark"] .water-glass-card::before {
   background: linear-gradient(
-    115deg,
+    105deg,
     transparent 0%,
-    transparent 38%,
-    rgba(131, 198, 155, 0.12) 46%,
-    rgba(255, 255, 255, 0.22) 50%,
-    rgba(131, 198, 155, 0.12) 54%,
-    transparent 62%,
+    rgba(56, 189, 248, 0.05) 20%,
+    rgba(56, 189, 248, 0.22) 42%,
+    rgba(255, 255, 255, 0.36) 50%,
+    rgba(52, 211, 153, 0.24) 55%,
+    rgba(56, 189, 248, 0.16) 62%,
     transparent 100%
   );
-  opacity: 0.55;
+  opacity: 0.8;
 }
 
 /* Dark mode blue water ripple glow - Soft, translucent and harmonious */
@@ -1931,28 +2508,7 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
     inset 0 1px 1.5px 0 rgba(255, 255, 255, 0.15);
 }
 
-:root[data-theme="dark"] .today-card.liquid-glass,
-:root[data-theme="dark"] .today-card.water-glass-card {
-  background: linear-gradient(
-    140deg,
-    rgba(32, 49, 37, 0.88) 0%,
-    rgba(22, 34, 26, 0.78) 100%
-  );
-  border-color: rgba(131, 198, 155, 0.35);
-  box-shadow: 
-    0 14px 36px -8px rgba(0, 0, 0, 0.65),
-    0 0 20px -4px rgba(76, 153, 109, 0.22),
-    inset 0 1px 1px 0 rgba(255, 255, 255, 0.18);
-}
 
-:root[data-theme="dark"] .today-card.liquid-glass:hover,
-:root[data-theme="dark"] .today-card.water-glass-card:hover {
-  border-color: rgba(161, 219, 179, 0.55);
-  box-shadow: 
-    0 20px 50px -8px rgba(0, 0, 0, 0.75),
-    0 0 28px -2px rgba(131, 198, 155, 0.28),
-    inset 0 1.5px 2px 0 rgba(255, 255, 255, 0.25);
-}
 :root[data-theme="dark"] .mobile-bottom-nav {
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   background: linear-gradient(180deg, rgba(20, 28, 23, 0.88) 0%, rgba(14, 20, 16, 0.84) 100%);
