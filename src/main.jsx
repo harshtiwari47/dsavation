@@ -2,6 +2,7 @@ import React, { useEffect, useLayoutEffect, useMemo, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { createRoot } from 'react-dom/client';
 import { Analytics } from '@vercel/analytics/react';
+import { Icon as IconifyIcon } from '@iconify/react';
 import { AVATAR_STYLES, createAvatarDataUri, createAvatarSeeds } from './avatar.js';
 import { downloadExplainerImage, copyExplainerImage } from './explainerCard.js';
 import { initLiquidGlass } from './liquidGlass.js';
@@ -22,6 +23,7 @@ const shiftDay = (dateKey, offset) => {
 };
 const studyYearLabel = (year) => ({ 'first-year': 'First year', 'second-year': 'Second year', 'third-year': 'Third year', 'fourth-year': 'Fourth year', passed: 'Passed out' }[year] || 'Year not provided');
 const CLUB_DEPARTMENTS = [
+  'Core Team',
   'Technical',
   'Graphics',
   'Event',
@@ -376,14 +378,23 @@ function ProgressHeatmap({ progress }) {
 function QuestionActionsGuide() {
   return <div className="question-actions-guide" aria-label="Question controls">
     <span><i className="guide-check"><Icon name="check" size={12}/></i>Mark solved for personal progress</span>
-    <span><i className="guide-bookmark">◇</i>Save for review</span>
-    <span><i className="guide-expand">+</i>Show approach and complexity</span>
+    <span><i className="guide-in-progress"><IconifyIcon icon="grommet-icons:in-progress" width={13} height={13}/></i>In progress</span>
+    <span><i className="guide-expand"><Icon name="arrow" size={12}/></i>Click card to show/hide approach and complexity</span>
   </div>;
 }
 
 function QuestionRow({ question, solved, solvedAt, bookmarked, onSolve, onBookmark }) {
   const [expanded, setExpanded] = useState(false);
-  return <article className={`question-card fish-card ${solved ? 'is-solved' : ''} ${expanded ? 'is-expanded' : ''}`}>
+  const handleCardClick = (e) => {
+    if (e.target.closest('a') || e.target.closest('button') || e.target.closest('.question-analysis')) return;
+    setExpanded((open) => !open);
+  };
+  return <article
+    className={`question-card fish-card ${solved ? 'is-solved' : ''} ${expanded ? 'is-expanded' : ''}`}
+    onClick={handleCardClick}
+    role="region"
+    aria-expanded={expanded}
+  >
     <div className="question-main">
       <span className="day-number">{String(question.day).padStart(3, '0')}</span>
       <div className="question-copy">
@@ -393,9 +404,8 @@ function QuestionRow({ question, solved, solvedAt, bookmarked, onSolve, onBookma
       <div className="question-topic"><Pill>{question.topic}</Pill></div>
       <div className="question-level"><span className={`difficulty ${question.difficulty.toLowerCase()}`}><i/>{question.difficulty}</span></div>
       <div className="question-actions">
-        <button type="button" className={`icon-button solve-button ${solved ? 'complete' : ''}`} onClick={onSolve} aria-label={solved ? 'Remove from personal progress' : 'Mark in personal progress'} title={solved ? 'Remove from personal progress' : 'Mark solved for personal progress'}>{solved ? <Icon name="check" size={15}/> : <span className="check-empty"/>}</button>
-        <button type="button" className={`icon-button bookmark-button ${bookmarked ? 'saved' : ''}`} onClick={onBookmark} aria-label={bookmarked ? 'Remove bookmark' : 'Bookmark'} title="Save for review">{bookmarked ? '◆' : '◇'}</button>
-        <button type="button" className="icon-button expand-button" onClick={() => setExpanded((open) => !open)} aria-expanded={expanded} aria-controls={`question-analysis-${question.id}`} aria-label={expanded ? 'Hide analysis' : 'Show approach and complexity'} title={expanded ? 'Hide approach and complexity' : 'Show approach and complexity'}>{expanded ? '−' : '+'}</button>
+        <button type="button" className={`icon-button solve-button ${solved ? 'complete' : ''}`} onClick={(e) => { e.stopPropagation(); onSolve(); }} aria-label={solved ? 'Remove from personal progress' : 'Mark in personal progress'} title={solved ? 'Remove from personal progress' : 'Mark solved for personal progress'}>{solved ? <Icon name="check" size={15}/> : <span className="check-empty"/>}</button>
+        <button type="button" className={`icon-button bookmark-button in-progress-btn ${bookmarked ? 'in-progress-active' : ''}`} onClick={(e) => { e.stopPropagation(); onBookmark(); }} aria-label={bookmarked ? 'Remove from in progress' : 'Mark as in progress'} title={bookmarked ? 'In progress (click to remove)' : 'Mark as in progress'}><IconifyIcon icon="grommet-icons:in-progress" width={15} height={15}/></button>
       </div>
     </div>
     {expanded && <div id={`question-analysis-${question.id}`} className="question-analysis">
@@ -427,12 +437,6 @@ function App() {
   const [pattern, setPattern] = useState('Any pattern');
   const [sort, setSort] = useState('day');
   const [progress, setProgress] = useState({});
-  const [fontScale, setFontScale] = useState(() => {
-    const stored = localStorage.getItem('dsavation-font-scale');
-    const saved = Number(stored);
-    if (!stored || !Number.isFinite(saved) || saved < .9 || saved > 1.5) return 1.2;
-    return saved;
-  });
   const [bookmarks, setBookmarks] = useState(() => JSON.parse(localStorage.getItem('dsavation-bookmarks') || '[]'));
   const [club, setClub] = useState({ dateKey: localDay(), assignment: null, submittedCount: 0, acceptedCount: 0, participants: [] });
   const [history, setHistory] = useState([]);
@@ -926,9 +930,9 @@ function App() {
     localStorage.setItem('dsavation-theme', theme);
   }, [theme]);
   useLayoutEffect(() => {
-    document.documentElement.style.fontSize = `${Math.round(fontScale * 100)}%`;
-    localStorage.setItem('dsavation-font-scale', String(fontScale));
-  }, [fontScale]);
+    localStorage.removeItem('dsavation-font-scale');
+    document.documentElement.style.fontSize = '';
+  }, []);
 
   async function solvePersonal(questionId) {
     if (!account) { setAuthMode('login'); setAuthOpen(true); setAuthError('Sign in to save private progress. This will not affect the club leaderboard.'); return; }
@@ -1136,10 +1140,6 @@ function App() {
     catch { setNotice('Select the reset link and copy it manually.'); }
   }
 
-  function changeFontSize(amount) {
-    setFontScale((value) => Math.max(.9, Math.min(1.5, Math.round((value + amount) * 100) / 100)));
-  }
-
   const clearFilters = () => { setQuery(''); setTopic('All topics'); setDifficulty('Any level'); setStructure('Any data structure'); setPattern('Any pattern'); };
 
   return <div className="app-frame">
@@ -1148,16 +1148,29 @@ function App() {
     <header className="topbar">
       <a className="brand" href="/" onClick={(event) => { event.preventDefault(); navigate('general'); }}><img className="brand-mark" src="/favicon.svg" alt="" aria-hidden="true"/><span>DSAvation</span></a>
       <nav className="main-nav" aria-label="Main navigation">
-        <button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><Icon name="book" size={15}/>General</button>
-        <button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={15}/>Account</button>
+        <button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><IconifyIcon icon="bi:journal-bookmark" width={16} height={16}/>General</button>
         {account && <button className={view === 'members' ? 'active' : ''} onClick={() => navigate('members')}><Icon name="users" size={15}/>Members</button>}
         <button className={view === 'club' ? 'active' : ''} onClick={() => navigate('club')}><Icon name="users" size={15}/>Club challenge</button>
         {isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={15}/>Dashboard{memberCounts.pending > 0 && <span className="nav-count">{memberCounts.pending}</span>}</button>}
       </nav>
       <div className="account-actions">
         <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15}/><span>{theme === 'dark' ? 'Light' : 'Dark'}</span></button>
-        <div className="font-controls" aria-label="Text size controls"><span>TEXT</span><button onClick={() => changeFontSize(-.05)} aria-label="Decrease text size" disabled={fontScale <= .9}>A−</button><output aria-live="polite">{Math.round(fontScale * 100)}%</output><button onClick={() => changeFontSize(.05)} aria-label="Increase text size" disabled={fontScale >= 1.5}>A+</button></div>
-        {account ? <><span className="account-name"><MemberAvatar person={account} label=""/><span>{account.name.split(' ')[0]}{account.role !== 'member' && <small>{account.role}</small>}</span></span>{!account.githubVerified && <button className="button button-quiet github-link" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/><span>Link GitHub</span></button>}<button className="button button-quiet sign-out" onClick={logout} aria-label="Sign out" title="Sign out"><span>Sign out</span><Icon name="logout" size={14}/></button></> : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
+        {account ? <>
+          {!account.githubVerified && <button className="button button-quiet github-link" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/><span>Link GitHub</span></button>}
+          <button
+            type="button"
+            className={`account-profile-btn ${view === 'progress' ? 'active' : ''}`}
+            onClick={() => navigate('progress')}
+            title="Open Account & Settings"
+            aria-label="Open Account & Settings"
+          >
+            <MemberAvatar person={account} label=""/>
+            <span className="account-name-label">
+              <strong>{account.name.split(' ')[0]}</strong>
+              {account.role !== 'member' && <small>{account.role}</small>}
+            </span>
+          </button>
+        </> : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
       </div>
     </header>
 
@@ -1184,12 +1197,32 @@ function App() {
         <QuestionActionsGuide/>
         <div className="question-list">{visibleQuestions.length ? visibleQuestions.map((question) => <QuestionRow key={question.id} question={question} solved={Boolean(progress[question.id])} solvedAt={progress[question.id]} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>) : <div className="no-results"><span>⌕</span><strong>No questions match those filters.</strong><p>Try a different topic, level, or keyword.</p><button onClick={clearFilters}>Reset filters</button></div>}</div>
       </section>}
-      <footer className="site-footer"><span>DSAvation · ABES Technovation Club Website</span><span>220 interview questions · curated from Striver and NeetCode</span></footer>
+      <footer className="site-footer"><span>DSAvation</span><span>Technovation – The Networking Club</span></footer>
     </main>}
 
     {view === 'progress' && <main className="content-shell page-content">
-      <div className="page-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>PERSONAL ACCOUNT</div><h1>Account<span>.</span></h1><p>Update your member details and review your private DSA progress. Personal checkmarks never affect club points.</p></div><div className="metric-card"><strong>{solvedCount}</strong><span>QUESTIONS TRACKED</span></div></div>
-      {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Your account and progress are private.</h2><p>Sign in to update your member details and keep a dated record of solved questions.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <><section className="panel account-settings"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>MEMBER DETAILS</div><h2>Your profile</h2></div>{account.githubVerified ? <Pill tone="green">GitHub verified</Pill> : <Pill tone="amber">GitHub not verified</Pill>}</div><form className="account-form" key={`${account.id}:${account.githubUsername}:${account.githubVerified}`} onSubmit={saveProfile}><label>FULL NAME<input name="name" defaultValue={account.name} required minLength="2" maxLength="80" autoComplete="name"/></label><label>CLUB DEPARTMENT<select name="department" defaultValue={account.department || ''} required><option value="" disabled>Select your club department</option>{!CLUB_DEPARTMENTS.includes(account.department) && account.department && <option value={account.department}>{account.department}</option>}{CLUB_DEPARTMENTS.map((dept) => <option key={dept} value={dept}>{dept}</option>)}</select></label><label>GITHUB USERNAME<input name="githubUsername" defaultValue={account.githubUsername} required={!account.githubVerified && Boolean(account.githubUsername)} pattern="[A-Za-z0-9-]{1,39}" readOnly={account.githubVerified} placeholder="Connect GitHub to fill this automatically"/><small>{account.githubVerified ? 'Read from your verified GitHub account.' : 'Connect GitHub to verify and fill this username.'}</small></label><label>LEETCODE USERNAME<input name="leetcodeUsername" defaultValue={account.leetcodeUsername} required pattern="[A-Za-z0-9_-]{1,40}"/></label><label>YEAR OF STUDY<select name="studyYear" defaultValue={account.studyYear} required><option value="first-year">First year</option><option value="second-year">Second year</option><option value="third-year">Third year</option><option value="fourth-year">Fourth year</option><option value="passed">Passed out</option></select></label><div className="avatar-picker"><div className="avatar-picker-heading"><MemberAvatar style={avatarDraftStyle} seed={avatarDraftSeed || account.avatarSeed || account.id} className="avatar-current" label="Selected avatar preview"/><div><strong>Choose your avatar</strong><span>Pick a style, then select a face or shuffle the options.</span></div><button type="button" className="button button-quiet" onClick={shuffleAvatarChoices}>Shuffle options</button></div><div className="avatar-style-tabs" role="tablist" aria-label="DiceBear avatar styles">{AVATAR_STYLES.map((style) => <button type="button" key={style.id} role="tab" aria-selected={avatarDraftStyle === style.id} className={avatarDraftStyle === style.id ? 'selected' : ''} onClick={() => chooseAvatarStyle(style.id)}>{style.name}</button>)}</div><div className="avatar-choice-grid" aria-label="Choose an avatar">{avatarChoices.map((seed, index) => <button type="button" key={seed} className={`avatar-choice ${avatarDraftSeed === seed ? 'selected' : ''}`} aria-label={`Choose avatar ${index + 1}`} aria-pressed={avatarDraftSeed === seed} onClick={() => setAvatarDraftSeed(seed)}><MemberAvatar style={avatarDraftStyle} seed={seed} label=""/></button>)}</div><small className="avatar-license-note">CC BY 4.0 credits: <a href="https://www.dicebear.com/styles/fun-emoji/" target="_blank" rel="noreferrer">Fun Emoji Set by Davis Uche</a> and <a href="https://www.dicebear.com/styles/micah/" target="_blank" rel="noreferrer">Avatar Illustration System by Micah Lanier</a>.</small></div><div className="account-form-actions"><button className="button button-dark" disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save account details'} <Icon name="arrow" size={14}/></button>{account.githubVerified ? <button className="button button-danger" type="button" disabled={profileBusy} onClick={disconnectGithub}>Disconnect GitHub</button> : <button className="button button-quiet" type="button" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/>Connect GitHub</button>}</div></form></section><ProgressHeatmap progress={progress}/><div className="progress-summary"><article><span>COMPLETED</span><strong>{solvedCount}<small> / 220</small></strong></article><article><span>CURRICULUM COVERED</span><strong>{Math.round(solvedCount / 220 * 100)}<small>%</small></strong></article><article><span>DAILY PRACTICE</span><strong>{new Set(Object.values(progress).map((value) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))).size}<small> sessions</small></strong></article><article><span>PERSONAL STREAK</span><strong>{personalStreak.current}<small> days</small></strong><small className="streak-best">Best: {personalStreak.best} days · checkmarks only</small></article><article><span>SAVED FOR REVIEW</span><strong>{bookmarks.length}<small> questions</small></strong></article></div><div className="section-heading compact"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR COMPLETIONS</div><h2>{solvedCount ? 'Recently tracked' : 'A clean slate'}</h2></div><button className="button button-quiet" onClick={() => { navigate('general'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Browse questions <Icon name="arrow" size={14}/></button></div>{solvedCount ? <><QuestionActionsGuide/><div className="question-list">{Object.entries(progress).sort((a, b) => new Date(b[1]) - new Date(a[1])).map(([id, solvedAt]) => byId.get(Number(id)) && ({ question: byId.get(Number(id)), solvedAt })).filter(Boolean).map(({ question, solvedAt }) => <QuestionRow key={question.id} question={question} solved={true} solvedAt={solvedAt} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>)}</div></> : <div className="empty-panel"><span>01</span><h2>Your first question starts the record.</h2><p>Use the personal checkmark in the question library when you finish a problem. Club challenge submissions are tracked separately.</p><button className="button button-dark" onClick={() => navigate('general')}>Browse the library <Icon name="arrow" size={14}/></button></div>}</>}
+      <div className="page-heading">
+        <div>
+          <div className="eyebrow"><span className="eyebrow-line"/>PERSONAL ACCOUNT</div>
+          <h1>Account<span>.</span></h1>
+          <p>Update your member details and review your private DSA progress. Personal checkmarks never affect club points.</p>
+        </div>
+        <div className="account-heading-actions">
+          <div className="metric-card"><strong>{solvedCount}</strong><span>QUESTIONS TRACKED</span></div>
+          {account && (
+            <button
+              type="button"
+              className="button button-quiet sign-out-tab-btn"
+              onClick={logout}
+              title="Sign out"
+            >
+              <Icon name="logout" size={14}/><span>Sign out</span>
+            </button>
+          )}
+        </div>
+      </div>
+      {!account ? <div className="login-prompt"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Your account and progress are private.</h2><p>Sign in to update your member details and keep a dated record of solved questions.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div> : <><section className="panel account-settings"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>MEMBER DETAILS</div><h2>Your profile</h2></div>{account.githubVerified ? <Pill tone="green">GitHub verified</Pill> : <Pill tone="amber">GitHub not verified</Pill>}</div><form className="account-form" key={`${account.id}:${account.githubUsername}:${account.githubVerified}`} onSubmit={saveProfile}><label>FULL NAME<input name="name" defaultValue={account.name} required minLength="2" maxLength="80" autoComplete="name"/></label><label>CLUB DEPARTMENT<select name="department" defaultValue={account.department || ''} required><option value="" disabled>Select your club department</option>{!CLUB_DEPARTMENTS.includes(account.department) && account.department && <option value={account.department}>{account.department}</option>}{CLUB_DEPARTMENTS.map((dept) => <option key={dept} value={dept}>{dept}</option>)}</select></label><label>GITHUB USERNAME<input name="githubUsername" defaultValue={account.githubUsername} required={!account.githubVerified && Boolean(account.githubUsername)} pattern="[A-Za-z0-9-]{1,39}" readOnly={account.githubVerified} placeholder="Connect GitHub to fill this automatically"/><small>{account.githubVerified ? 'Read from your verified GitHub account.' : 'Connect GitHub to verify and fill this username.'}</small></label><label>LEETCODE USERNAME<input name="leetcodeUsername" defaultValue={account.leetcodeUsername} required pattern="[A-Za-z0-9_-]{1,40}"/></label><label>YEAR OF STUDY<select name="studyYear" defaultValue={account.studyYear} required><option value="first-year">First year</option><option value="second-year">Second year</option><option value="third-year">Third year</option><option value="fourth-year">Fourth year</option><option value="passed">Passed out</option></select></label><div className="avatar-picker"><div className="avatar-picker-heading"><MemberAvatar style={avatarDraftStyle} seed={avatarDraftSeed || account.avatarSeed || account.id} className="avatar-current" label="Selected avatar preview"/><div><strong>Choose your avatar</strong><span>Pick a style, then select a face or shuffle the options.</span></div><button type="button" className="button button-quiet" onClick={shuffleAvatarChoices}>Shuffle options</button></div><div className="avatar-style-tabs" role="tablist" aria-label="DiceBear avatar styles">{AVATAR_STYLES.map((style) => <button type="button" key={style.id} role="tab" aria-selected={avatarDraftStyle === style.id} className={avatarDraftStyle === style.id ? 'selected' : ''} onClick={() => chooseAvatarStyle(style.id)}>{style.name}</button>)}</div><div className="avatar-choice-grid" aria-label="Choose an avatar">{avatarChoices.map((seed, index) => <button type="button" key={seed} className={`avatar-choice ${avatarDraftSeed === seed ? 'selected' : ''}`} aria-label={`Choose avatar ${index + 1}`} aria-pressed={avatarDraftSeed === seed} onClick={() => setAvatarDraftSeed(seed)}><MemberAvatar style={avatarDraftStyle} seed={seed} label=""/></button>)}</div><small className="avatar-license-note">CC BY 4.0 credits: <a href="https://www.dicebear.com/styles/fun-emoji/" target="_blank" rel="noreferrer">Fun Emoji Set by Davis Uche</a> and <a href="https://www.dicebear.com/styles/micah/" target="_blank" rel="noreferrer">Avatar Illustration System by Micah Lanier</a>.</small></div><div className="account-form-actions"><button className="button button-dark" disabled={profileBusy}>{profileBusy ? 'Saving…' : 'Save account details'} <Icon name="arrow" size={14}/></button>{account.githubVerified ? <button className="button button-danger" type="button" disabled={profileBusy} onClick={disconnectGithub}>Disconnect GitHub</button> : <button className="button button-quiet" type="button" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/>Connect GitHub</button>}<button className="button button-quiet" type="button" onClick={logout}><Icon name="logout" size={14}/>Sign out</button></div></form></section><ProgressHeatmap progress={progress}/><div className="progress-summary"><article><span>COMPLETED</span><strong>{solvedCount}<small> / 220</small></strong></article><article><span>CURRICULUM COVERED</span><strong>{Math.round(solvedCount / 220 * 100)}<small>%</small></strong></article><article><span>DAILY PRACTICE</span><strong>{new Set(Object.values(progress).map((value) => new Date(value).toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' }))).size}<small> sessions</small></strong></article><article><span>PERSONAL STREAK</span><strong>{personalStreak.current}<small> days</small></strong><small className="streak-best">Best: {personalStreak.best} days · checkmarks only</small></article><article><span>IN PROGRESS</span><strong>{bookmarks.length}<small> questions</small></strong></article></div><div className="section-heading compact"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR COMPLETIONS</div><h2>{solvedCount ? 'Recently tracked' : 'A clean slate'}</h2></div><button className="button button-quiet" onClick={() => { navigate('general'); window.scrollTo({ top: 0, behavior: 'smooth' }); }}>Browse questions <Icon name="arrow" size={14}/></button></div>{solvedCount ? <><QuestionActionsGuide/><div className="question-list">{Object.entries(progress).sort((a, b) => new Date(b[1]) - new Date(a[1])).map(([id, solvedAt]) => byId.get(Number(id)) && ({ question: byId.get(Number(id)), solvedAt })).filter(Boolean).map(({ question, solvedAt }) => <QuestionRow key={question.id} question={question} solved={true} solvedAt={solvedAt} bookmarked={bookmarks.includes(question.id)} onSolve={() => solvePersonal(question.id)} onBookmark={() => toggleBookmark(question.id)}/>)}</div></> : <div className="empty-panel"><span>01</span><h2>Your first question starts the record.</h2><p>Use the personal checkmark in the question library when you finish a problem. Club challenge submissions are tracked separately.</p><button className="button button-dark" onClick={() => navigate('general')}>Browse the library <Icon name="arrow" size={14}/></button></div>}</>}
+      <footer className="site-footer"><span>DSAvation</span><span>Technovation – The Networking Club</span></footer>
     </main>}
 
     {view === 'members' && <main className="content-shell page-content members-page">
@@ -1220,7 +1253,7 @@ function App() {
         {directoryPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={directoryBusy || directoryPagination.page <= 1} onClick={() => loadDirectory(directoryPagination.page - 1)}>Previous</button><span>Page {directoryPagination.page} of {directoryPagination.totalPages} · {directoryPagination.total} members</span><button className="button button-quiet" disabled={directoryBusy || directoryPagination.page >= directoryPagination.totalPages} onClick={() => loadDirectory(directoryPagination.page + 1)}>Next</button></div>}
         <p className="directory-disclaimer">{isAdmin ? 'Admin view: LeetCode statistics come from its public GraphQL service and are only visible to administrators. Private personal progress is never shared.' : 'Member profiles display verified club identity and links. LeetCode account statistics are private to administrators.'}</p>
       </>}
-      <footer className="site-footer"><span>DSAvation · ABES Technovation Club</span><span>Directory access is limited to approved members</span></footer>
+      <footer className="site-footer"><span>DSAvation</span><span>Technovation – The Networking Club</span></footer>
     </main>}
 
     {view === 'dashboard' && isAdmin && <main className="content-shell page-content dashboard-page">
@@ -1243,7 +1276,7 @@ function App() {
       </section>
       <section className="panel dashboard-activity-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>SCORING CONTROLS</div><h2>Accepted submissions</h2></div></div><p className="leaderboard-note">New verified submissions receive one point automatically. Set a lower value to deduct points; every adjustment is added to the activity log.</p>{scoredSubmissions.length ? <div className="review-list">{scoredSubmissions.map((item) => <article className="review-item score-adjustment-row" key={item.id}><div><strong>{item.member?.name || 'Member'} <span>· {item.assignment?.dateKey} · LC {item.assignment?.questionId}</span></strong><p>{item.solutionPath || item.commitUrl}</p><a href={item.commitUrl} target="_blank" rel="noreferrer">Open verified commit <Icon name="external" size={13}/></a></div><label className="points-control">POINTS<select aria-label={`Points for ${item.member?.name || 'member'}`} value={item.points ?? 1} disabled={memberBusy === item.id} onChange={(event) => adjustPoints(item, event.target.value)}>{Array.from({ length: 11 }, (_, value) => <option value={value} key={value}>{value} point{value === 1 ? '' : 's'}</option>)}</select></label></article>)}</div> : <div className="soft-empty">No verified submissions have been scored yet.</div>}{scoredPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={scoredPagination.page <= 1} onClick={() => refreshScoredSubmissions(scoredPagination.page - 1)}>Previous</button><span>Page {scoredPagination.page} of {scoredPagination.totalPages}</span><button className="button button-quiet" disabled={scoredPagination.page >= scoredPagination.totalPages} onClick={() => refreshScoredSubmissions(scoredPagination.page + 1)}>Next</button></div>}</section>
       <section className="panel dashboard-activity-panel"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>ADMIN AUDIT</div><h2>Admin activity <span className="count-badge">{activityPagination.total}</span></h2></div><button className="button button-quiet" onClick={() => refreshActivity(activityPagination.page)}>Refresh</button></div>{activity.length ? <div className="admin-activity-list">{activity.map((entry) => <article className="admin-activity-row" key={entry.id}><div><strong>{entry.actorName} <small>{entry.actorRole}</small></strong><span>{entry.action.replaceAll('_', ' ')} · {entry.targetLabel || 'account action'}</span>{Object.keys(entry.details || {}).length > 0 && <code>{JSON.stringify(entry.details)}</code>}</div><time dateTime={new Date(entry.createdAt).toISOString()}>{new Date(entry.createdAt).toLocaleString('en-GB', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })}</time></article>)}</div> : <div className="soft-empty">Admin actions will appear here as they happen.</div>}{activityPagination.totalPages > 1 && <div className="pagination-controls"><button className="button button-quiet" disabled={activityPagination.page <= 1} onClick={() => refreshActivity(activityPagination.page - 1)}>Previous</button><span>Page {activityPagination.page} of {activityPagination.totalPages}</span><button className="button button-quiet" disabled={activityPagination.page >= activityPagination.totalPages} onClick={() => refreshActivity(activityPagination.page + 1)}>Next</button></div>}</section>
-      <footer className="site-footer"><span>DSAvation · account administration</span><span>De-approved accounts lose access immediately</span></footer>
+      <footer className="site-footer"><span>DSAvation</span><span>Technovation – The Networking Club</span></footer>
     </main>}
 
     {view === 'club' && <main className="content-shell page-content">
@@ -1436,7 +1469,7 @@ function App() {
           {submissions.length > 0 && <section className="panel my-submissions"><div className="panel-heading"><div><div className="eyebrow"><span className="eyebrow-line"/>YOUR CLUB SUBMISSIONS</div><h2>Review history</h2></div></div>{submissions.slice(0, 5).map((item) => <div className="my-submission" key={item.id}><span>{item.assignment?.dateKey} · LC {item.assignment?.questionId}</span><Pill tone={item.status === 'accepted' ? 'green' : item.status === 'rejected' ? 'red' : 'amber'}>{item.status}</Pill></div>)}</section>}
         </aside>
       </div> : <div className="library-locked panel"><span className="prompt-icon"><Icon name="lock" size={23}/></span><div><h2>Sign in to view club questions and activity.</h2><p>Approved club members can view the current assignment, history, and standings.</p></div><button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button></div>}
-      <footer className="site-footer"><span>DSAvation · ABES Technovation Club Website</span><span>Verified commit links earn points automatically</span></footer>
+      <footer className="site-footer"><span>DSAvation</span><span>Technovation – The Networking Club</span></footer>
     </main>}
 
     {explainerModalOpen && selectedExplainer && (
@@ -1649,7 +1682,7 @@ function App() {
         <div className="auth-switch">{authMode === 'signup' ? 'Already a member?' : 'New to DSAvation?'} <button onClick={() => { setAuthMode(authMode === 'signup' ? 'login' : 'signup'); setAuthError(''); }}>{authMode === 'signup' ? 'Sign in' : 'Create account'}</button>{authMode === 'login' && <><span> · </span><button onClick={() => setAuthError('Ask an administrator to generate a one-time password reset link for your account.')}>Forgot password?</button></>}</div>
         <p className="auth-privacy"><Icon name="lock" size={13}/> Personal checkmarks are private and never count toward the club scoreboard.</p>
       </section></div>}
-    <div className={`mobile-bottom-nav ${account ? 'has-account' : ''} ${isAdmin ? 'admin-nav' : ''}`}><button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><Icon name="book" size={17}/>General</button><button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={17}/>Account</button>{account && <button className={view === 'members' ? 'active' : ''} onClick={() => navigate('members')}><Icon name="users" size={17}/>Members</button>}<button className={view === 'club' ? 'active' : ''} onClick={() => navigate('club')}><Icon name="users" size={17}/>Club</button>{isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={17}/>Admin</button>}</div>
+    <div className={`mobile-bottom-nav ${account ? 'has-account' : ''} ${isAdmin ? 'admin-nav' : ''}`}><button className={view === 'general' ? 'active' : ''} onClick={() => navigate('general')}><IconifyIcon icon="bi:journal-bookmark" width={17} height={17}/>General</button><button className={view === 'progress' ? 'active' : ''} onClick={() => { navigate('progress'); if (!account) { setAuthMode('login'); setAuthOpen(true); } }}><Icon name="check" size={17}/>Account</button>{account && <button className={view === 'members' ? 'active' : ''} onClick={() => navigate('members')}><Icon name="users" size={17}/>Members</button>}<button className={view === 'club' ? 'active' : ''} onClick={() => navigate('club')}><Icon name="users" size={17}/>Club</button>{isAdmin && <button className={view === 'dashboard' ? 'active' : ''} onClick={() => navigate('dashboard')}><Icon name="users" size={17}/>Admin</button>}</div>
     <Analytics/>
   </div>;
 }

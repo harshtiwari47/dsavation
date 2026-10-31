@@ -1,6 +1,6 @@
 :root {
   font-family: 'DM Sans', sans-serif;
-  font-size: 120%;
+  font-size: 135%;
   color: #0c1b26;
   background: #fbfdff;
   font-synthesis: none;
@@ -280,6 +280,65 @@ svg { flex: none; }
   backdrop-filter: blur(14px);
   -webkit-backdrop-filter: blur(14px);
   box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+}
+
+.account-profile-btn {
+  height: 36px;
+  padding: 3px 12px 3px 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 9999px;
+  background: rgba(246, 250, 248, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.85);
+  color: #3b5450;
+  font-size: 0.6875rem;
+  font-weight: 500;
+  cursor: pointer;
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  box-shadow: inset 0 1px 0 0 rgba(255, 255, 255, 0.95);
+  transition: all 150ms ease;
+}
+.account-profile-btn:hover {
+  background: rgba(255, 255, 255, 0.95);
+  border-color: rgba(30, 106, 80, 0.3);
+  transform: translateY(-1px);
+}
+.account-profile-btn.active {
+  border-color: var(--green);
+  background: rgba(255, 255, 255, 0.95);
+  box-shadow: 0 0 0 2px rgba(13, 148, 136, 0.2);
+}
+.account-profile-btn .avatar { width: 28px; height: 28px; }
+.account-name-label {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  text-align: left;
+  line-height: 1.1;
+}
+.account-name-label strong {
+  font-size: 0.6875rem;
+  color: var(--ink);
+}
+.account-name-label small {
+  display: block;
+  margin-top: 1px;
+  color: var(--green);
+  font: 0.46875rem var(--mono);
+  text-transform: uppercase;
+  letter-spacing: .5px;
+}
+.account-heading-actions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.sign-out-tab-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }
 
 .account-name small { display: block; margin-top: 1px; color: var(--green); font: 0.5rem var(--mono); text-transform: uppercase; letter-spacing: .6px; }
@@ -616,6 +675,7 @@ h1, h2, h3, p { margin-top: 0; }
 .question-actions-guide span { display: inline-flex; align-items: center; gap: 6px; }
 .question-actions-guide i { width: 22px; height: 22px; display: inline-grid; place-items: center; border: 1px solid var(--line-dark); border-radius: 6px; color: var(--ocean-dark); background: var(--surface); font: 600 0.75rem var(--mono); font-style: normal; }
 .question-actions-guide .guide-bookmark { color: var(--coral); }
+.question-actions-guide .guide-in-progress { color: #d97706; }
 
 /* ==========================================================================
    Hydrodynamic Fish Card UI for Question List
@@ -633,6 +693,7 @@ h1, h2, h3, p { margin-top: 0; }
 .question-card.fish-card {
   position: relative;
   overflow: hidden;
+  cursor: pointer;
   border: 1px solid rgba(255, 255, 255, 0.9);
   border-left: 4.5px solid var(--ocean);
   border-radius: 12px;
@@ -654,6 +715,12 @@ h1, h2, h3, p { margin-top: 0; }
     box-shadow 0.26s ease,
     border-color 0.26s ease,
     background 0.26s ease;
+}
+
+.question-card a,
+.question-card button,
+.question-card .question-analysis {
+  cursor: auto;
 }
 
 /* Fish Hydrodynamic Streamline Glide on Hover */
@@ -695,7 +762,7 @@ h1, h2, h3, p { margin-top: 0; }
 }
 
 .question-card.is-solved .question-title { color: #527588; }
-.question-main { min-height: 64px; padding: 10px 16px; display: grid; grid-template-columns: 48px minmax(200px, 1.7fr) minmax(120px, .95fr) 76px 110px; align-items: center; gap: 14px; }
+.question-main { min-height: 64px; padding: 10px 16px; display: grid; grid-template-columns: 48px minmax(200px, 1.7fr) minmax(120px, .95fr) 76px 72px; align-items: center; gap: 14px; }
 .day-number {
   display: inline-flex;
   align-items: center;
@@ -734,6 +801,11 @@ h1, h2, h3, p { margin-top: 0; }
 .solve-button.complete:hover { background: var(--green-dark); }
 .check-empty { width: 14px; height: 14px; border: 1.5px solid #a8c8d8; border-radius: 4px; }
 .bookmark-button.saved { color: var(--coral); }
+.bookmark-button.in-progress-btn.in-progress-active {
+  color: #d97706;
+  background: rgba(245, 158, 11, 0.12);
+  border-color: rgba(245, 158, 11, 0.35);
+}
 .expand-button { font: 0.875rem var(--mono); }
 .question-analysis { padding: 16px 24px 18px 78px; display: grid; grid-template-columns: minmax(200px, .8fr) 2fr auto; align-items: start; gap: 22px; border-top: 1px solid rgba(224, 242, 254, 0.8); background: rgba(240, 249, 254, 0.65); border-radius: 0 0 12px 12px; }
 .micro-label { color: var(--ocean-dark); font: 600 0.5rem var(--mono); letter-spacing: .7px; }
@@ -1226,7 +1298,7 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
   .overview-grid { grid-template-columns: 1.3fr 1fr; }
   .community-card { grid-column: 1 / -1; min-height: 135px; }
   .community-card .community-figure { margin-top: 13px; }
-  .question-main { grid-template-columns: 36px minmax(180px, 1.5fr) minmax(110px, .9fr) 65px 98px; gap: 8px; }
+  .question-main { grid-template-columns: 36px minmax(180px, 1.5fr) minmax(110px, .9fr) 65px 68px; gap: 8px; }
   .question-analysis { grid-template-columns: 1fr 1.8fr; }
   .question-analysis .text-link { grid-column: 2; }
   .progress-summary { grid-template-columns: repeat(3, 1fr); }
@@ -1298,7 +1370,7 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
   .overview-card { padding: 14px; }
   .filter-select { flex: 1 1 120px; }
   .filter-select:nth-of-type(4) { flex: 1 1 155px; }
-  .question-main { grid-template-columns: 34px minmax(160px, 1fr) 95px; gap: 8px; }
+  .question-main { grid-template-columns: 34px minmax(160px, 1fr) 65px; gap: 8px; }
   .question-topic, .question-level { display: none; }
   .question-actions { grid-column: 3; grid-row: 1; }
   .question-analysis { padding-left: 55px; grid-template-columns: 1fr; gap: 12px; }
@@ -1352,7 +1424,7 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
   .question-actions-guide { padding-inline: 8px; gap: 6px 10px; font-size: 0.5rem; }
   .question-actions-guide span { gap: 4px; }
   .question-actions-guide i { width: 18px; height: 18px; }
-  .question-main { min-height: 65px; padding: 8px; grid-template-columns: 29px minmax(0, 1fr) 78px; gap: 5px; }
+  .question-main { min-height: 65px; padding: 8px; grid-template-columns: 29px minmax(0, 1fr) 58px; gap: 5px; }
   .day-number { font-size: 0.5rem; }
   .question-title { font-size: 0.625rem; }
   .question-title-line { gap: 5px; }
@@ -1551,13 +1623,30 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
 :root[data-theme="dark"] .theme-toggle,
 :root[data-theme="dark"] .font-controls,
 :root[data-theme="dark"] .button-quiet,
-:root[data-theme="dark"] .account-name {
+:root[data-theme="dark"] .account-name,
+:root[data-theme="dark"] .account-profile-btn {
   background: rgba(27, 36, 30, 0.65);
   border-color: rgba(255, 255, 255, 0.09);
   color: #a0c0bc;
   box-shadow: 
     0 2px 6px -1px rgba(0, 0, 0, 0.35),
     inset 0 1px 0 0 rgba(255, 255, 255, 0.08);
+}
+:root[data-theme="dark"] .account-profile-btn:hover {
+  background: rgba(38, 52, 43, 0.85);
+  border-color: rgba(131, 198, 155, 0.35);
+  color: #e8eee8;
+}
+:root[data-theme="dark"] .account-profile-btn.active {
+  border-color: rgba(131, 198, 155, 0.6);
+  background: rgba(38, 60, 46, 0.9);
+  box-shadow: 0 0 0 2px rgba(131, 198, 155, 0.25);
+}
+:root[data-theme="dark"] .account-name-label strong {
+  color: #e8eee8;
+}
+:root[data-theme="dark"] .account-name-label small {
+  color: #83c69b;
 }
 
 :root[data-theme="dark"] .theme-toggle:hover,
@@ -1883,6 +1972,12 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
 :root[data-theme="dark"] .question-card.is-solved .question-title { color: #82a8ba; }
 :root[data-theme="dark"] .question-actions-guide { border-color: rgba(56, 189, 248, 0.15); color: #bae6fd; background: rgba(14, 30, 44, 0.75); }
 :root[data-theme="dark"] .question-actions-guide i { border-color: rgba(56, 189, 248, 0.25); color: var(--ocean-bright); background: #0c1c28; }
+:root[data-theme="dark"] .question-actions-guide .guide-in-progress { color: #fbbf24; }
+:root[data-theme="dark"] .bookmark-button.in-progress-btn.in-progress-active {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.15);
+  border-color: rgba(251, 191, 36, 0.4);
+}
 :root[data-theme="dark"] .progress-summary .streak-best { color: #5eead4; }
 :root[data-theme="dark"] .question-analysis { border-color: rgba(56, 189, 248, 0.12); background: rgba(8, 20, 30, 0.75); }
 :root[data-theme="dark"] .icon-button:hover { background: rgba(56, 189, 248, 0.15); color: var(--ocean-bright); }
