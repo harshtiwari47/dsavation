@@ -81,7 +81,7 @@ function Icon({ name, size = 17 }) {
     trophy: <><path d="M8 21h8M12 17v4M7 4h10v4a5 5 0 0 1-10 0z"/><path d="M7 6H4v2a4 4 0 0 0 4 4M17 6h3v2a4 4 0 0 1-4 4"/></>,
     filter: <><path d="M4 7h16M7 12h10M10 17h4"/><circle cx="7" cy="7" r="2"/><circle cx="16" cy="12" r="2"/></>,
     github: <><path d="M9 19c-4.3 1.4-4.3-2.5-6-3m12 6v-3.9a3.4 3.4 0 0 0-.9-2.6c3-.3 6.1-1.5 6.1-6.8A5.3 5.3 0 0 0 18.8 5a4.9 4.9 0 0 0-.1-3S17.5 1.7 15 3.4a13.5 13.5 0 0 0-7 0C5.5 1.7 4.3 2 4.3 2a4.9 4.9 0 0 0-.1 3A5.3 5.3 0 0 0 2.8 7.7c0 5.3 3.1 6.5 6.1 6.8A3.4 3.4 0 0 0 8 17.1V22"/></>,
-    leetcode: <path d="M13.483 0a1.374 1.374 0 0 0-.961.438L7.116 6.226l-3.854 4.126a5.266 5.266 0 0 0-1.209 2.104 5.35 5.35 0 0 0-.125.513 5.527 5.527 0 0 0 .062 2.362 5.83 5.83 0 0 0 .349 1.017 5.938 5.938 0 0 0 4.818 3.662 5.895 5.895 0 0 0 2.613-.34 5.9 5.9 0 0 0 2.062-1.258l3.87-4.143a1.196 1.196 0 0 0 0-1.666 1.144 1.144 0 0 0-1.637 0l-3.87 4.143a3.528 3.528 0 0 1-1.233.753 3.528 3.528 0 0 1-1.562.203 3.55 3.55 0 0 1-2.883-2.191 3.542 3.542 0 0 1-.209-.608 3.327 3.327 0 0 1-.038-1.413 3.15 3.15 0 0 1 .724-1.259l3.854-4.125 5.405-5.788a1.374 1.374 0 0 0-.961-2.337zm4.122 7.822a1.2 1.2 0 0 0-1.696.075l-4.908 5.248a1.2 1.2 0 0 0 .075 1.696 1.2 1.2 0 0 0 1.696-.075l4.908-5.248a1.2 1.2 0 0 0-.075-1.696z" fill="currentColor" stroke="none"/>,
+    leetcode: <g transform="translate(2, 2) scale(0.833)"><path d="M13.483 0a1.374 1.374 0 0 0-.961.438L7.116 6.226l-3.854 4.126a5.266 5.266 0 0 0-1.209 2.104 5.35 5.35 0 0 0-.125.513 5.527 5.527 0 0 0 .062 2.362 5.83 5.83 0 0 0 .349 1.017 5.938 5.938 0 0 0 4.818 3.662 5.895 5.895 0 0 0 2.613-.34 5.9 5.9 0 0 0 2.062-1.258l3.87-4.143a1.196 1.196 0 0 0 0-1.666 1.144 1.144 0 0 0-1.637 0l-3.87 4.143a3.528 3.528 0 0 1-1.233.753 3.528 3.528 0 0 1-1.562.203 3.55 3.55 0 0 1-2.883-2.191 3.542 3.542 0 0 1-.209-.608 3.327 3.327 0 0 1-.038-1.413 3.15 3.15 0 0 1 .724-1.259l3.854-4.125 5.405-5.788a1.374 1.374 0 0 0-.961-2.337zm4.122 7.822a1.2 1.2 0 0 0-1.696.075l-4.908 5.248a1.2 1.2 0 0 0 .075 1.696 1.2 1.2 0 0 0 1.696-.075l4.908-5.248a1.2 1.2 0 0 0-.075-1.696z" fill="currentColor" stroke="none"/></g>,
     close: <><path d="m6 6 12 12M18 6 6 18"/></>,
     lock: <><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 1 1 8 0v3"/></>,
     logout: <><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></>,
@@ -1447,7 +1447,7 @@ function App() {
           <MemberAvatar person={member} label=""/>
           <div className="dashboard-member-identity"><div className="member-name-line"><strong>{member.name}</strong><Pill tone={member.approvalStatus === 'approved' ? 'green' : 'amber'}>{member.approvalStatus === 'approved' ? 'Approved' : 'Pending'}</Pill></div><span>{member.email}</span><small>Club Department: {member.department} · {studyYearLabel(member.studyYear)} · GitHub @{member.githubUsername || '—'} · LeetCode @{member.leetcodeUsername || '—'}</small><small>Joined {member.createdAt ? new Date(member.createdAt).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Asia/Kolkata' }) : 'date unavailable'}</small></div>
           <div className="dashboard-member-actions">
-            <select aria-label={`Role for ${member.name}`} value={member.role} disabled={memberBusy === member.id || member.id === account.id || member.approvalStatus !== 'approved'} onChange={(event) => updateRole(member, event.target.value)}><option value="member">Member</option><option value="lead">Club lead</option><option value="admin">Admin</option></select>
+            <select aria-label={`Role for ${member.name}`} value={member.role} disabled={memberBusy === member.id || member.id === account.id || member.approvalStatus !== 'approved'} onChange={(event) => updateRole(member, event.target.value)}><option value="member">Member</option><option value="admin">Admin</option></select>
             <button className="button button-quiet" disabled={memberBusy === member.id} onClick={() => generateResetLink(member)}>Generate reset link</button>
             {member.approvalStatus === 'approved' ? <button className="button button-quiet" disabled={memberBusy === member.id || member.id === account.id} onClick={() => setMemberApproval(member, 'pending')}>De-approve</button> : <button className="button button-green" disabled={memberBusy === member.id} onClick={() => setMemberApproval(member, 'approved')}>{memberBusy === member.id ? 'Saving…' : 'Approve account'} <Icon name="check" size={14}/></button>}
             <button className="button button-danger" disabled={memberBusy === member.id || member.id === account.id} onClick={() => deleteMember(member)}>Delete</button>
@@ -1526,7 +1526,7 @@ function App() {
                             checked={submissionMethod === 'github'}
                             onChange={() => setSubmissionMethod('github')}
                           />
-                          <Icon name="github" size={15} />
+                          <Icon name="github" size={13} />
                           <span>GitHub Commit</span>
                         </label>
                         <label className={`submission-method-tab ${submissionMethod === 'leetcode' ? 'active' : ''}`}>
@@ -1537,7 +1537,7 @@ function App() {
                             checked={submissionMethod === 'leetcode'}
                             onChange={() => setSubmissionMethod('leetcode')}
                           />
-                          <Icon name="leetcode" size={15} />
+                          <Icon name="leetcode" size={13} />
                           <span>LeetCode Direct</span>
                         </label>
                       </div>
@@ -1545,7 +1545,7 @@ function App() {
                       {submissionMethod === 'github' ? (
                         !account.githubVerified ? (
                           <div className="inline-callout">
-                            <Icon name="github" size={16} />
+                            <Icon name="github" size={15} />
                             <span>Connect the GitHub account you want to use; its verified username will replace the signup value.</span>
                             <button onClick={() => { window.location.href = '/api/auth/github/start'; }}>Link GitHub</button>
                           </div>
@@ -1554,7 +1554,7 @@ function App() {
                             <div className="submission-form-heading">
                               <label htmlFor="commit-url">GITHUB COMMIT CODE OR FULL URL</label>
                               <button className="submission-info" type="button" aria-label="How to submit a solution" aria-expanded={submissionHelpOpen} aria-controls="submission-help" onClick={() => setSubmissionHelpOpen((open) => !open)}>
-                                <Icon name="info" size={15} />
+                                <Icon name="info" size={13} />
                               </button>
                             </div>
                             {submissionHelpOpen && (
@@ -1572,7 +1572,7 @@ function App() {
                             <div className="submission-input-row">
                               <input id="commit-url" type="text" required value={commitUrl} onChange={(event) => setCommitUrl(event.target.value)} placeholder={`e.g. 76c3f95 or https://github.com/${account.githubUsername}/REPO/commit/FULL_SHA`} />
                               <button className="button button-dark" disabled={submissionBusy}>
-                                {submissionBusy ? 'Verifying…' : 'Verify and submit'} <Icon name="arrow" size={14} />
+                                {submissionBusy ? 'Verifying…' : 'Verify and submit'} <Icon name="arrow" size={13} />
                               </button>
                             </div>
                             <small>Enter a commit hash (e.g. <code>76c3f95</code>) or full commit URL. Required changed file: <code>{assignedQuestion.id}/solution.txt</code> (at least one byte). The linked GitHub account must own the repository.</small>
@@ -1581,7 +1581,7 @@ function App() {
                       ) : (
                         !account.leetcodeUsername ? (
                           <div className="inline-callout">
-                            <Icon name="info" size={16} />
+                            <Icon name="info" size={15} />
                             <span>Your LeetCode username is not added yet. Add it in your Account profile to submit directly.</span>
                             <button type="button" onClick={() => navigate('progress')}>Go to Account</button>
                           </div>
@@ -1589,7 +1589,7 @@ function App() {
                           <div className="leetcode-direct-box">
                             <div className="leetcode-direct-meta">
                               <span className="leetcode-user-tag">
-                                <Icon name="leetcode" size={15} />
+                                <Icon name="leetcode" size={13} />
                                 LeetCode: <strong>@{account.leetcodeUsername}</strong>
                               </span>
                               <span className="leetcode-target-tag">
@@ -1606,7 +1606,7 @@ function App() {
                                 disabled={submissionBusy}
                                 onClick={submitLeetCodeSolution}
                               >
-                                {submissionBusy ? 'Verifying on LeetCode…' : <>Submit with LeetCode <Icon name="arrow" size={14} /></>}
+                                {submissionBusy ? 'Verifying on LeetCode…' : <>Submit with LeetCode <Icon name="arrow" size={13} /></>}
                               </button>
                               <a
                                 className="button button-quiet button-sm"
@@ -1614,7 +1614,7 @@ function App() {
                                 target="_blank"
                                 rel="noreferrer"
                               >
-                                Open on LeetCode <Icon name="external" size={13} />
+                                Open on LeetCode <Icon name="external" size={12} />
                               </a>
                             </div>
                           </div>
