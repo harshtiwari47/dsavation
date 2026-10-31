@@ -164,8 +164,11 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey }
 
   let avatarDrawn = false;
   try {
-    const dataUri = await createAvatarDataUri(explainer.avatarStyle, explainer.avatarSeed);
-    if (dataUri) {
+    const isCustom = explainer.avatarStyle === 'custom' || /^https?:\/\//i.test(explainer.avatarSeed || '') || Boolean(explainer.avatarUrl);
+    const imgSource = isCustom
+      ? (explainer.avatarUrl || explainer.avatarSeed)
+      : await createAvatarDataUri(explainer.avatarStyle, explainer.avatarSeed);
+    if (imgSource) {
       await new Promise((resolve) => {
         const img = new Image();
         img.crossOrigin = 'anonymous';
@@ -181,7 +184,7 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey }
           resolve();
         };
         img.onerror = () => resolve();
-        img.src = dataUri;
+        img.src = imgSource;
         setTimeout(resolve, 600); // 600ms timeout max
       });
     }

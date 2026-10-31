@@ -148,13 +148,24 @@ function baseUrl(req) {
   return `${String(protocol).split(',')[0]}://${String(host).split(',')[0]}`;
 }
 
+function formatAvatar(user, fallbackId) {
+  const isCustom = user?.avatarStyle === 'custom' || /^https?:\/\//i.test(String(user?.avatarSeed || ''));
+  return {
+    avatarStyle: isCustom ? 'custom' : (AVATAR_STYLES.has(user?.avatarStyle) ? user.avatarStyle : 'critters'),
+    avatarSeed: String(user?.avatarSeed || user?._id || fallbackId || 'dsavation-member'),
+    avatarUrl: user?.avatarUrl || (isCustom ? String(user?.avatarSeed) : ''),
+  };
+}
+
 function account(user) {
   if (!user) return null;
+  const avatar = formatAvatar(user);
   return {
     id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
     email: user.email, githubUsername: user.githubUsername || '', leetcodeUsername: user.leetcodeUsername || '',
-    avatarStyle: AVATAR_STYLES.has(user.avatarStyle) ? user.avatarStyle : 'critters',
-    avatarSeed: String(user.avatarSeed || user._id),
+    avatarStyle: avatar.avatarStyle,
+    avatarSeed: avatar.avatarSeed,
+    avatarUrl: avatar.avatarUrl,
     githubVerified: Boolean(user.githubVerifiedAt), role: user.role || 'member',
     showPublic: Boolean(user.showPublic), createdAt: user.createdAt,
   };
@@ -370,14 +381,30 @@ async function updateProfile(db, req, user, body) {
   const githubUsername = String(body.githubUsername ?? user.githubUsername ?? '').trim().replace(/^@/, '');
   const leetcodeUsername = String(body.leetcodeUsername ?? user.leetcodeUsername ?? '').trim();
   const avatarStyle = String(body.avatarStyle ?? user.avatarStyle ?? 'critters');
-  const avatarSeed = String(body.avatarSeed ?? user.avatarSeed ?? user._id);
+  let avatarSeed = String(body.avatarSeed ?? user.avatarSeed ?? user._id);
+  let avatarUrl = String(body.avatarUrl ?? user.avatarUrl ?? '').trim();
   if (name.length < 2 || name.length > 80) throw new HttpError(400, 'Enter your full name (2–80 characters).');
   if (department.length < 2 || department.length > 80) throw new HttpError(400, 'Enter your Club Department (2–80 characters).');
   if (!['first-year', 'second-year', 'third-year', 'fourth-year', 'passed'].includes(studyYear)) throw new HttpError(400, 'Choose your current year of study.');
   if (leetcodeUsername && !/^[a-z0-9_-]{1,40}$/i.test(leetcodeUsername)) throw new HttpError(400, 'Enter a valid LeetCode username.');
-  if (!AVATAR_STYLES.has(avatarStyle)) throw new HttpError(400, 'Choose one of the available DiceBear avatar styles.');
-  if (!/^[A-Za-z0-9_-]{1,64}$/.test(avatarSeed)) throw new HttpError(400, 'Choose a valid avatar variant.');
-  const update = { name, department, studyYear, leetcodeUsername, avatarStyle, avatarSeed, updatedAt: new Date() };
+  if (!AVATAR_STYLES.has(avatarStyle) && avatarStyle !== 'custom') throw new HttpError(400, 'Choose one of the available DiceBear avatar styles.');
+  if (avatarStyle === 'custom') {
+    const rawUrl = avatarUrl || avatarSeed;
+    try {
+      const parsed = new URL(rawUrl);
+      if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:') throw new Error();
+      if (rawUrl.length > 1000) throw new HttpError(400, 'Custom image URL is too long (maximum 1000 characters).');
+    } catch (err) {
+      if (err instanceof HttpError) throw err;
+      throw new HttpError(400, 'Enter a valid image URL starting with http:// or https://');
+    }
+    avatarSeed = rawUrl;
+    avatarUrl = rawUrl;
+  } else {
+    if (!/^[A-Za-z0-9_-]{1,64}$/.test(avatarSeed)) throw new HttpError(400, 'Choose a valid avatar variant.');
+    avatarUrl = '';
+  }
+  const update = { name, department, studyYear, leetcodeUsername, avatarStyle, avatarSeed, avatarUrl, updatedAt: new Date() };
   const unset = {};
   if (!githubUsername) {
     Object.assign(update, { githubUsername: '' });
@@ -483,7 +510,7 @@ async function getClubToday(db) {
   const submissions = await db.collection('submissions').find({ assignmentId: assignment._id }).sort({ submittedAt: 1 }).toArray();
   const userIds = [...new Set(submissions.map((item) => String(item.userId)))].map((id) => new ObjectId(id));
   const profiles = userIds.length ? await db.collection('users').find(approvedUserFilter({ _id: { $in: userIds } }), {
-    projection: { name: 1, department: 1, showPublic: 1, githubUsername: 1, avatarStyle: 1, avatarSeed: 1 },
+    projection: { name: 1, department: 1, showPublic: 1, githubUsername: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
   }).toArray() : [];
   const profileById = new Map(profiles.map((profile) => [String(profile._id), profile]));
   const activeSubmissions = submissions.filter((item) => item.status !== 'invalidated' && profileById.has(String(item.userId)));
@@ -493,8 +520,7 @@ async function getClubToday(db) {
       name: profile.showPublic ? profile.name : profile.githubUsername ? `@${profile.githubUsername}` : 'ABES member',
       department: profile.showPublic ? profile.department : '',
       githubUsername: profile.githubUsername,
-      avatarStyle: AVATAR_STYLES.has(profile.avatarStyle) ? profile.avatarStyle : 'critters',
-      avatarSeed: String(profile.avatarSeed || profile._id),
+      ...formatAvatar(profile),
     }] : [];
   });
   return {
@@ -722,7 +748,7 @@ async function leaderboard(db, url) {
     { $sort: { accepted: -1, lastAcceptedAt: 1 } },
   ]).toArray();
   const profiles = await db.collection('users').find(approvedUserFilter(), {
-    projection: { name: 1, department: 1, githubUsername: 1, showPublic: 1, createdAt: 1, avatarStyle: 1, avatarSeed: 1 },
+    projection: { name: 1, department: 1, githubUsername: 1, showPublic: 1, createdAt: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
   }).toArray();
   const totalById = new Map(totals.map((row) => [String(row._id), row]));
   const today = dayKey();
@@ -759,8 +785,7 @@ async function leaderboard(db, url) {
       name: profile.showPublic ? profile.name : profile.githubUsername ? `@${profile.githubUsername}` : 'ABES member',
       department: profile.showPublic ? profile.department : 'ABES member',
       githubUsername: profile.githubUsername,
-      avatarStyle: AVATAR_STYLES.has(profile.avatarStyle) ? profile.avatarStyle : 'critters',
-      avatarSeed: String(profile.avatarSeed || profile._id),
+      ...formatAvatar(profile),
       points: row.points ?? row.accepted,
       completed: row.accepted,
       scheduled: eligible.length,
@@ -891,7 +916,7 @@ async function getTodaySubmissions(db, req, user, url) {
     .toArray();
 
   const allApproved = await db.collection('users').find(approvedUserFilter(), {
-    projection: { name: 1, email: 1, department: 1, studyYear: 1, githubUsername: 1, avatarStyle: 1, avatarSeed: 1 },
+    projection: { name: 1, email: 1, department: 1, studyYear: 1, githubUsername: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
   }).toArray();
   const profileById = new Map(allApproved.map((p) => [String(p._id), p]));
   const attemptedUserIdSet = new Set(submissions.map((item) => String(item.userId)));
@@ -906,8 +931,7 @@ async function getTodaySubmissions(db, req, user, url) {
       department: profile?.department || '',
       studyYear: profile?.studyYear || '',
       githubUsername: profile?.githubUsername || item.authorLogin || '',
-      avatarStyle: AVATAR_STYLES.has(profile?.avatarStyle) ? profile.avatarStyle : 'critters',
-      avatarSeed: String(profile?.avatarSeed || profile?._id || item.userId),
+      ...formatAvatar(profile, item.userId),
       commitUrl: item.commitUrl,
       commitSha: item.commitSha,
       solutionPath: item.solutionPath,
@@ -932,8 +956,7 @@ async function getTodaySubmissions(db, req, user, url) {
       department: u.department || '',
       studyYear: u.studyYear || '',
       githubUsername: u.githubUsername || '',
-      avatarStyle: AVATAR_STYLES.has(u.avatarStyle) ? u.avatarStyle : 'critters',
-      avatarSeed: String(u.avatarSeed || u._id),
+      ...formatAvatar(u),
       commitUrl: '',
       commitSha: '',
       solutionPath: '',
@@ -1055,7 +1078,7 @@ async function listMembers(db, url) {
   const [total, members, pending, approved] = await Promise.all([
     db.collection('users').countDocuments(filter),
     db.collection('users').find(filter, {
-      projection: { name: 1, department: 1, studyYear: 1, email: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1, avatarStyle: 1, avatarSeed: 1 },
+      projection: { name: 1, department: 1, studyYear: 1, email: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
     }).sort({ name: 1 }).skip(skip).limit(pageSize).toArray(),
     db.collection('users').countDocuments({ $or: [{ approvalStatus: 'pending' }, { approvalStatus: { $exists: false }, verifiedAt: null }] }),
     db.collection('users').countDocuments(approvedUserFilter()),
@@ -1063,7 +1086,7 @@ async function listMembers(db, url) {
   return { members: members.map((user) => ({
     id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
     email: user.email, githubUsername: user.githubUsername, leetcodeUsername: user.leetcodeUsername || '', role: user.role || 'member',
-    avatarStyle: AVATAR_STYLES.has(user.avatarStyle) ? user.avatarStyle : 'critters', avatarSeed: String(user.avatarSeed || user._id),
+    ...formatAvatar(user),
     approvalStatus: approvalStatus(user), showPublic: Boolean(user.showPublic), createdAt: user.createdAt, approvedAt: user.approvedAt || user.verifiedAt || null,
   })), pagination: pageMeta(page, pageSize, total), counts: { pending, approved } };
 }
@@ -1088,11 +1111,11 @@ async function listDirectory(db, url, viewer = null) {
     filters.push({ studyYear });
   }
   const filter = filters.length === 1 ? filters[0] : { $and: filters };
-  const { page, pageSize, skip } = pageOptions(url, 16, 40);
+  const { page, pageSize, skip } = pageOptions(url, 60, 100);
   const [total, members, departments] = await Promise.all([
     db.collection('users').countDocuments(filter),
     db.collection('users').find(filter, {
-      projection: { name: 1, department: 1, studyYear: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, avatarStyle: 1, avatarSeed: 1 },
+      projection: { name: 1, department: 1, studyYear: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
     }).sort({ name: 1 }).skip(skip).limit(pageSize).toArray(),
     db.collection('users').find(approvedUserFilter(), { projection: { department: 1 } }).toArray(),
   ]);
@@ -1108,8 +1131,7 @@ async function listDirectory(db, url, viewer = null) {
         githubUsername: member.githubUsername || '',
         leetcodeUsername: canSeeLeetcode ? (member.leetcodeUsername || '') : '',
         role: member.role || 'member',
-        avatarStyle: AVATAR_STYLES.has(member.avatarStyle) ? member.avatarStyle : 'critters',
-        avatarSeed: String(member.avatarSeed || member._id),
+        ...formatAvatar(member),
       };
     }),
     departments: [...new Set(departments.map((member) => String(member.department || '').trim()).filter(Boolean))].sort((a, b) => a.localeCompare(b)),

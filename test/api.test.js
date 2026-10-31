@@ -309,6 +309,18 @@ test('authenticated profile and private-progress APIs validate and persist membe
   assert.equal(invalidAvatarStyle.response.status, 400);
   const invalidAvatarSeed = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: { avatarSeed: 'invalid seed !' } });
   assert.equal(invalidAvatarSeed.response.status, 400);
+
+  const customAvatar = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
+    avatarStyle: 'custom', avatarUrl: 'https://example.com/custom-avatar.png',
+  } });
+  assert.equal(customAvatar.response.status, 200);
+  assert.equal(customAvatar.data.user.avatarStyle, 'custom');
+  assert.equal(customAvatar.data.user.avatarUrl, 'https://example.com/custom-avatar.png');
+
+  const invalidCustomUrl = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
+    avatarStyle: 'custom', avatarUrl: 'not-a-valid-url',
+  } });
+  assert.equal(invalidCustomUrl.response.status, 400);
   const newGithub = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
     name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
     githubUsername: 'student-new-gh', leetcodeUsername: 'leet-updated',
