@@ -1286,8 +1286,7 @@ function App() {
       </nav>
       <div className="account-actions">
         <button className="theme-toggle" type="button" onClick={() => setTheme((current) => current === 'dark' ? 'light' : 'dark')} aria-label={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`} title={`Switch to ${theme === 'dark' ? 'light' : 'dark'} mode`}><Icon name={theme === 'dark' ? 'sun' : 'moon'} size={15}/><span>{theme === 'dark' ? 'Light' : 'Dark'}</span></button>
-        {account ? <>
-          {!account.githubVerified && <button className="button button-quiet github-link" onClick={() => { window.location.href = '/api/auth/github/start'; }}><Icon name="github" size={15}/><span>Link GitHub</span></button>}
+        {account ? (
           <button
             type="button"
             className={`account-profile-btn ${view === 'progress' ? 'active' : ''}`}
@@ -1301,7 +1300,7 @@ function App() {
               {account.role !== 'member' && <small>{account.role}</small>}
             </span>
           </button>
-        </> : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
+        ) : <button className="button button-dark" onClick={() => { setAuthMode('login'); setAuthOpen(true); }}>Sign in <Icon name="arrow" size={14}/></button>}
       </div>
     </header>
 
@@ -1488,11 +1487,6 @@ function App() {
                 </div>
                 <div className="panel-heading-actions">
                   {assignedQuestion && <Pill tone={assignedQuestion.difficulty.toLowerCase()}>{assignedQuestion.difficulty}</Pill>}
-                  {isLeader && editingTodayAssignment && club.assignment && (
-                    <button type="button" className="button button-danger delete-today-btn" onClick={deleteTodayAssignment} disabled={assignmentBusy} title="Delete today’s published question">
-                      <Icon name="trash" size={13} /> <span>Delete today's question</span>
-                    </button>
-                  )}
                 </div>
               </div>
               {assignedQuestion ? (
@@ -1770,15 +1764,15 @@ function App() {
                           </div>
                           <div className="daily-leader-actions">
                             <strong className="leader-score">{person.points}<small> pt{person.points === 1 ? '' : 's'}</small></strong>
-                            {isAdmin && person.commitUrl && (
+                            {isAdmin && person.commitUrl && person.submissionType !== 'leetcode' && (
                               <a
                                 href={person.commitUrl}
                                 target="_blank"
                                 rel="noreferrer"
                                 className="button button-quiet button-sm daily-commit-link"
-                                title={person.submissionType === 'leetcode' ? 'Open verified LeetCode problem' : 'View submission commit'}
+                                title="View submission commit"
                               >
-                                <span>{person.submissionType === 'leetcode' ? 'LeetCode' : 'View commit'}</span> <Icon name="external" size={12}/>
+                                <span>View commit</span> <Icon name="external" size={12}/>
                               </a>
                             )}
                           </div>
