@@ -315,14 +315,14 @@ test('authenticated profile and private-progress APIs validate and persist membe
   assert.equal(update.data.user.studyYear, 'fourth-year');
   assert.equal(update.data.user.avatarStyle, 'micah');
   assert.equal(update.data.user.avatarSeed, 'avatar-account-choice-1');
-  assert.equal(update.data.user.defaultSubmissionMethod, 'leetcode');
+  assert.equal(update.data.user.defaultSubmissionMethod, 'github');
 
   const updateSubmissionMethod = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
     name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
-    defaultSubmissionMethod: 'github',
+    defaultSubmissionMethod: 'leetcode',
   } });
   assert.equal(updateSubmissionMethod.response.status, 200);
-  assert.equal(updateSubmissionMethod.data.user.defaultSubmissionMethod, 'github');
+  assert.equal(updateSubmissionMethod.data.user.defaultSubmissionMethod, 'leetcode');
 
   const invalidSubmissionMethod = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
     name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',

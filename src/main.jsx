@@ -491,7 +491,7 @@ function App() {
   const [resetError, setResetError] = useState('');
   const [profileBusy, setProfileBusy] = useState(false);
   const [commitUrl, setCommitUrl] = useState('');
-  const [accountSubmissionMethod, setAccountSubmissionMethod] = useState(() => account?.defaultSubmissionMethod || 'leetcode');
+  const [accountSubmissionMethod, setAccountSubmissionMethod] = useState(() => account?.defaultSubmissionMethod || 'github');
   const [submissionHelpOpen, setSubmissionHelpOpen] = useState(false);
   const [submissionBusy, setSubmissionBusy] = useState(false);
   const [assignmentDate, setAssignmentDate] = useState(localDay());
@@ -1190,7 +1190,7 @@ function App() {
       const result = await api('/auth/profile', { method: 'PATCH', body: {
         name: values.name, department: values.department, studyYear: values.studyYear,
         githubUsername: values.githubUsername, leetcodeUsername: values.leetcodeUsername,
-        defaultSubmissionMethod: values.defaultSubmissionMethod || 'leetcode',
+        defaultSubmissionMethod: values.defaultSubmissionMethod || 'github',
         avatarStyle: avatarDraftStyle,
         avatarSeed: avatarDraftStyle === 'custom' ? avatarDraftCustomUrl.trim() : avatarDraftSeed,
         avatarUrl: avatarDraftStyle === 'custom' ? avatarDraftCustomUrl.trim() : '',
@@ -1549,7 +1549,7 @@ function App() {
                     <span>{assignedQuestion.pattern}</span>
                   </div>
                   <p className="assignment-prompt">
-                    Submit today’s verified solution using {(account?.defaultSubmissionMethod || 'leetcode') === 'github' ? <>your <strong>GitHub commit</strong></> : <>directly via <strong>LeetCode</strong></>}. A verified submission earns 1 point on the club leaderboard.
+                    Submit today’s verified solution using {(account?.defaultSubmissionMethod || 'github') === 'github' ? <>your <strong>GitHub commit</strong></> : <>directly via <strong>LeetCode</strong></>}. A verified submission earns 1 point on the club leaderboard.
                   </p>
                   <div className="assignment-counts">
                     <div><strong>{club.submittedCount}</strong><span>SUBMITTED</span></div>
@@ -1571,7 +1571,7 @@ function App() {
                     </div>
                   ) : (
                     <div className="submission-box-wrap">
-                      {(account?.defaultSubmissionMethod || 'leetcode') === 'github' ? (
+                      {(account?.defaultSubmissionMethod || 'github') === 'github' ? (
                         !account.githubVerified ? (
                           <div className="inline-callout">
                             <Icon name="github" size={15} />

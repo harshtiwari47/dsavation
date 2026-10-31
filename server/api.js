@@ -176,7 +176,7 @@ function account(user) {
     avatarUrl: avatar.avatarUrl,
     githubVerified: Boolean(user.githubVerifiedAt), role: user.role || 'member',
     showPublic: Boolean(user.showPublic), createdAt: user.createdAt,
-    defaultSubmissionMethod: user.defaultSubmissionMethod || 'leetcode',
+    defaultSubmissionMethod: user.defaultSubmissionMethod || 'github',
   };
 }
 
@@ -306,7 +306,7 @@ async function signup(db, req, res, body) {
     name, department, studyYear, email, passwordHash: await bcrypt.hash(password, 12), leetcodeUsername,
     githubUsername: gh.login, githubUserLower, githubId: gh.id,
     githubVerifiedAt: null, showPublic: body.showPublic !== false,
-    defaultSubmissionMethod: 'leetcode',
+    defaultSubmissionMethod: 'github',
     approvalStatus: administrator ? 'approved' : 'pending',
     approvedAt: administrator ? now : null, approvedBy: administrator ? 'ADMIN_EMAILS' : null,
     role: administrator ? 'admin' : 'member', createdAt: now, updatedAt: now,
@@ -414,7 +414,7 @@ async function updateProfile(db, req, user, body) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(avatarSeed)) throw new HttpError(400, 'Choose a valid avatar variant.');
     avatarUrl = '';
   }
-  let defaultSubmissionMethod = user.defaultSubmissionMethod || 'leetcode';
+  let defaultSubmissionMethod = user.defaultSubmissionMethod || 'github';
   if (body.defaultSubmissionMethod !== undefined) {
     if (!['leetcode', 'github'].includes(body.defaultSubmissionMethod)) {
       throw new HttpError(400, 'Choose a valid default submission method (leetcode or github).');
