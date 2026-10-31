@@ -587,7 +587,7 @@ h1, h2, h3, p { margin-top: 0; }
     transparent 100%
   );
   transform: translateX(-160%) skewX(-20deg);
-  animation: card-shimmer-sweep 4.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  animation: card-shimmer-sweep 9s cubic-bezier(0.4, 0, 0.2, 1) infinite;
   opacity: 0.5;
   transition: opacity 0.4s ease;
 }
@@ -2771,6 +2771,7 @@ button.moderation-stat.explainer-picker-stat-btn:hover {
 
 :root[data-theme="dark"] .liquid-glass::before,
 :root[data-theme="dark"] .water-glass-card::before {
+  animation-duration: 4.5s;
   background: linear-gradient(
     105deg,
     transparent 0%,

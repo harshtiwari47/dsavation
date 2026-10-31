@@ -176,6 +176,7 @@ function account(user) {
     avatarUrl: avatar.avatarUrl,
     githubVerified: Boolean(user.githubVerifiedAt), role: user.role || 'member',
     showPublic: Boolean(user.showPublic), createdAt: user.createdAt,
+    defaultSubmissionMethod: user.defaultSubmissionMethod || 'leetcode',
   };
 }
 
@@ -305,6 +306,7 @@ async function signup(db, req, res, body) {
     name, department, studyYear, email, passwordHash: await bcrypt.hash(password, 12), leetcodeUsername,
     githubUsername: gh.login, githubUserLower, githubId: gh.id,
     githubVerifiedAt: null, showPublic: body.showPublic !== false,
+    defaultSubmissionMethod: 'leetcode',
     approvalStatus: administrator ? 'approved' : 'pending',
     approvedAt: administrator ? now : null, approvedBy: administrator ? 'ADMIN_EMAILS' : null,
     role: administrator ? 'admin' : 'member', createdAt: now, updatedAt: now,
@@ -412,7 +414,14 @@ async function updateProfile(db, req, user, body) {
     if (!/^[A-Za-z0-9_-]{1,64}$/.test(avatarSeed)) throw new HttpError(400, 'Choose a valid avatar variant.');
     avatarUrl = '';
   }
-  const update = { name, department, studyYear, leetcodeUsername, avatarStyle, avatarSeed, avatarUrl, updatedAt: new Date() };
+  let defaultSubmissionMethod = user.defaultSubmissionMethod || 'leetcode';
+  if (body.defaultSubmissionMethod !== undefined) {
+    if (!['leetcode', 'github'].includes(body.defaultSubmissionMethod)) {
+      throw new HttpError(400, 'Choose a valid default submission method (leetcode or github).');
+    }
+    defaultSubmissionMethod = body.defaultSubmissionMethod;
+  }
+  const update = { name, department, studyYear, leetcodeUsername, defaultSubmissionMethod, avatarStyle, avatarSeed, avatarUrl, updatedAt: new Date() };
   const unset = {};
   if (!githubUsername) {
     Object.assign(update, { githubUsername: '' });
