@@ -250,8 +250,13 @@ test('commit links, solution paths, and India assignment dates reject malformed 
   assert.equal(parsePersonalCommitUrl('https://github.com/alex/dsa/blob/main/217/Solution.cpp'), null);
   assert.equal(parsePersonalCommitUrl('http://github.com/alex/dsa/commit/abcdef0'), null);
   assert.equal(isAssignmentSolutionPath('217/solution.txt', 217), true);
+  assert.equal(isAssignmentSolutionPath('217/solution.cpp', 217), true);
+  assert.equal(isAssignmentSolutionPath('217/solution.py', 217), true);
+  assert.equal(isAssignmentSolutionPath('217/solution.java', 217), true);
+  assert.equal(isAssignmentSolutionPath('217/solution.js', 217), true);
+  assert.equal(isAssignmentSolutionPath('217/solution.c', 217), true);
+  assert.equal(isAssignmentSolutionPath('217/solution.rs', 217), false);
   assert.equal(isAssignmentSolutionPath('217/Solution.txt', 217), false);
-  assert.equal(isAssignmentSolutionPath('217/solution.java', 217), false);
   assert.equal(isAssignmentSolutionPath('217/src/solution.txt', 217), false);
   assert.equal(isAssignmentSolutionPath('218/solution.txt', 217), false);
   assert.equal(isOnAssignmentDay('2026-10-28T18:29:59.000Z', '2026-10-28'), true);

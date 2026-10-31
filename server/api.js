@@ -723,12 +723,13 @@ async function makeSubmission(db, req, user, body) {
       throw new HttpError(400, 'The file must be created and committed during the assignment day in Asia/Kolkata.');
     }
     const matchingFiles = (commit.files || []).filter((file) => file.status !== 'removed' && isAssignmentSolutionPath(file.filename, assignment.questionId));
-    if (!matchingFiles.length) throw new HttpError(400, `This commit must create or change ${assignment.questionId}/solution.txt.`);
+    if (!matchingFiles.length) throw new HttpError(400, `This commit must create or change ${assignment.questionId}/solution.txt (or .cpp, .py, .java, .js, .c).`);
     const tree = await githubJson(`/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repository)}/git/trees/${encodeURIComponent(commit.commit.tree.sha)}?recursive=1`, process.env.GITHUB_TOKEN);
     const sizeByPath = new Map((tree.tree || []).filter((item) => item.type === 'blob').map((item) => [item.path, Number(item.size)]));
     const matchingFile = matchingFiles.find((file) => Number.isFinite(sizeByPath.get(file.filename)) && sizeByPath.get(file.filename) > 0);
     const solutionSizeBytes = matchingFile ? sizeByPath.get(matchingFile.filename) : 0;
-    if (!matchingFile) throw new HttpError(400, `${assignment.questionId}/solution.txt must contain at least one byte at this commit.`);
+    const targetFilename = matchingFiles[0]?.filename || `${assignment.questionId}/solution.txt`;
+    if (!matchingFile) throw new HttpError(400, `${targetFilename} must contain at least one byte at this commit.`);
     const now = new Date();
     submission = {
       assignmentId: assignment._id, userId: user._id, questionId: assignment.questionId,
@@ -883,8 +884,12 @@ export function parsePersonalCommitUrl(rawUrl) {
   return { owner, repository, sha: parts[3] };
 }
 
+export const ALLOWED_SOLUTION_EXTENSIONS = ['txt', 'cpp', 'py', 'java', 'js', 'c'];
+
 export function isAssignmentSolutionPath(filename, questionId) {
-  return String(filename || '') === `${Number(questionId)}/solution.txt`;
+  const match = String(filename || '').match(/^(\d+)\/solution\.(txt|cpp|py|java|js|c)$/);
+  if (!match) return false;
+  return Number(match[1]) === Number(questionId);
 }
 
 async function githubWebhook() {
