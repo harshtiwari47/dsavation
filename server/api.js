@@ -169,6 +169,7 @@ function account(user) {
   if (!user) return null;
   const avatar = formatAvatar(user);
   const explicit = Boolean(user.explicitSubmissionMethod);
+  const leetcodeApproved = user.role === 'admin' || user.leetcodeApproval === 'approved';
   return {
     id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
     email: user.email, githubUsername: user.githubUsername || '', leetcodeUsername: user.leetcodeUsername || '',
@@ -178,7 +179,8 @@ function account(user) {
     githubVerified: Boolean(user.githubVerifiedAt), role: user.role || 'member',
     showPublic: Boolean(user.showPublic), createdAt: user.createdAt,
     explicitSubmissionMethod: explicit,
-    defaultSubmissionMethod: explicit ? (user.defaultSubmissionMethod || 'github') : 'github',
+    leetcodeApproval: user.role === 'admin' ? 'approved' : (user.leetcodeApproval || 'none'),
+    defaultSubmissionMethod: leetcodeApproved && user.defaultSubmissionMethod === 'leetcode' ? 'leetcode' : 'github',
   };
 }
 
@@ -418,14 +420,36 @@ async function updateProfile(db, req, user, body) {
   }
   let defaultSubmissionMethod = user.defaultSubmissionMethod || 'github';
   let explicitSubmissionMethod = Boolean(user.explicitSubmissionMethod);
+  const leetcodeApproved = user.role === 'admin' || user.leetcodeApproval === 'approved';
+  let leetcodeApproval = user.role === 'admin' ? 'approved' : (user.leetcodeApproval || 'none');
+  let leetcodeRequestedAt = user.leetcodeRequestedAt || null;
+
+  if (body.requestLeetcodeApproval === true) {
+    if (!leetcodeApproved) {
+      leetcodeApproval = 'pending';
+      leetcodeRequestedAt = new Date();
+    }
+  }
+
   if (body.defaultSubmissionMethod !== undefined) {
     if (!['leetcode', 'github'].includes(body.defaultSubmissionMethod)) {
       throw new HttpError(400, 'Choose a valid default submission method (leetcode or github).');
     }
-    defaultSubmissionMethod = body.defaultSubmissionMethod;
+    if (body.defaultSubmissionMethod === 'leetcode' && !leetcodeApproved) {
+      leetcodeApproval = 'pending';
+      leetcodeRequestedAt = new Date();
+      defaultSubmissionMethod = 'github';
+    } else {
+      defaultSubmissionMethod = body.defaultSubmissionMethod;
+    }
     explicitSubmissionMethod = true;
   }
-  const update = { name, department, studyYear, leetcodeUsername, defaultSubmissionMethod, explicitSubmissionMethod, avatarStyle, avatarSeed, avatarUrl, updatedAt: new Date() };
+  const update = {
+    name, department, studyYear, leetcodeUsername,
+    defaultSubmissionMethod, explicitSubmissionMethod,
+    leetcodeApproval, leetcodeRequestedAt,
+    avatarStyle, avatarSeed, avatarUrl, updatedAt: new Date(),
+  };
   const unset = {};
   if (!githubUsername) {
     Object.assign(update, { githubUsername: '' });
@@ -579,6 +603,12 @@ async function getClubToday(db) {
 
 async function makeSubmission(db, req, user, body) {
   const isLeetCode = body.type === 'leetcode' || body.method === 'leetcode' || body.submissionMethod === 'leetcode';
+
+  if (isLeetCode) {
+    if (user.role !== 'admin' && user.leetcodeApproval !== 'approved') {
+      throw new HttpError(403, 'Submitting directly via LeetCode requires administrator approval. Request approval in your Account settings.');
+    }
+  }
 
   if (!isLeetCode && !user.githubVerifiedAt) {
     throw new HttpError(403, 'Link your verified GitHub account before submitting a club solution.');
@@ -1368,6 +1398,7 @@ async function listMembers(db, url) {
   const filters = [];
   if (status === 'approved') filters.push(approvedUserFilter());
   if (status === 'pending') filters.push({ $or: [{ approvalStatus: 'pending' }, { approvalStatus: { $exists: false }, verifiedAt: null }] });
+  if (status === 'leetcode' || status === 'leetcode-pending') filters.push({ leetcodeApproval: 'pending' });
   if (query) {
     const escaped = query.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
     const regex = new RegExp(escaped, 'i');
@@ -1375,20 +1406,25 @@ async function listMembers(db, url) {
   }
   const filter = filters.length > 1 ? { $and: filters } : filters[0] || {};
   const { page, pageSize, skip } = pageOptions(url, 20, 50);
-  const [total, members, pending, approved] = await Promise.all([
+  const [total, members, pending, approved, leetcodePending] = await Promise.all([
     db.collection('users').countDocuments(filter),
     db.collection('users').find(filter, {
-      projection: { name: 1, department: 1, studyYear: 1, email: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
+      projection: { name: 1, department: 1, studyYear: 1, email: 1, githubUsername: 1, leetcodeUsername: 1, role: 1, showPublic: 1, createdAt: 1, approvalStatus: 1, approvedAt: 1, verifiedAt: 1, leetcodeApproval: 1, leetcodeRequestedAt: 1, defaultSubmissionMethod: 1, avatarStyle: 1, avatarSeed: 1, avatarUrl: 1 },
     }).sort({ name: 1 }).skip(skip).limit(pageSize).toArray(),
     db.collection('users').countDocuments({ $or: [{ approvalStatus: 'pending' }, { approvalStatus: { $exists: false }, verifiedAt: null }] }),
     db.collection('users').countDocuments(approvedUserFilter()),
+    db.collection('users').countDocuments({ leetcodeApproval: 'pending' }),
   ]);
   return { members: members.map((user) => ({
     id: String(user._id), name: user.name, department: user.department, studyYear: user.studyYear || '',
     email: user.email, githubUsername: user.githubUsername, leetcodeUsername: user.leetcodeUsername || '', role: user.role || 'member',
     ...formatAvatar(user),
-    approvalStatus: approvalStatus(user), showPublic: Boolean(user.showPublic), createdAt: user.createdAt, approvedAt: user.approvedAt || user.verifiedAt || null,
-  })), pagination: pageMeta(page, pageSize, total), counts: { pending, approved } };
+    approvalStatus: approvalStatus(user),
+    leetcodeApproval: user.role === 'admin' ? 'approved' : (user.leetcodeApproval || 'none'),
+    leetcodeRequestedAt: user.leetcodeRequestedAt || null,
+    defaultSubmissionMethod: user.defaultSubmissionMethod || 'github',
+    showPublic: Boolean(user.showPublic), createdAt: user.createdAt, approvedAt: user.approvedAt || user.verifiedAt || null,
+  })), pagination: pageMeta(page, pageSize, total), counts: { pending, approved, leetcodePending } };
 }
 
 async function listDirectory(db, url, viewer = null) {
@@ -1538,6 +1574,21 @@ async function updateMember(db, user, memberId, body) {
     if (body.approvalStatus === 'approved') {
       update.approvedAt = new Date();
       update.approvedBy = user._id;
+    }
+  }
+  if (body.leetcodeApproval !== undefined) {
+    if (!['approved', 'pending', 'none'].includes(body.leetcodeApproval)) {
+      throw new HttpError(400, 'LeetCode approval status must be approved, pending, or none.');
+    }
+    update.leetcodeApproval = body.leetcodeApproval;
+    update.updatedAt = new Date();
+    if (body.leetcodeApproval === 'approved') {
+      update.leetcodeApprovedAt = new Date();
+      update.leetcodeApprovedBy = user._id;
+    } else {
+      if (member.defaultSubmissionMethod === 'leetcode') {
+        update.defaultSubmissionMethod = 'github';
+      }
     }
   }
   if (!Object.keys(update).length) throw new HttpError(400, 'No member settings were provided.');

@@ -164,12 +164,13 @@ async function call(db, path, { method = 'GET', body, cookie = '' } = {}) {
   };
 }
 
-async function seedUser(db, { name, email, username, role = 'member', approved = true, leetcodeUsername = 'leet-id', department = 'Computer Science', studyYear = 'third-year', showPublic = true }) {
+async function seedUser(db, { name, email, username, role = 'member', approved = true, leetcodeUsername = 'leet-id', department = 'Computer Science', studyYear = 'third-year', showPublic = true, leetcodeApproval = 'approved' }) {
   const user = {
     _id: new ObjectId(), name, department, studyYear,
     email, passwordHash: await bcrypt.hash('correct-horse-123', 4),
     githubUsername: username, githubUserLower: username.toLowerCase(), githubId: 100,
     githubVerifiedAt: new Date(), leetcodeUsername, showPublic, role,
+    leetcodeApproval,
     approvalStatus: approved ? 'approved' : 'pending', approvedAt: approved ? new Date() : null,
     createdAt: new Date(), updatedAt: new Date(),
   };
@@ -1194,4 +1195,91 @@ test('submitting solutions directly via LeetCode verifies titleSlug, statusDispl
   assert.equal(clubToday.data.dailyLeaderboard.length, 1);
   assert.equal(clubToday.data.dailyLeaderboard[0].name, 'LC Member');
   assert.equal(clubToday.data.dailyLeaderboard[0].submissionType, 'leetcode');
+});
+
+test('LeetCode submission requires admin approval: member request, admin approval, rejection, and revocation flow', async () => {
+  const db = new FakeDatabase();
+  const admin = await seedUser(db, { name: 'Admin LC', email: 'adminlc@abes.ac.in', username: 'admin-lc', role: 'admin' });
+  const member = await seedUser(db, {
+    name: 'Member LC',
+    email: 'memberlc@abes.ac.in',
+    username: 'member-lc',
+    role: 'member',
+    leetcodeApproval: 'none',
+    leetcodeUsername: 'memberlc_user',
+  });
+
+  const todayKey = indiaDay();
+  const { insertedId: assignmentId } = await db.collection('assignments').insertOne({
+    dateKey: todayKey,
+    questionId: 217,
+    topic: 'Arrays',
+    active: true,
+    publishedAt: dateAtIndiaNoon(todayKey),
+  });
+
+  // 1. Unapproved member submitting via LeetCode is blocked with 403
+  const blocked = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: member.cookie,
+    body: { assignmentId, type: 'leetcode' },
+  });
+  assert.equal(blocked.response.status, 403);
+  assert.match(blocked.data.error, /requires administrator approval/i);
+
+  // 2. Member requests LeetCode approval via /auth/profile
+  const reqProfile = await call(db, '/auth/profile', {
+    method: 'PATCH',
+    cookie: member.cookie,
+    body: { requestLeetcodeApproval: true },
+  });
+  assert.equal(reqProfile.response.status, 200);
+  assert.equal(reqProfile.data.user.leetcodeApproval, 'pending');
+
+  // 3. Admin lists members with status=leetcode
+  const lcList = await call(db, '/admin/members?status=leetcode', { cookie: admin.cookie });
+  assert.equal(lcList.response.status, 200);
+  assert.equal(lcList.data.counts.leetcodePending, 1);
+  assert.equal(lcList.data.members.some((m) => m.id === String(member.user._id)), true);
+
+  // 4. Admin approves LeetCode access for member
+  const approveRes = await call(db, `/admin/members/${member.user._id}`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: { leetcodeApproval: 'approved' },
+  });
+  assert.equal(approveRes.response.status, 200);
+
+  // 5. Member's account reflects approved status and can submit
+  const noonEpochSec = Math.floor(dateAtIndiaNoon(todayKey).getTime() / 1000);
+  leetcodeRecentPayload = {
+    data: {
+      recentSubmissionList: [
+        {
+          title: 'Contains Duplicate',
+          titleSlug: 'contains-duplicate',
+          timestamp: String(noonEpochSec),
+          statusDisplay: 'Accepted',
+          lang: 'python3',
+        },
+      ],
+    },
+  };
+  const submitRes = await call(db, '/submissions', {
+    method: 'POST',
+    cookie: member.cookie,
+    body: { assignmentId, type: 'leetcode' },
+  });
+  assert.equal(submitRes.response.status, 201);
+  assert.equal(submitRes.data.submission.status, 'accepted');
+
+  // 6. Admin revoking LeetCode access resets approval
+  const revokeRes = await call(db, `/admin/members/${member.user._id}`, {
+    method: 'PATCH',
+    cookie: admin.cookie,
+    body: { leetcodeApproval: 'none' },
+  });
+  assert.equal(revokeRes.response.status, 200);
+  const updatedMemberDoc = await db.collection('users').findOne({ _id: member.user._id });
+  assert.equal(updatedMemberDoc.leetcodeApproval, 'none');
 });
