@@ -12,8 +12,39 @@ export function ExplainerModal({
   handleCopyExplainerImage,
   imageExporting,
   copiedNotice,
+  todaySubmissionsData,
 }) {
   if (!explainerModalOpen || !selectedExplainer) return null;
+
+  const explainerId = String(selectedExplainer.id || selectedExplainer.userId || '');
+
+  // Cross-check if the explainer has submitted today's assignment
+  const submissionFromToday = todaySubmissionsData?.submissions?.find(
+    (s) => String(s.member?.id || s.userId || s.memberId || '') === explainerId && s.status === 'accepted'
+  );
+
+  const submissionFromLeaderboard = club?.todayLeaderboard?.find(
+    (m) => String(m.id || m.userId || '') === explainerId
+  );
+
+  const rawSubmittedAt =
+    selectedExplainer.submittedAt ||
+    submissionFromToday?.submittedAt ||
+    submissionFromLeaderboard?.submittedAt ||
+    null;
+
+  const isValidDate = rawSubmittedAt && !isNaN(new Date(rawSubmittedAt).getTime());
+
+  const hasSubmitted = Boolean(
+    (selectedExplainer.hasSubmitted && isValidDate) ||
+    (selectedExplainer.status === 'accepted' && isValidDate) ||
+    submissionFromToday ||
+    submissionFromLeaderboard
+  );
+
+  const formattedTime = hasSubmitted && isValidDate
+    ? new Date(rawSubmittedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })
+    : '';
 
   return (
     <div
@@ -39,7 +70,10 @@ export function ExplainerModal({
         <div className="explainer-preview-card" id="explainer-spotlight-card">
           <div className="explainer-preview-header">
             <div className="explainer-brand-lockup">
-              <img src="/technovation-logo.png" alt="Logo" className="explainer-card-logo" />
+              <picture>
+                <source srcSet="/technovation-logo-tp.webp" type="image/webp" />
+                <img src="/technovation-logo-tp.png" alt="Logo" className="explainer-card-logo" />
+              </picture>
               <div>
                 <span className="explainer-preview-brand">TECHNOVATION CLUB</span>
                 <span className="explainer-sub-brand">DSAvation · Daily Problem Spotlight</span>
@@ -85,9 +119,11 @@ export function ExplainerModal({
           </div>
 
           <div className="explainer-preview-footer">
-            <div className="explainer-footer-status">
-              ✓ Solution Attempt Accepted · Submitted {new Date(selectedExplainer.submittedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' })} IST
-            </div>
+            {hasSubmitted && formattedTime && (
+              <div className="explainer-footer-status">
+                ✓ Solution Attempt Accepted · Submitted {formattedTime} IST
+              </div>
+            )}
             <div className="explainer-footer-prompt">
               Please share your code walkthrough, approach and complexity insights in today's club session!
             </div>
@@ -108,4 +144,3 @@ export function ExplainerModal({
     </div>
   );
 }
-

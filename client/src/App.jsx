@@ -86,6 +86,9 @@ export function App() {
   const [lightStyle, setLightStyle] = useState(storedLightStyle);
   const [questions, setQuestions] = useState([]);
   const [topics, setTopics] = useState([]);
+  const [questionsBusy, setQuestionsBusy] = useState(false);
+  const [questionsError, setQuestionsError] = useState('');
+  const questionsRequestRef = useRef(null);
   const [authReady, setAuthReady] = useState(false);
   const [appLoading, setAppLoading] = useState(true);
   const [authOpen, setAuthOpen] = useState(false);
@@ -101,14 +104,33 @@ export function App() {
   const [pattern, setPattern] = useState('Any pattern');
   const [sort, setSort] = useState('day');
   const [progress, setProgress] = useState({});
+  const [progressBusy, setProgressBusy] = useState(false);
+  const [progressLoaded, setProgressLoaded] = useState(false);
+  const [progressError, setProgressError] = useState('');
+  const progressRequestRef = useRef(null);
   const [clubActivity, setClubActivity] = useState({});
   const [clubLocked, setClubLocked] = useState({});
   const [bookmarks, setBookmarks] = useState(() => JSON.parse(localStorage.getItem('dsavation-bookmarks') || '[]'));
   const [club, setClub] = useState({ dateKey: localDay(), assignment: null, submittedCount: 0, acceptedCount: 0, participants: [], dailyLeaderboard: [] });
+  const [clubTodayBusy, setClubTodayBusy] = useState(false);
+  const [clubTodayLoaded, setClubTodayLoaded] = useState(false);
+  const [clubTodayError, setClubTodayError] = useState('');
+  const clubTodayRequestRef = useRef(null);
   const [history, setHistory] = useState([]);
+  const [historyLoaded, setHistoryLoaded] = useState(false);
+  const [historyError, setHistoryError] = useState('');
+  const historyRequestsRef = useRef(new Map());
   const [leaderboard, setLeaderboard] = useState([]);
+  const [leaderboardLoaded, setLeaderboardLoaded] = useState(false);
+  const [leaderboardError, setLeaderboardError] = useState('');
+  const leaderboardRequestsRef = useRef(new Map());
   const [leaderboardScope, setLeaderboardScope] = useState('daily');
   const [submissions, setSubmissions] = useState([]);
+  const [submissionsBusy, setSubmissionsBusy] = useState(false);
+  const [submissionsLoaded, setSubmissionsLoaded] = useState(false);
+  const [submissionsError, setSubmissionsError] = useState('');
+  const submissionsRequestRef = useRef(null);
+  const initialRouteLoadedRef = useRef(false);
   const [pending, setPending] = useState([]);
   const [pendingPagination, setPendingPagination] = useState({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
   const [todaySubmissionsData, setTodaySubmissionsData] = useState({ totalAttempted: 0, totalNotAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [], notAttempted: [], questionId: null, questionTitle: '' });
@@ -129,10 +151,12 @@ export function App() {
   const [repickWaivePenalty, setRepickWaivePenalty] = useState(false);
   const [directoryDepartments, setDirectoryDepartments] = useState([]);
   const [directoryPagination, setDirectoryPagination] = useState({ page: 1, pageSize: 60, total: 0, totalPages: 1 });
+  const [directoryLoaded, setDirectoryLoaded] = useState(false);
   const [directoryQuery, setDirectoryQuery] = useState('');
   const [directoryDepartment, setDirectoryDepartment] = useState('');
   const [directoryYear, setDirectoryYear] = useState('');
   const [directoryBusy, setDirectoryBusy] = useState(false);
+  const [directoryError, setDirectoryError] = useState('');
   const [directoryLeetcodeStats, setDirectoryLeetcodeStats] = useState({});
   const [leetcodeStatsBusy, setLeetcodeStatsBusy] = useState('');
   const [showAllLeetcodeStats, setShowAllLeetcodeStats] = useState(false);
@@ -140,8 +164,11 @@ export function App() {
   const [individuallyOpenedStats, setIndividuallyOpenedStats] = useState({});
   const directoryDebounceRef = useRef(null);
   const [membersBusy, setMembersBusy] = useState(false);
+  const [membersError, setMembersError] = useState('');
   const [scoredBusy, setScoredBusy] = useState(false);
+  const [scoredError, setScoredError] = useState('');
   const [activityBusy, setActivityBusy] = useState(false);
+  const [activityError, setActivityError] = useState('');
   const [pendingBusy, setPendingBusy] = useState(false);
   const [historyBusy, setHistoryBusy] = useState(false);
   const [leaderboardBusy, setLeaderboardBusy] = useState(false);
@@ -212,6 +239,8 @@ export function App() {
   const [submissionHeatmapSecondYearCounts, setSubmissionHeatmapSecondYearCounts] = useState({});
   const [heatmapSecondYearOnly, setHeatmapSecondYearOnly] = useState(false);
   const [submissionHeatmapBusy, setSubmissionHeatmapBusy] = useState(false);
+  const [submissionHeatmapLoaded, setSubmissionHeatmapLoaded] = useState(false);
+  const [submissionHeatmapError, setSubmissionHeatmapError] = useState('');
   const [heatmapDayModal, setHeatmapDayModal] = useState(null); // { date, count }
   const [heatmapDayData, setHeatmapDayData] = useState(null);  // { date, submissions, count }
   const [heatmapDayBusy, setHeatmapDayBusy] = useState(false);
@@ -327,87 +356,155 @@ export function App() {
     }
   }
 
-  async function loadClub() {
-    try {
-      const [today, assigned, board] = await Promise.all([
-        api('/club/today'),
-        api(`/club/assignments?page=${historyPagination.page}&pageSize=8`),
-        api(`/club/leaderboard?page=${leaderboardPagination.page}&pageSize=20`),
-      ]);
+  async function loadClubToday(force = false) {
+    if (!account || (!force && clubTodayLoaded && club.dateKey === localDay())) return;
+    if (clubTodayRequestRef.current) return clubTodayRequestRef.current;
+    setClubTodayBusy(true);
+    setClubTodayError('');
+    const request = api('/club/today').then((today) => {
       setClub(today);
-      setHistory(assigned.assignments || []);
-      setHistoryPagination(assigned.pagination || { page: 1, pageSize: 8, total: 0, totalPages: 1 });
-      setLeaderboard(board.leaderboard || []);
-      setLeaderboardPagination(board.pagination || { page: 1, pageSize: 20, total: 0, totalPages: 1 });
-      if (board.userRank !== undefined) setCurrentUserRank(board.userRank);
+      if (today?.assignment?.explainer) setSelectedExplainer(today.assignment.explainer);
+      setClubTodayLoaded(true);
       setApiNotice('');
-    } catch (error) {
+    }).catch((error) => {
+      setClubTodayError(error.message);
       setApiNotice(error.message.includes('MONGODB_URI') ? 'Community features need the DSAvation database configured.' : error.message);
-    }
+    }).finally(() => {
+      setClubTodayBusy(false);
+      clubTodayRequestRef.current = null;
+    });
+    clubTodayRequestRef.current = request;
+    return request;
   }
 
-  async function loadQuestionLibrary(signal) {
-    const result = await api('/questions', { signal });
-    setQuestions(normalizeQuestions(result.questions));
-    setTopics(result.topics || []);
+  async function loadClub(force = true) {
+    const requests = [];
+    if (force || !clubTodayLoaded) requests.push(loadClubToday(force));
+    if (force || !historyLoaded) requests.push(loadHistoryPage(historyPagination.page, force));
+    if (force || !leaderboardLoaded) requests.push(loadLeaderboardPage(leaderboardPagination.page, force));
+    await Promise.allSettled(requests);
   }
 
-  async function loadMemberData(user = account) {
-    if (!user) return;
-    try {
-      const [personal, own] = await Promise.all([api('/progress'), api('/submissions?page=1&pageSize=10')]);
+  async function loadQuestionLibrary() {
+    if (questions.length) return;
+    if (questionsRequestRef.current) return questionsRequestRef.current;
+    setQuestionsBusy(true);
+    setQuestionsError('');
+    const request = api('/questions').then((result) => {
+      setQuestions(normalizeQuestions(result.questions));
+      setTopics(result.topics || []);
+    }).catch((error) => {
+      setQuestionsError(error.message);
+      setNotice(error.message);
+    }).finally(() => {
+      setQuestionsBusy(false);
+      questionsRequestRef.current = null;
+    });
+    questionsRequestRef.current = request;
+    return request;
+  }
+
+  async function loadMemberProgress(user = account, force = false) {
+    if (!user || (!force && progressLoaded)) return;
+    if (progressRequestRef.current) return progressRequestRef.current;
+    setProgressBusy(true);
+    setProgressError('');
+    const request = api('/progress').then((personal) => {
       const rows = personal.progress || [];
       const activityRows = personal.activity || rows.filter((item) => item.isClub);
       setProgress(Object.fromEntries(rows.map((item) => [item.questionId, item.solvedAt])));
       setClubLocked(Object.fromEntries(rows.filter((item) => item.isClub).map((item) => [item.questionId, true])));
       setClubActivity(Object.fromEntries(activityRows.map((item) => [item.questionId, item.clubSubmittedAt || item.solvedAt])));
+      setProgressLoaded(true);
+    }).catch((error) => {
+      setProgressError(error.message);
+      setNotice(error.message);
+    }).finally(() => {
+      setProgressBusy(false);
+      progressRequestRef.current = null;
+    });
+    progressRequestRef.current = request;
+    return request;
+  }
+
+  async function loadOwnSubmissions(user = account, force = false) {
+    if (!user || (!force && submissionsLoaded)) return;
+    if (submissionsRequestRef.current) return submissionsRequestRef.current;
+    setSubmissionsBusy(true);
+    setSubmissionsError('');
+    const request = api('/submissions?page=1&pageSize=10').then((own) => {
       setSubmissions(own.submissions || []);
-    } catch (error) { setNotice(error.message); }
-    if (['lead', 'admin'].includes(user.role)) {
-      try {
-        const [pendingResult, todayResult] = await Promise.all([
-          api(`/admin/submissions?status=pending&page=${pendingPagination.page}&pageSize=10`),
-          api('/admin/today-submissions'),
-        ]);
-        setPending(pendingResult.submissions || []);
-        setPendingPagination(pendingResult.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
-        setTodaySubmissionsData(todayResult || { totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [] });
-      } catch (error) {
-        setPending([]);
-        setTodaySubmissionsData({ totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [] });
-        setNotice(error.message);
-      }
-    } else {
+      setSubmissionsLoaded(true);
+    }).catch((error) => {
+      setSubmissionsError(error.message);
+      setNotice(error.message);
+    }).finally(() => {
+      setSubmissionsBusy(false);
+      submissionsRequestRef.current = null;
+    });
+    submissionsRequestRef.current = request;
+    return request;
+  }
+
+  async function loadAdminData(user = account) {
+    if (!user || !['lead', 'admin'].includes(user.role)) {
       setPending([]);
       setPendingPagination({ page: 1, pageSize: 10, total: 0, totalPages: 1 });
       setTodaySubmissionsData({ totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [] });
+      setMembers([]);
+      setScoredSubmissions([]);
+      setActivity([]);
+      return;
     }
+
+    setPendingBusy(true);
+    setTodaySubmissionsBusy(true);
+    try {
+      const [pendingResult, todayResult] = await Promise.all([
+        api(`/admin/submissions?status=pending&page=${pendingPagination.page}&pageSize=10`),
+        api('/admin/today-submissions'),
+      ]);
+      setPending(pendingResult.submissions || []);
+      setPendingPagination(pendingResult.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
+      setTodaySubmissionsData(todayResult || { totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [] });
+    } catch (error) {
+      setPending([]);
+      setTodaySubmissionsData({ totalAttempted: 0, acceptedCount: 0, pendingCount: 0, submissions: [] });
+      setNotice(error.message);
+    } finally {
+      setPendingBusy(false);
+      setTodaySubmissionsBusy(false);
+    }
+
     if (user.role === 'admin') {
-      try {
-        const queryStatus = memberFilter === 'heatmap' ? 'pending' : memberFilter;
-        const query = new URLSearchParams({ page: String(membersPagination.page), pageSize: '20', status: queryStatus });
-        if (memberQuery.trim()) query.set('q', memberQuery.trim());
-        const [memberResult, scoredResult, activityResult, heatmapResult] = await Promise.all([
-          api(`/admin/members?${query}`),
-          api('/admin/submissions?status=accepted&page=1&pageSize=10'),
-          api('/admin/activity?page=1&pageSize=10'),
-          api('/admin/submissions-heatmap'),
-        ]);
-        setMembers(memberResult.members || []);
-        setMembersPagination(memberResult.pagination || { page: 1, pageSize: 20, total: 0, totalPages: 1 });
-        setMemberCounts(memberResult.counts || { pending: 0, approved: 0, leetcodePending: 0 });
-        setScoredSubmissions(scoredResult.submissions || []);
-        setScoredPagination(scoredResult.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
-        setActivity(activityResult.activity || []);
-        setActivityPagination(activityResult.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
-        setSubmissionHeatmapCounts(heatmapResult?.counts || {});
-        setSubmissionHeatmapSecondYearCounts(heatmapResult?.secondYearCounts || {});
-      } catch (error) { setMembers([]); setScoredSubmissions([]); setActivity([]); setNotice(error.message); }
-    } else { setMembers([]); setScoredSubmissions([]); setActivity([]); }
+      await Promise.allSettled([
+        refreshMembers(membersPagination.page, memberFilter, memberQuery),
+        refreshScoredSubmissions(scoredPagination.page),
+        refreshActivity(activityPagination.page),
+        loadSubmissionHeatmap(),
+      ]);
+    } else {
+      setMembers([]);
+      setScoredSubmissions([]);
+      setActivity([]);
+    }
+  }
+
+  async function loadMemberData(user = account) {
+    if (!user) return;
+    await Promise.allSettled([loadMemberProgress(user, true), loadOwnSubmissions(user, true)]);
+  }
+
+  async function retryInitialData() {
+    await Promise.allSettled([
+      loadQuestionLibrary(),
+      loadMemberProgress(account, true),
+    ]);
   }
 
   async function refreshMembers(page = 1, status = memberFilter, search = memberQuery) {
     setMembersBusy(true);
+    setMembersError('');
     const queryStatus = status === 'heatmap' ? 'pending' : status;
     const params = new URLSearchParams({ page: String(page), pageSize: '20', status: queryStatus });
     if (search.trim()) params.set('q', search.trim());
@@ -419,7 +516,7 @@ export function App() {
       setMembers(result.members || []);
       setMembersPagination(result.pagination || { page: 1, pageSize: 20, total: 0, totalPages: 1 });
       setMemberCounts(result.counts || { pending: 0, approved: 0, leetcodePending: 0 });
-    } catch (error) { setNotice(error.message); }
+    } catch (error) { setMembersError(error.message); setNotice(error.message); }
     finally { setMembersBusy(false); }
   }
 
@@ -486,8 +583,10 @@ export function App() {
     setHeatmapDayData(null);
   }
 
-  async function loadDirectory(page = 1, search = directoryQuery, department = directoryDepartment, year = directoryYear) {
+  async function loadDirectory(page = 1, search = directoryQuery, department = directoryDepartment, year = directoryYear, force = true) {
+    if (!force && directoryLoaded) return;
     setDirectoryBusy(true);
+    setDirectoryError('');
     const params = new URLSearchParams({ page: String(page), pageSize: '60' });
     if (search.trim()) params.set('q', search.trim());
     if (department) params.set('department', department);
@@ -500,8 +599,11 @@ export function App() {
       setDirectoryMembers(sorted);
       setDirectoryDepartments(result.departments || []);
       setDirectoryPagination(result.pagination || { page: 1, pageSize: 60, total: 0, totalPages: 1 });
+      setDirectoryLoaded(true);
     } catch (error) {
       setDirectoryMembers([]);
+      setDirectoryLoaded(false);
+      setDirectoryError(error.message);
       setNotice(error.message);
     } finally { setDirectoryBusy(false); }
   }
@@ -623,11 +725,12 @@ export function App() {
 
   async function refreshActivity(page = 1) {
     setActivityBusy(true);
+    setActivityError('');
     try {
       const result = await api(`/admin/activity?page=${page}&pageSize=10`);
       setActivity(result.activity || []);
       setActivityPagination(result.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
-    } catch (error) { setNotice(error.message); }
+    } catch (error) { setActivityError(error.message); setNotice(error.message); }
     finally { setActivityBusy(false); }
   }
 
@@ -659,11 +762,12 @@ export function App() {
 
   async function refreshScoredSubmissions(page = 1) {
     setScoredBusy(true);
+    setScoredError('');
     try {
       const result = await api(`/admin/submissions?status=accepted&page=${page}&pageSize=10`);
       setScoredSubmissions(result.submissions || []);
       setScoredPagination(result.pagination || { page: 1, pageSize: 10, total: 0, totalPages: 1 });
-    } catch (error) { setNotice(error.message); }
+    } catch (error) { setScoredError(error.message); setNotice(error.message); }
     finally { setScoredBusy(false); }
   }
 
@@ -679,11 +783,13 @@ export function App() {
 
   async function loadSubmissionHeatmap() {
     setSubmissionHeatmapBusy(true);
+    setSubmissionHeatmapError('');
     try {
       const result = await api('/admin/submissions-heatmap');
       setSubmissionHeatmapCounts(result.counts || {});
       setSubmissionHeatmapSecondYearCounts(result.secondYearCounts || {});
-    } catch (error) { setNotice(error.message); } finally { setSubmissionHeatmapBusy(false); }
+      setSubmissionHeatmapLoaded(true);
+    } catch (error) { setSubmissionHeatmapError(error.message); setNotice(error.message); } finally { setSubmissionHeatmapBusy(false); }
   }
 
   async function refreshTodaySubmissions() {
@@ -915,25 +1021,69 @@ export function App() {
     }
   }
 
-  async function loadLeaderboardPage(page) {
+  async function requestLeaderboardPage(page) {
     setLeaderboardBusy(true);
+    setLeaderboardError('');
     try {
       const result = await api(`/club/leaderboard?page=${page}&pageSize=20`);
       setLeaderboard(result.leaderboard || []);
       setLeaderboardPagination(result.pagination || { page, pageSize: 20, total: 0, totalPages: 1 });
       if (result.userRank !== undefined) setCurrentUserRank(result.userRank);
-    } catch (error) { setNotice(error.message); }
+      setLeaderboardLoaded(true);
+    } catch (error) { setLeaderboardError(error.message); setNotice(error.message); }
     finally { setLeaderboardBusy(false); }
   }
 
-  async function loadHistoryPage(page) {
+  function loadLeaderboardPage(page, force = false) {
+    const requests = leaderboardRequestsRef.current;
+    const current = requests.get(page);
+    if (current) {
+      if (current.refresh) return current.refresh;
+      if (!force) return current.promise;
+      current.refresh = current.promise.then(() => requestLeaderboardPage(page)).finally(() => {
+        if (requests.get(page) === current) requests.delete(page);
+      });
+      return current.refresh;
+    }
+
+    const request = { promise: null, refresh: null };
+    request.promise = requestLeaderboardPage(page).finally(() => {
+      if (requests.get(page) === request && !request.refresh) requests.delete(page);
+    });
+    requests.set(page, request);
+    return request.promise;
+  }
+
+  async function requestHistoryPage(page) {
     setHistoryBusy(true);
+    setHistoryError('');
     try {
       const result = await api(`/club/assignments?page=${page}&pageSize=8`);
       setHistory(result.assignments || []);
       setHistoryPagination(result.pagination || { page, pageSize: 8, total: 0, totalPages: 1 });
-    } catch (error) { setNotice(error.message); }
+      setHistoryLoaded(true);
+    } catch (error) { setHistoryError(error.message); setNotice(error.message); }
     finally { setHistoryBusy(false); }
+  }
+
+  function loadHistoryPage(page, force = false) {
+    const requests = historyRequestsRef.current;
+    const current = requests.get(page);
+    if (current) {
+      if (current.refresh) return current.refresh;
+      if (!force) return current.promise;
+      current.refresh = current.promise.then(() => requestHistoryPage(page)).finally(() => {
+        if (requests.get(page) === current) requests.delete(page);
+      });
+      return current.refresh;
+    }
+
+    const request = { promise: null, refresh: null };
+    request.promise = requestHistoryPage(page).finally(() => {
+      if (requests.get(page) === request && !request.refresh) requests.delete(page);
+    });
+    requests.set(page, request);
+    return request.promise;
   }
 
   useEffect(() => {
@@ -979,55 +1129,61 @@ export function App() {
   }, []);
 
   useEffect(() => {
-    if (view === 'members' && account) loadDirectory(1);
-    if (view === 'dashboard' && account?.role === 'admin') {
-      if (Object.keys(submissionHeatmapCounts).length === 0) loadSubmissionHeatmap();
-      refreshRateLimits();
-    }
-  }, [view, account?.id, account?.role]);
-
-  useEffect(() => {
     if (!authReady) return undefined;
     if (!account) {
       setQuestions([]); setTopics([]); setProgress({}); setClubActivity({}); setClubLocked({}); setSubmissions([]); setPending([]); setMembers([]); setDirectoryMembers([]);
       setHistory([]); setLeaderboard([]);
       setClub({ dateKey: localDay(), assignment: null, submittedCount: 0, acceptedCount: 0, participants: [] });
+      setQuestionsBusy(false); setQuestionsError('');
+      setProgressBusy(false); setProgressLoaded(false); setProgressError('');
+      setSubmissionsBusy(false); setSubmissionsLoaded(false);
+      setSubmissionsError('');
+      setClubTodayBusy(false); setClubTodayLoaded(false);
+      setClubTodayError('');
+      setHistoryLoaded(false); setLeaderboardLoaded(false);
+      setHistoryError(''); setLeaderboardError('');
+      setDirectoryLoaded(false);
       setAppLoading(false);
+      initialRouteLoadedRef.current = true;
       return undefined;
     }
-    const controller = new AbortController();
-    let active = true;
-    const startTime = Date.now();
-    setAppLoading(true);
-    Promise.allSettled([
-      loadQuestionLibrary(controller.signal).catch((error) => {
-        if (error.name !== 'AbortError') setNotice(error.message);
-      }),
-      loadMemberData(account),
-      loadClub(),
-    ]).finally(() => {
-      const elapsed = Date.now() - startTime;
-      const minDisplayTime = 50;
-      const remaining = Math.max(0, minDisplayTime - elapsed);
-      setTimeout(() => {
-        if (active) setAppLoading(false);
-      }, remaining);
-    });
-    return () => {
-      active = false;
-      controller.abort();
-    };
-  }, [authReady, account?.id]);
+
+    const firstRouteLoad = !initialRouteLoadedRef.current;
+    initialRouteLoadedRef.current = true;
+    const needsCurriculum = ['general', 'activity', 'club'].includes(view);
+    const needsProgress = ['general', 'activity'].includes(view);
+    const requiredData = [];
+
+    if (needsCurriculum && !questions.length) requiredData.push(loadQuestionLibrary());
+    if (needsProgress && !progressLoaded) requiredData.push(loadMemberProgress(account));
+
+    if (firstRouteLoad && requiredData.length) {
+      setAppLoading(true);
+      Promise.allSettled(requiredData).finally(() => setAppLoading(false));
+    } else {
+      setAppLoading(false);
+    }
+
+    if (view === 'general') loadClubToday();
+    if (view === 'club') {
+      loadClub(false);
+      loadOwnSubmissions(account);
+      if (!progressLoaded) loadMemberProgress(account);
+    }
+    if (view === 'members' && !directoryLoaded) loadDirectory(1, directoryQuery, directoryDepartment, directoryYear, false);
+    if (view === 'dashboard' && account.role === 'admin') {
+      loadAdminData(account);
+      refreshRateLimits();
+    } else if (view === 'dashboard' && account.role === 'lead') {
+      loadAdminData(account);
+    }
+    return undefined;
+  }, [authReady, account?.id, account?.role, view]);
 
   function navigate(nextView) {
     const path = getPathFromView(nextView);
     if (window.location.pathname !== path) window.history.pushState({}, '', path);
     setView(nextView);
-    if (nextView === 'dashboard' && account?.role === 'admin') {
-      refreshMembers(1, memberFilter === 'heatmap' ? 'pending' : memberFilter, memberQuery);
-      if (Object.keys(submissionHeatmapCounts).length === 0) loadSubmissionHeatmap();
-      refreshRateLimits();
-    }
   }
 
   useEffect(() => { localStorage.setItem('dsavation-bookmarks', JSON.stringify(bookmarks)); }, [bookmarks]);
@@ -1126,7 +1282,7 @@ export function App() {
         setClubLocked((prev) => ({ ...prev, [qId]: true }));
         setClubActivity((prev) => ({ ...prev, [qId]: solvedAt }));
       }
-      await loadClub(); await loadHistoryPage(1); await loadMemberData();
+      await loadClub(); await loadMemberData();
     } catch (error) { setNotice(error.message); }
     finally { setSubmissionBusy(false); }
   }
@@ -1150,7 +1306,6 @@ export function App() {
         setClubActivity((prev) => ({ ...prev, [qId]: solvedAt }));
       }
       await loadClub();
-      await loadHistoryPage(1);
       await loadMemberData();
     } catch (error) {
       setNotice(error.message);
@@ -1169,7 +1324,7 @@ export function App() {
       setNotice(isReplacingToday
         ? `Today's question was changed. ${result.assignment.invalidatedSubmissions || 0} previous submission(s) were invalidated; members can submit the corrected question.`
         : `Question of the Day published for ${result.assignment.dateKey}.`);
-      await loadClub(); await loadHistoryPage(1); await loadMemberData();
+      await loadClub(); await loadMemberData();
       await refreshActivity(activityPagination.page);
     } catch (error) { setNotice(error.message); }
     finally { setAssignmentBusy(false); }
@@ -1188,7 +1343,6 @@ export function App() {
       setSelectedExplainer(null);
       setAssignmentQuestion('');
       await loadClub();
-      await loadHistoryPage(1);
       await loadMemberData();
       await refreshTodaySubmissions();
       await refreshActivity(activityPagination.page);
@@ -1462,6 +1616,7 @@ export function App() {
   }
 
   const clearFilters = () => { setQuery(''); setTopic('All topics'); setDifficulty('Any level'); setStructure('Any data structure'); setPattern('Any pattern'); };
+  const loaderGreetingName = String(account?.name || '').trim().split(/\s+/)[0];
 
 
   return (
@@ -1473,17 +1628,12 @@ export function App() {
           <div className="global-loading" role="progressbar" aria-label="Loading DSAvation" aria-valuetext="Loading">
             <span />
           </div>
-          <div className="global-loader-card">
-            <img src="/loading-bot.png" alt="DSAvation Mascot Bot" className="global-loader-bot" />
-            <div className="global-loader-content">
-              <div className="global-loader-title">
-                <span className="global-loader-pulse-dot" />
-                <strong>Powering up circuits…</strong>
-              </div>
-              <p className="global-loader-msg">
-                DSAvation bot is waking up &amp; preparing your challenges ✨
-              </p>
-            </div>
+          <img src="/loading-expression.gif" alt="DSAvation Mascot Bot" className="global-loader-bot" />
+          <div className="global-loader-copy">
+            <strong className="global-loader-title">
+              {loaderGreetingName ? `Hey, ${loaderGreetingName}!` : 'Hey there!'}
+            </strong>
+            <p className="global-loader-msg">Getting your DSAvation space ready...</p>
           </div>
         </aside>
       )}
@@ -1527,6 +1677,17 @@ export function App() {
           account={account}
           assignedQuestion={assignedQuestion}
           club={club}
+          clubTodayBusy={clubTodayBusy}
+          clubTodayLoaded={clubTodayLoaded}
+          clubTodayError={clubTodayError}
+          retryClubToday={() => loadClubToday(true)}
+          questions={questions}
+          questionsBusy={questionsBusy}
+          questionsError={questionsError}
+          progressBusy={progressBusy}
+          progressLoaded={progressLoaded}
+          progressError={progressError}
+          retryInitialData={retryInitialData}
           navigate={navigate}
           solvedCount={solvedCount}
           setAuthMode={setAuthMode}
@@ -1615,6 +1776,10 @@ export function App() {
           setAuthOpen={setAuthOpen}
           clubActivity={clubActivity}
           clubTrackedCount={clubTrackedCount}
+          clubActivityBusy={progressBusy && !progressLoaded}
+          clubActivityLoaded={progressLoaded}
+          clubActivityError={progressError}
+          retryClubActivity={() => loadMemberProgress(account, true)}
           navigate={navigate}
           byId={byId}
           handleSolve={handleSolve}
@@ -1637,6 +1802,7 @@ export function App() {
           directoryDepartments={directoryDepartments}
           directoryYear={directoryYear}
           setDirectoryYear={setDirectoryYear}
+          directoryError={directoryError}
           showAllLeetcodeStats={showAllLeetcodeStats}
           loadingAllStats={loadingAllStats}
           toggleAllLeetcodeStats={toggleAllLeetcodeStats}
@@ -1671,7 +1837,10 @@ export function App() {
           heatmapSecondYearOnly={heatmapSecondYearOnly}
           setHeatmapSecondYearOnly={setHeatmapSecondYearOnly}
           submissionHeatmapBusy={submissionHeatmapBusy}
+          submissionHeatmapLoaded={submissionHeatmapLoaded}
+          submissionHeatmapError={submissionHeatmapError}
           membersBusy={membersBusy}
+          membersError={membersError}
           loadSubmissionHeatmap={loadSubmissionHeatmap}
           refreshMembers={refreshMembers}
           membersPagination={membersPagination}
@@ -1690,6 +1859,7 @@ export function App() {
           acceptedSubmissionsOpen={acceptedSubmissionsOpen}
           setAcceptedSubmissionsOpen={setAcceptedSubmissionsOpen}
           scoredBusy={scoredBusy}
+          scoredError={scoredError}
           refreshScoredSubmissions={refreshScoredSubmissions}
           scoredPagination={scoredPagination}
           scoredSubmissions={scoredSubmissions}
@@ -1698,6 +1868,7 @@ export function App() {
           setAuditCardOpen={setAuditCardOpen}
           activityPagination={activityPagination}
           activityBusy={activityBusy}
+          activityError={activityError}
           refreshActivity={refreshActivity}
           activity={activity}
           rateLimitCount={rateLimitCount}
@@ -1721,12 +1892,22 @@ export function App() {
           account={account}
           club={club}
           assignedQuestion={assignedQuestion}
+          clubTodayBusy={clubTodayBusy}
+          clubTodayLoaded={clubTodayLoaded}
+          clubTodayError={clubTodayError}
+          retryClubToday={() => loadClubToday(true)}
+          questionsBusy={questionsBusy}
+          questionsError={questionsError}
+          retryQuestionData={loadQuestionLibrary}
           isAdmin={isAdmin}
           isLeader={isLeader}
           copiedAnnouncement={copiedAnnouncement}
           handleCopyAnnouncement={handleCopyAnnouncement}
           isLeetcodeApproved={isLeetcodeApproved}
           submissions={submissions}
+          submissionsBusy={submissionsBusy && !submissionsLoaded}
+          submissionsError={submissionsError}
+          retryOwnSubmissions={() => loadOwnSubmissions(account, true)}
           submissionHelpOpen={submissionHelpOpen}
           setSubmissionHelpOpen={setSubmissionHelpOpen}
           submitClubSolution={submitClubSolution}
@@ -1760,7 +1941,12 @@ export function App() {
           byId={byId}
           clubLocked={clubLocked}
           clubActivity={clubActivity}
+          clubActivityBusy={progressBusy && !progressLoaded}
+          clubActivityLoaded={progressLoaded}
+          clubActivityError={progressError}
           historyBusy={historyBusy}
+          historyLoaded={historyLoaded}
+          historyError={historyError}
           loadHistoryPage={loadHistoryPage}
           setExportStudyYear={setExportStudyYear}
           setExportModalOpen={setExportModalOpen}
@@ -1773,6 +1959,8 @@ export function App() {
           leaderboard={leaderboard}
           leaderboardPagination={leaderboardPagination}
           leaderboardBusy={leaderboardBusy}
+          leaderboardLoaded={leaderboardLoaded}
+          leaderboardError={leaderboardError}
           loadLeaderboardPage={loadLeaderboardPage}
           setAuthMode={setAuthMode}
           setAuthOpen={setAuthOpen}
@@ -1788,6 +1976,7 @@ export function App() {
         handleCopyExplainerImage={handleCopyExplainerImage}
         imageExporting={imageExporting}
         copiedNotice={copiedNotice}
+        todaySubmissionsData={todaySubmissionsData}
       />
 
       <RepickModal

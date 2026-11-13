@@ -1,19 +1,18 @@
 // DSAvation Service Worker
-const CACHE_NAME = 'dsavation-pwa-v3';
+const CACHE_NAME = 'dsavation-pwa-v5';
 const PRECACHE_URLS = [
   '/',
   '/index.html',
   '/manifest.json',
   '/manifest.webmanifest',
-  '/technovation-logo.png',
-  '/technovation-logo-transparent.png'
+  '/technovation-logo-tp.webp'
 ];
 
 self.addEventListener('install', (event) => {
   self.skipWaiting();
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => {
-      return cache.addAll(PRECACHE_URLS).catch(() => {});
+      return cache.addAll(PRECACHE_URLS).catch(() => { });
     })
   );
 });
@@ -32,17 +31,33 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-  // Let all API calls bypass the service worker cache
-  if (event.request.url.includes('/api/')) return;
+  const requestUrl = new URL(event.request.url);
+  if (requestUrl.origin !== self.location.origin || requestUrl.pathname.startsWith('/api/')) return;
+
   // Navigation requests: network first with cache fallback
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => caches.match('/index.html'))
+      fetch(event.request).catch(async () => {
+        try {
+          return await caches.match('/index.html') || Response.error();
+        } catch {
+          return Response.error();
+        }
+      })
     );
     return;
   }
-  // Static assets: cache first, fall back to network
-  event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
-  );
+
+  event.respondWith((async () => {
+    try {
+      const cached = await caches.match(event.request);
+      if (cached) return cached;
+    } catch { }
+
+    try {
+      return await fetch(event.request);
+    } catch {
+      return Response.error();
+    }
+  })());
 });

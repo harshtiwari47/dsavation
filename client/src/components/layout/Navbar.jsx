@@ -30,7 +30,10 @@ export const Navbar = React.memo(function Navbar({
           navigate('general');
         }}
       >
-        <img className="brand-mark" src="/technovation-logo-tp.png" alt="Technovation Logo" />
+        <picture>
+          <source srcSet="/technovation-logo-tp.webp" type="image/webp" />
+          <img className="brand-mark" src="/technovation-logo-tp.png" alt="Technovation Logo" />
+        </picture>
         <span>DSAvation</span>
       </a>
       <nav className="main-nav" aria-label="Main navigation">

@@ -458,9 +458,12 @@ export function AccountPage({
               <div className="theme-choice">
                 <span className="account-pref-label">COLOR THEME &amp; APPEARANCE</span>
                 <div className="theme-choice-grid theme-choice-grid-4" role="radiogroup" aria-label="Color theme and appearance">
+                  <div className="theme-choice-group-label">
+                    <strong>Light themes</strong>
+                  </div>
                   <button
                     type="button"
-                    className={`theme-choice-card ${theme === 'light' ? 'selected' : ''}`}
+                    className={`theme-choice-card ${theme === 'light' ? 'selected' : ''} ${lightStyle === 'light' ? 'mode-selected' : ''}`}
                     aria-pressed={theme === 'light'}
                     onClick={() => {
                       rememberLightStyle?.('light');
@@ -476,7 +479,7 @@ export function AccountPage({
                   </button>
                   <button
                     type="button"
-                    className={`theme-choice-card ${theme === 'technovation' ? 'selected' : ''}`}
+                    className={`theme-choice-card ${theme === 'technovation' ? 'selected' : ''} ${lightStyle === 'technovation' ? 'mode-selected' : ''}`}
                     aria-pressed={theme === 'technovation'}
                     onClick={() => {
                       rememberLightStyle?.('technovation');
@@ -490,9 +493,12 @@ export function AccountPage({
                       <span>Orange &amp; blue light</span>
                     </span>
                   </button>
+                  <div className="theme-choice-group-label">
+                    <strong>Dark themes</strong>
+                  </div>
                   <button
                     type="button"
-                    className={`theme-choice-card ${theme === 'forest' ? 'selected' : ''}`}
+                    className={`theme-choice-card ${theme === 'forest' ? 'selected' : ''} ${darkStyle === 'forest' ? 'mode-selected' : ''}`}
                     aria-pressed={theme === 'forest'}
                     onClick={() => {
                       rememberDarkStyle('forest');
@@ -508,7 +514,7 @@ export function AccountPage({
                   </button>
                   <button
                     type="button"
-                    className={`theme-choice-card ${theme === 'dark' ? 'selected' : ''}`}
+                    className={`theme-choice-card ${theme === 'dark' ? 'selected' : ''} ${darkStyle === 'dark' ? 'mode-selected' : ''}`}
                     aria-pressed={theme === 'dark'}
                     onClick={() => {
                       rememberDarkStyle('dark');

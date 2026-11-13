@@ -9,12 +9,22 @@ export function ClubChallengePage({
   account,
   club,
   assignedQuestion,
+  clubTodayBusy,
+  clubTodayLoaded,
+  clubTodayError,
+  retryClubToday,
+  questionsBusy,
+  questionsError,
+  retryQuestionData,
   isAdmin,
   isLeader,
   copiedAnnouncement,
   handleCopyAnnouncement,
   isLeetcodeApproved,
   submissions,
+  submissionsBusy,
+  submissionsError,
+  retryOwnSubmissions,
   submissionHelpOpen,
   setSubmissionHelpOpen,
   submitClubSolution,
@@ -48,7 +58,13 @@ export function ClubChallengePage({
   byId,
   clubLocked,
   clubActivity,
+  clubActivityBusy,
+  clubActivityLoaded,
+  clubActivityError,
+  retryClubActivity,
   historyBusy,
+  historyLoaded,
+  historyError,
   loadHistoryPage,
   setExportStudyYear,
   setExportModalOpen,
@@ -61,6 +77,8 @@ export function ClubChallengePage({
   leaderboard,
   leaderboardPagination,
   leaderboardBusy,
+  leaderboardLoaded,
+  leaderboardError,
   loadLeaderboardPage,
   setAuthMode,
   setAuthOpen,
@@ -99,7 +117,17 @@ export function ClubChallengePage({
                       <span className="eyebrow-line" />
                       TODAY'S ASSIGNMENT
                     </div>
-                    <h2>{assignedQuestion ? assignedQuestion.title : 'No assignment today'}</h2>
+                    <h2>
+                      {assignedQuestion?.title || (club?.assignment
+                        ? questionsBusy
+                          ? 'Loading question details…'
+                          : `LeetCode #${club.assignment.questionId}`
+                        : !clubTodayLoaded || clubTodayBusy
+                          ? 'Loading today’s assignment…'
+                          : clubTodayError
+                            ? 'Today’s assignment is unavailable'
+                            : 'No assignment today')}
+                    </h2>
                   </div>
                   <div className="panel-heading-actions">
                     {assignedQuestion && (
@@ -164,9 +192,19 @@ export function ClubChallengePage({
                           Sign in
                         </button>
                       </div>
+                    ) : submissionsBusy ? (
+                      <div className="inline-callout" role="status">
+                        <IconifyIcon icon="charm:refresh" width={14} height={14} className="spin-icon" />
+                        <span>Checking your submission status…</span>
+                      </div>
+                    ) : submissionsError && !submissionsLoaded ? (
+                      <div className="inline-callout" role="alert">
+                        <span>Could not check your submission: {submissionsError}</span>
+                        <button onClick={retryOwnSubmissions}>Retry</button>
+                      </div>
                     ) : submissions.some(
-                        (item) => item.assignment?.dateKey === club?.assignment?.dateKey && item.status !== 'invalidated'
-                      ) ? (
+                      (item) => item.assignment?.dateKey === club?.assignment?.dateKey && item.status !== 'invalidated'
+                    ) ? (
                       <div className="inline-callout submitted">
                         <Icon name="check" size={16} />
                         <span>
@@ -307,10 +345,28 @@ export function ClubChallengePage({
                   </>
                 ) : (
                   <div className="no-assignment-note">
-                    <p>
-                      A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from
-                      punctuality calculations.
-                    </p>
+                    {!clubTodayLoaded || clubTodayBusy ? (
+                      <p role="status">Loading today’s assignment…</p>
+                    ) : clubTodayError ? (
+                      <>
+                        <p role="alert">Could not load today’s assignment: {clubTodayError}</p>
+                        <button className="button button-quiet" onClick={retryClubToday}>Retry</button>
+                      </>
+                    ) : club?.assignment ? (
+                      <>
+                        <p role={questionsError ? 'alert' : 'status'}>
+                          {questionsError
+                            ? `Question details could not be loaded: ${questionsError}`
+                            : `Loading details for LeetCode #${club.assignment.questionId}…`}
+                        </p>
+                        {questionsError && <button className="button button-quiet" onClick={retryQuestionData}>Retry</button>}
+                      </>
+                    ) : (
+                      <p>
+                        A club lead has not assigned a question for this date. Unassigned holidays and breaks are excluded from
+                        punctuality calculations.
+                      </p>
+                    )}
                   </div>
                 )}
               </div>
@@ -381,8 +437,8 @@ export function ClubChallengePage({
                     {assignmentBusy
                       ? 'Saving…'
                       : editingTodayAssignment && assignmentDate === localDay()
-                      ? 'Replace today’s question'
-                      : 'Publish assignment'}{' '}
+                        ? 'Replace today’s question'
+                        : 'Publish assignment'}{' '}
                     <Icon name="arrow" size={14} />
                   </button>
                 </form>
@@ -390,8 +446,8 @@ export function ClubChallengePage({
                   {editingTodayAssignment && assignmentDate === localDay()
                     ? 'Changing today’s question invalidates existing submissions, removes their points, and lets members submit the corrected question.'
                     : history.some((item) => item.dateKey === assignmentDate)
-                    ? 'A question is already published for this date.'
-                    : 'Publish at most one question per date. Leave holidays and breaks unassigned.'}
+                      ? 'A question is already published for this date.'
+                      : 'Publish at most one question per date. Leave holidays and breaks unassigned.'}
                 </p>
               </section>
             )}
@@ -566,9 +622,25 @@ export function ClubChallengePage({
                   </div>
                   <h2>Published days</h2>
                 </div>
-                <span className="micro-count">{historyPagination.total}</span>
+                <span className="micro-count">{historyLoaded ? historyPagination.total : '—'}</span>
               </div>
-              {history.length ? (
+              {!historyLoaded && historyError ? (
+                <div className="soft-empty" role="alert">
+                  <span>Assignment history could not be loaded: {historyError}</span>
+                  <button className="button button-quiet" onClick={() => loadHistoryPage(historyPagination.page)}>Retry</button>
+                </div>
+              ) : !historyLoaded || (historyBusy && !history.length) ? (
+                <div className="soft-empty" role="status">Loading assignment history…</div>
+              ) : !clubActivityLoaded ? (
+                clubActivityBusy ? (
+                  <div className="soft-empty" role="status">Loading completion records…</div>
+                ) : (
+                  <div className="soft-empty" role="alert">
+                    <span>Completion records could not be loaded: {clubActivityError}</span>
+                    <button className="button button-quiet" onClick={retryClubActivity}>Retry</button>
+                  </div>
+                )
+              ) : history.length ? (
                 <>
                   <div className="history-list">
                     {history.map((item) => {
@@ -696,17 +768,21 @@ export function ClubChallengePage({
               {leaderboardScope === 'daily' ? (
                 <>
                   <p className="leaderboard-note"></p>
-                  {club?.dailyLeaderboard?.length ? (
+                  {!clubTodayLoaded || clubTodayBusy ? (
+                    <div className="soft-empty" role="status">Loading today’s standings…</div>
+                  ) : clubTodayError ? (
+                    <div className="soft-empty" role="alert">Today’s standings are unavailable: {clubTodayError}</div>
+                  ) : club?.dailyLeaderboard?.length ? (
                     <div className="leaderboard-list">
                       {club.dailyLeaderboard.map((person, index) => {
                         const rank = index + 1;
                         const isTopThree = rank <= 3;
                         const submittedTimeStr = person.submittedAt
                           ? new Date(person.submittedAt).toLocaleTimeString('en-GB', {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                              timeZone: 'Asia/Kolkata',
-                            }) + ' IST'
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: 'Asia/Kolkata',
+                          }) + ' IST'
                           : '';
                         const isLeetCode =
                           person.submissionType === 'leetcode' ||
@@ -717,9 +793,9 @@ export function ClubChallengePage({
                             ? `https://leetcode.com/u/${encodeURIComponent(leetcodeUser)}/`
                             : person.commitUrl || 'https://leetcode.com'
                           : person.commitUrl ||
-                            (person.githubUsername
-                              ? `https://github.com/${encodeURIComponent(person.githubUsername)}`
-                              : '');
+                          (person.githubUsername
+                            ? `https://github.com/${encodeURIComponent(person.githubUsername)}`
+                            : '');
 
                         return (
                           <div
@@ -785,16 +861,16 @@ export function ClubChallengePage({
                   currentUserRank ||
                   (account
                     ? (() => {
-                        const idx = leaderboard.findIndex(
-                          (p) =>
-                            (p.userId && p.userId === account.id) ||
-                            (account.githubUsername &&
-                              p.githubUsername?.toLowerCase() === account.githubUsername?.toLowerCase())
-                        );
-                        if (idx !== -1)
-                          return (leaderboardPagination.page - 1) * leaderboardPagination.pageSize + idx + 1;
-                        return null;
-                      })()
+                      const idx = leaderboard.findIndex(
+                        (p) =>
+                          (p.userId && p.userId === account.id) ||
+                          (account.githubUsername &&
+                            p.githubUsername?.toLowerCase() === account.githubUsername?.toLowerCase())
+                      );
+                      if (idx !== -1)
+                        return (leaderboardPagination.page - 1) * leaderboardPagination.pageSize + idx + 1;
+                      return null;
+                    })()
                     : null);
                 return (
                   <>
@@ -882,6 +958,13 @@ export function ClubChallengePage({
                           </button>
                         </div>
                       </>
+                    ) : !leaderboardLoaded && leaderboardError ? (
+                      <div className="soft-empty" role="alert">
+                        <span>Overall standings could not be loaded: {leaderboardError}</span>
+                        <button className="button button-quiet" onClick={() => loadLeaderboardPage(leaderboardPagination.page)}>Retry</button>
+                      </div>
+                    ) : !leaderboardLoaded || leaderboardBusy ? (
+                      <div className="soft-empty" role="status">Loading overall standings…</div>
                     ) : (
                       <div className="soft-empty">No scored club submissions yet. Be first to get on the board.</div>
                     )}
