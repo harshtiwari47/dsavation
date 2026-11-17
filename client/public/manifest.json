@@ -8,16 +8,20 @@
   "orientation": "portrait-primary",
   "theme_color": "#0284c7",
   "background_color": "#0c1b26",
-  "categories": ["education", "developer tools", "productivity"],
+  "categories": [
+    "education",
+    "developer tools",
+    "productivity"
+  ],
   "icons": [
     {
-      "src": "/technovation-logo.png",
-      "sizes": "192x192 512x512",
-      "type": "image/png",
+      "src": "/technovation-logo-tp.webp",
+      "sizes": "512x512",
+      "type": "image/webp",
       "purpose": "any maskable"
     },
     {
-      "src": "/technovation-logo-transparent.png",
+      "src": "/technovation-logo-tp.png",
       "sizes": "192x192 512x512",
       "type": "image/png",
       "purpose": "any"

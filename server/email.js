@@ -79,7 +79,7 @@ If you did not request this reset, please contact an administrator.
     <!-- Header -->
     <tr>
       <td style="background: linear-gradient(135deg, #1a1a2e 0%, #16213e 100%); padding: 20px 24px 12px 24px; text-align: center;">
-        <img src="${FRONTEND_URL}/technovation-logo.png" alt="Technovation Logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 8px;" />
+        <img src="${FRONTEND_URL}/technovation-logo-tp.png" alt="Technovation Logo" style="max-width: 180px; height: auto; display: block; margin: 0 auto 8px;" />
         <h1 style="margin: 0; color: #ffffff; font-size: 24px; font-weight: 600; letter-spacing: -0.5px;">Technical Team Technovation</h1>
         <p style="margin: 4px 0 0; color: rgba(255,255,255,0.7); font-size: 14px;">Password Reset Request</p>
       </td>

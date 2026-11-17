@@ -44,7 +44,7 @@ export function HomePage({
       <section className="welcome-row home-welcome-row">
         <div className="welcome-hero-lead">
           <div className="hero-mascot-wrapper">
-            <img src="/technovation-mascot.png" alt="Technovation Club Mascot" className="hero-mascot-img" />
+            <img src="/technovation-mascot.webp" alt="Technovation Club Mascot" className="hero-mascot-img" />
           </div>
           <div className="hero-content">
             <div className="eyebrow">

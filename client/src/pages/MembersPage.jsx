@@ -183,7 +183,8 @@ export function MembersPage({
           </form>
           {directoryBusy && !directoryMembers.length ? (
             <div className="panel directory-loading" role="status">
-              Loading approved member profiles…
+              <img src="/loading-expression.gif" alt="" aria-hidden="true" />
+              <span>Loading approved member profiles…</span>
             </div>
           ) : directoryMembers.length ? (
             <div className="member-directory-grid">
@@ -202,8 +203,8 @@ export function MembersPage({
                   (showAllLeetcodeStats
                     ? true
                     : isSelf
-                    ? Boolean(stats || lookup?.reason)
-                    : Boolean(individuallyOpenedStats[member.id]));
+                      ? Boolean(stats || lookup?.reason)
+                      : Boolean(individuallyOpenedStats[member.id]));
                 return (
                   <MemberDirectoryCard
                     key={member.id}

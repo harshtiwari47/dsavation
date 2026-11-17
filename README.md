@@ -179,7 +179,7 @@ Centralized control room for club administrators to manage memberships, schedule
 * 👥 **Member Approvals & Roles:** Approve new registrations, manage admin access, and filter member rosters.
 * 📅 **Challenge Management:** Schedule future assignments, publish daily problems, and assign or swap daily solution explainers.
 * 🛡️ **Submission Auditing:** Review verified GitHub commit proofs and LeetCode submissions with live verification status and manual override tools.
-* ⚡ **Aura & Rate Limits:** Award custom Blaze points, manage club honors, and monitor system rate limits in real time.
+* ⚡ **Blaze & Rate Limits:** Award custom Blaze points, manage club honors, and monitor system rate limits in real time.
 
 ---
 

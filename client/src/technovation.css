@@ -1,39 +1,39 @@
 /* ==========================================================================
    Technovation Theme (Orange & Blue Light Mode)
    Inspired by the Technovation – Networking Club crest & emblem:
-   - Primary Shield Blue: #0d5a89 (deep, sharp, collegiate blue)
-   - Primary Logo Orange: #fa8a1e (energetic, warm, vibrant sunburst)
-   - Clean, high-contrast light surfaces for crisp readability
+   - Logo Blue: #155f91 (the emblem's confident, architectural blue)
+   - Logo Orange: #f4772b (used selectively as a warm call-to-action)
+   - White and mist-blue surfaces keep the interface crisp and breathable
    ========================================================================== */
 
 :root[data-theme="technovation"] {
   color-scheme: light;
-  color: #0e1e2d;
-  background: #fbf7f0;
+  color: #102c43;
+  background: #f5f8fc;
 
   /* Surfaces & Ink */
-  --paper: #f8f3ea;
+  --paper: #f5f8fc;
   --surface: #ffffff;
-  --surface-muted: #f4ecdf;
-  --ink: #0d1e2e;
-  --body: #2c4255;
-  --muted: #5e7387;
-  --line: #e3dad0;
-  --line-dark: #ccbfb0;
+  --surface-muted: #edf4fa;
+  --ink: #102c43;
+  --body: #385267;
+  --muted: #64798b;
+  --line: #d9e4ed;
+  --line-dark: #bdcfdd;
 
-  /* Technovation Brand Palette: Vibrant Orange & Shield Blue */
-  --ocean: #0d5a89;
-  --ocean-dark: #083c5d;
-  --ocean-light: #e6f1f8;
-  --ocean-bright: #1b74ad;
-  --green: #0d5a89;
-  --green-dark: #083c5d;
-  --green-light: #e6f1f8;
-  --coral: #fa8a1e;
-  --orange: #fa8a1e;
-  --orange-soft: #fff2e5;
-  --blue: #0d5a89;
-  --blue-soft: #e6f1f8;
+  /* Technovation Brand Palette: logo blue leads; orange punctuates. */
+  --ocean: #155f91;
+  --ocean-dark: #10496f;
+  --ocean-light: #e8f3fa;
+  --ocean-bright: #287eae;
+  --green: #155f91;
+  --green-dark: #10496f;
+  --green-light: #e8f3fa;
+  --coral: #f4772b;
+  --orange: #f4772b;
+  --orange-soft: #fff1e8;
+  --blue: #155f91;
+  --blue-soft: #e8f3fa;
   --red: #ef4444;
   --red-soft: #fee2e2;
   --amber: #d97706;
@@ -45,15 +45,18 @@
    -------------------------------------------------------------------------- */
 :root[data-theme="technovation"] body {
   color: var(--ink);
-  background: #fbf7f0;
+  background: #f5f8fc;
   background:
-    radial-gradient(ellipse 75% 45% at 15% -8%, rgba(250, 138, 30, 0.08) 0%, transparent 60%),
-    radial-gradient(ellipse 70% 50% at 85% 0%, rgba(13, 90, 137, 0.07) 0%, transparent 60%),
+    radial-gradient(ellipse 70% 42% at 100% -5%, rgba(21, 95, 145, 0.10) 0%, transparent 62%),
+    radial-gradient(ellipse 58% 35% at 0% 8%, rgba(244, 119, 43, 0.055) 0%, transparent 60%),
+    linear-gradient(rgba(21, 95, 145, 0.028) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(21, 95, 145, 0.028) 1px, transparent 1px),
     linear-gradient(180deg,
-      #fbf7f0 0%,
-      #f8f3ea 28%,
-      #f3ebdf 65%,
-      #ede1d2 100%);
+      #f8fbfd 0%,
+      #f5f8fc 32%,
+      #f1f6fa 68%,
+      #edf3f8 100%);
+  background-size: auto, 32px 32px, 32px 32px, auto;
   background-attachment: fixed;
 }
 
@@ -61,34 +64,67 @@
    2. Topbar & Main Navigation
    -------------------------------------------------------------------------- */
 :root[data-theme="technovation"] .topbar {
-  background: #ffffff !important;
-  border-bottom: 1px solid #e3dad0 !important;
-  box-shadow: 0 1px 4px rgba(13, 90, 137, 0.05) !important;
+  background: #10496f !important;
+  border-bottom: 3px solid #f4772b !important;
+  box-shadow: 0 7px 20px rgba(16, 73, 111, 0.20) !important;
+}
+
+:root[data-theme="technovation"] .topbar::before {
+  background: linear-gradient(105deg, transparent 20%, rgba(255, 255, 255, 0.10) 45%, rgba(244, 119, 43, 0.18) 62%, transparent 82%);
+  opacity: 1;
+}
+
+:root[data-theme="technovation"] .topbar .brand,
+:root[data-theme="technovation"] .topbar .account-actions,
+:root[data-theme="technovation"] .topbar .account-profile-btn,
+:root[data-theme="technovation"] .topbar .theme-toggle {
+  color: #ffffff;
 }
 
 :root[data-theme="technovation"] .brand-mark-label strong {
-  color: #0d5a89;
+  color: #155f91;
 }
 
-:root[data-theme="technovation"] .main-nav a.active {
-  background: #0d5a89 !important;
+:root[data-theme="technovation"] .main-nav {
+  background: rgba(7, 53, 83, 0.70);
+  border-color: rgba(205, 231, 247, 0.25);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.10), 0 4px 14px rgba(4, 34, 54, 0.20);
+}
+
+:root[data-theme="technovation"] .main-nav button {
+  color: #dceefa;
+}
+
+:root[data-theme="technovation"] .main-nav button.active {
+  background: #f4772b !important;
   color: #ffffff !important;
-  box-shadow: 0 2px 8px rgba(13, 90, 137, 0.25) !important;
+  border-color: #f4772b !important;
+  box-shadow: 0 3px 10px rgba(4, 34, 54, 0.26) !important;
 }
 
-:root[data-theme="technovation"] .main-nav a:not(.active):hover {
-  background: #f4ecdf;
-  color: #0d5a89;
+:root[data-theme="technovation"] .main-nav button:not(.active):hover {
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
 }
 
 :root[data-theme="technovation"] .theme-toggle:hover {
-  background: #f4ecdf;
-  color: #fa8a1e;
+  background: #f4772b;
+  border-color: #f4772b;
+  color: #ffffff;
+  box-shadow: 0 4px 12px rgba(4, 34, 54, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.18);
+}
+
+:root[data-theme="technovation"] .theme-toggle {
+  background: rgba(255, 255, 255, 0.12);
+  border-color: rgba(220, 238, 250, 0.34);
+  color: #ffffff;
+  box-shadow: 0 2px 8px rgba(4, 34, 54, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.12);
 }
 
 :root[data-theme="technovation"] .account-profile-btn.active {
-  background: #f4ecdf;
-  border-color: #0d5a89;
+  background: rgba(255, 255, 255, 0.13);
+  border-color: rgba(255, 255, 255, 0.32);
 }
 
 /* --------------------------------------------------------------------------
@@ -108,39 +144,51 @@
 :root[data-theme="technovation"] .month-detail-card,
 :root[data-theme="technovation"] .auth-modal,
 :root[data-theme="technovation"] .leaderboard-panel {
-  background: linear-gradient(145deg, #ffffff 0%, #fdfbf7 100%) !important;
-  border: 1px solid #e3dad0 !important;
-  box-shadow: 0 2px 8px -2px rgba(13, 90, 137, 0.05), 0 1px 3px rgba(250, 138, 30, 0.03) !important;
+  background: linear-gradient(145deg, #ffffff 0%, #fbfdff 100%) !important;
+  border: 1px solid #d9e4ed !important;
+  box-shadow: 0 2px 7px -3px rgba(16, 73, 111, 0.12), 0 10px 22px -16px rgba(16, 73, 111, 0.13) !important;
+}
+
+:root[data-theme="technovation"] .liquid-glass::before,
+:root[data-theme="technovation"] .water-glass-card::before {
+  background: linear-gradient(105deg, transparent 22%, rgba(21, 95, 145, 0.08) 45%, rgba(244, 119, 43, 0.10) 52%, transparent 73%);
+}
+
+:root[data-theme="technovation"] .question-card,
+:root[data-theme="technovation"] .member-directory-card {
+  border-left: 3px solid #155f91 !important;
 }
 
 :root[data-theme="technovation"] .question-card:hover,
 :root[data-theme="technovation"] .member-directory-card:hover {
-  border-color: #fa8a1e !important;
-  box-shadow: 0 4px 14px -3px rgba(250, 138, 30, 0.18) !important;
+  border-color: #78a9c8 !important;
+  box-shadow: 0 7px 18px -10px rgba(16, 73, 111, 0.25), 0 0 0 3px rgba(244, 119, 43, 0.06) !important;
 }
 
 :root[data-theme="technovation"] .overview-card.personal-card {
-  border-color: rgba(13, 90, 137, 0.3) !important;
+  border-color: rgba(21, 95, 145, 0.38) !important;
+  background: linear-gradient(145deg, #eef7fc 0%, #ffffff 72%) !important;
 }
 
 :root[data-theme="technovation"] .overview-card.community-card {
-  border-color: rgba(250, 138, 30, 0.35) !important;
+  border-color: rgba(244, 119, 43, 0.48) !important;
+  background: linear-gradient(145deg, #fff4ec 0%, #ffffff 72%) !important;
 }
 
 /* --------------------------------------------------------------------------
    4. Featured Challenge (Today's Card & QOTD Panel)
-   Deep collegiate blue shield surface with orange accents
+   Deep logo-blue surface with a single orange edge
    -------------------------------------------------------------------------- */
 :root[data-theme="technovation"] .today-card,
 :root[data-theme="technovation"] .qotd-panel {
-  background: radial-gradient(130% 120% at 20% 0%, #0d273a 0%, #091a27 55%, #051019 100%) !important;
-  border: 1.5px solid rgba(250, 138, 30, 0.45) !important;
-  box-shadow: 0 10px 28px -6px rgba(13, 90, 137, 0.35) !important;
+  background: radial-gradient(120% 140% at 0% 0%, #287eae 0%, #155f91 43%, #10496f 100%) !important;
+  border: 1px solid rgba(244, 119, 43, 0.82) !important;
+  box-shadow: 0 14px 30px -12px rgba(16, 73, 111, 0.42) !important;
   color: #f8fafc !important;
 }
 
 :root[data-theme="technovation"] .today-card .card-kicker {
-  color: #fa8a1e !important;
+  color: #ffd1b8 !important;
   font-weight: 700;
 }
 
@@ -153,30 +201,30 @@
    5. Buttons, Controls, & Inputs
    -------------------------------------------------------------------------- */
 :root[data-theme="technovation"] .button-dark {
-  background: #0d5a89 !important;
+  background: #155f91 !important;
   color: #ffffff !important;
-  border: 1px solid #0d5a89 !important;
+  border: 1px solid #155f91 !important;
 }
 
 :root[data-theme="technovation"] .button-dark:hover:not(:disabled) {
-  background: #083c5d !important;
-  border-color: #083c5d !important;
+  background: #10496f !important;
+  border-color: #10496f !important;
 }
 
 :root[data-theme="technovation"] .button-primary {
-  background: #fa8a1e !important;
+  background: #c95718 !important;
   color: #ffffff !important;
-  border: 1px solid #fa8a1e !important;
+  border: 1px solid #c95718 !important;
 }
 
 :root[data-theme="technovation"] .button-primary:hover:not(:disabled) {
-  background: #e67300 !important;
-  border-color: #e67300 !important;
+  background: #a94510 !important;
+  border-color: #a94510 !important;
 }
 
 :root[data-theme="technovation"] .button-quiet:hover {
-  background: #f4ecdf;
-  color: #0d5a89;
+  background: #edf4fa;
+  color: #155f91;
 }
 
 :root[data-theme="technovation"] button:focus-visible,
@@ -184,15 +232,15 @@
 :root[data-theme="technovation"] input:focus-visible,
 :root[data-theme="technovation"] select:focus-visible,
 :root[data-theme="technovation"] textarea:focus-visible {
-  outline: 2px solid #fa8a1e !important;
+  outline: 2px solid #f4772b !important;
   outline-offset: 2px;
 }
 
 :root[data-theme="technovation"] input:not([type="checkbox"]):focus,
 :root[data-theme="technovation"] select:focus,
 :root[data-theme="technovation"] textarea:focus {
-  border-color: #fa8a1e !important;
-  box-shadow: 0 0 0 3px rgba(250, 138, 30, 0.15) !important;
+  border-color: #155f91 !important;
+  box-shadow: 0 0 0 3px rgba(21, 95, 145, 0.16) !important;
 }
 
 /* --------------------------------------------------------------------------
@@ -201,25 +249,25 @@
 :root[data-theme="technovation"] .streak-badge,
 :root[data-theme="technovation"] .blaze-badge,
 :root[data-theme="technovation"] .flame-icon {
-  color: #fa8a1e;
+  color: #d85d1b;
 }
 
 :root[data-theme="technovation"] .points-badge {
-  background: #e6f1f8;
-  color: #0d5a89;
-  border: 1px solid #b9d5e8;
+  background: #e8f3fa;
+  color: #10496f;
+  border: 1px solid #bfd8e8;
 }
 
 :root[data-theme="technovation"] .submitted-today-pill,
 :root[data-theme="technovation"] .heatmap-day-submitted-chip,
 :root[data-theme="technovation"] .pill-submitted {
-  background: #e6f1f8;
-  color: #0d5a89;
-  border: 1px solid #0d5a89;
+  background: #e8f3fa;
+  color: #10496f;
+  border: 1px solid #78a9c8;
 }
 
 :root[data-theme="technovation"] .rank-1 {
-  color: #d97706;
+  color: #b65a13;
 }
 
 :root[data-theme="technovation"] .rank-2 {
@@ -227,7 +275,7 @@
 }
 
 :root[data-theme="technovation"] .rank-3 {
-  color: #c2410c;
+  color: #bd5a1b;
 }
 
 /* --------------------------------------------------------------------------
@@ -235,23 +283,37 @@
    -------------------------------------------------------------------------- */
 :root[data-theme="technovation"] .search-input:focus-within,
 :root[data-theme="technovation"] .member-search:focus-within {
-  border-color: #0d5a89;
-  box-shadow: 0 0 0 3px rgba(13, 90, 137, 0.12);
+  border-color: #155f91;
+  box-shadow: 0 0 0 3px rgba(21, 95, 145, 0.12);
 }
 
 :root[data-theme="technovation"] .filter-bar select:focus,
 :root[data-theme="technovation"] .sort-button:hover {
-  border-color: #0d5a89;
+  border-color: #155f91;
 }
 
 :root[data-theme="technovation"] .scope-toggle-btn.active {
-  background: #0d5a89 !important;
+  background: #155f91 !important;
   color: #ffffff !important;
 }
 
+:root[data-theme="technovation"] .mobile-bottom-nav {
+  background: #10496f;
+  border-top-color: #f4772b;
+}
+
+:root[data-theme="technovation"] .mobile-bottom-nav button {
+  color: #dceefa;
+}
+
+:root[data-theme="technovation"] .mobile-bottom-nav button.active {
+  color: #ffffff;
+  background: rgba(244, 119, 43, 0.92);
+}
+
 :root[data-theme="technovation"] .pagination-controls button:hover:not(:disabled) {
-  border-color: #0d5a89;
-  color: #0d5a89;
+  border-color: #155f91;
+  color: #155f91;
 }
 
 /* --------------------------------------------------------------------------
@@ -264,5 +326,33 @@
 
 :root[data-theme="technovation"] .theme-choice-card.selected {
   background: #ffffff;
-  box-shadow: inset 0 0 0 1.5px #fa8a1e;
+  box-shadow: inset 0 0 0 1.5px #155f91, 0 0 0 3px rgba(244, 119, 43, 0.10);
+}
+
+/* --------------------------------------------------------------------------
+   9. Mobile Bottom Navigation
+   -------------------------------------------------------------------------- */
+@media (max-width: 768px) {
+  :root[data-theme="technovation"] .mobile-bottom-nav {
+    border-top: 2px solid #f4772b !important;
+    background: #10496f !important;
+    box-shadow: 0 -8px 28px rgba(16, 73, 111, 0.26), inset 0 1px 0 rgba(255, 255, 255, 0.12) !important;
+  }
+
+  :root[data-theme="technovation"] .mobile-bottom-nav button {
+    color: #dceefa;
+    font-size: 0.6rem;
+    font-weight: 600;
+  }
+
+  :root[data-theme="technovation"] .mobile-bottom-nav button:hover,
+  :root[data-theme="technovation"] .mobile-bottom-nav button:active {
+    color: #ffffff;
+  }
+
+  :root[data-theme="technovation"] .mobile-bottom-nav button.active {
+    color: #ffffff;
+    background: #f4772b;
+    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22);
+  }
 }

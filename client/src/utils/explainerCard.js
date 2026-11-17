@@ -74,7 +74,7 @@ export async function resolveExplainerAvatarDataUri(explainer) {
         });
         if (dataUri) return dataUri;
       }
-    } catch {}
+    } catch { }
   }
 
   // 2. SVG (DiceBear) Avatar
@@ -112,7 +112,7 @@ export async function resolveExplainerAvatarDataUri(explainer) {
       ctx.fillText(initial, 120, 126);
       return canvas.toDataURL('image/png');
     }
-  } catch {}
+  } catch { }
 
   return null;
 }
@@ -164,6 +164,7 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey, 
   try {
     await new Promise((resolve) => {
       const logoImg = new Image();
+      let usedPngFallback = false;
       logoImg.onload = () => {
         ctx.save();
         safeRoundRect(ctx, 60, 52, 46, 46, 10);
@@ -172,11 +173,18 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey, 
         ctx.restore();
         resolve();
       };
-      logoImg.onerror = () => resolve();
-      logoImg.src = '/technovation-logo.png';
+      logoImg.onerror = () => {
+        if (!usedPngFallback) {
+          usedPngFallback = true;
+          logoImg.src = '/technovation-logo-tp.png';
+        } else {
+          resolve();
+        }
+      };
+      logoImg.src = '/technovation-logo-tp.webp';
       setTimeout(resolve, 1000);
     });
-  } catch {}
+  } catch { }
 
   // Eyebrow badge
   ctx.fillStyle = '#38bdf8';
@@ -373,16 +381,26 @@ export async function renderExplainerCardCanvas({ explainer, question, dateKey, 
     nextY += 10;
   }
 
-  // Submission Status - Luminous Green
-  const subTimeStr = explainer.submittedAt ? new Date(explainer.submittedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' }) : '';
-  ctx.fillStyle = '#34d399';
-  ctx.font = '700 15px system-ui, -apple-system, sans-serif';
-  ctx.fillText(`✓ Solution Attempt Accepted · Submitted at ${subTimeStr} IST`, textX, nextY + 16);
+  // Submission Status - Luminous Green (only if submitted)
+  const isValidDate = explainer.submittedAt && !isNaN(new Date(explainer.submittedAt).getTime());
+  const isSubmitted = Boolean(
+    (explainer.hasSubmitted && isValidDate) ||
+    (explainer.status === 'accepted' && isValidDate) ||
+    (isValidDate && explainer.hasSubmitted !== false)
+  );
+
+  if (isSubmitted && isValidDate) {
+    const subTimeStr = new Date(explainer.submittedAt).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Asia/Kolkata' });
+    ctx.fillStyle = '#34d399';
+    ctx.font = '700 15px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`✓ Solution Attempt Accepted · Submitted at ${subTimeStr} IST`, textX, nextY + 16);
+    nextY += 28;
+  }
 
   // Group instructions note - Crisp Off-White
   ctx.fillStyle = '#f1f5f9';
   ctx.font = 'italic 14px system-ui, -apple-system, sans-serif';
-  ctx.fillText("Please share your code walkthrough, approach and complexity insights in today's club session!", textX, nextY + 44);
+  ctx.fillText("Please share your code walkthrough, approach and complexity insights in today's club session!", textX, nextY + 16);
   ctx.restore();
 
   // 5. Footer Bar - Clear and Legible

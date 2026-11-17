@@ -278,11 +278,13 @@ test('commit links, solution paths, and India assignment dates reject malformed 
 
 test('signup stores a password hash and login distinguishes unknown account, wrong password, and pending approval', async () => {
   const db = new FakeDatabase();
-  const signup = await call(db, '/auth/register', { method: 'POST', body: {
-    name: 'New Student', department: 'Computer Science', studyYear: 'second-year',
-    email: 'student@abes.ac.in', password: 'correct-horse-123', githubUsername: 'new-student',
-    leetcodeUsername: 'new-leet-id',
-  } });
+  const signup = await call(db, '/auth/register', {
+    method: 'POST', body: {
+      name: 'New Student', department: 'Computer Science', studyYear: 'second-year',
+      email: 'student@abes.ac.in', password: 'correct-horse-123', githubUsername: 'new-student',
+      leetcodeUsername: 'new-leet-id',
+    }
+  });
   assert.equal(signup.response.status, 201);
   assert.equal(signup.data.approvalStatus, 'pending');
   const stored = db.collection('users').documents[0];
@@ -300,10 +302,12 @@ test('signup stores a password hash and login distinguishes unknown account, wro
   assert.equal(pending.response.status, 403);
   assert.match(pending.data.error, /not currently approved/i);
 
-  const missingLeet = await call(db, '/auth/register', { method: 'POST', body: {
-    name: 'Second Student', department: 'Computer Science', studyYear: 'second-year',
-    email: 'second@abes.ac.in', password: 'correct-horse-123', githubUsername: 'second-student',
-  } });
+  const missingLeet = await call(db, '/auth/register', {
+    method: 'POST', body: {
+      name: 'Second Student', department: 'Computer Science', studyYear: 'second-year',
+      email: 'second@abes.ac.in', password: 'correct-horse-123', githubUsername: 'second-student',
+    }
+  });
   assert.equal(missingLeet.response.status, 400);
   assert.match(missingLeet.data.error, /leetcode username/i);
 });
@@ -317,11 +321,13 @@ test('authenticated profile and private-progress APIs validate and persist membe
   assert.equal(library.response.status, 200);
   assert.equal(library.data.questions.length, 220);
 
-  const update = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
-    name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
-    githubUsername: 'student-gh', leetcodeUsername: 'leet-updated', showPublic: true,
-    avatarStyle: 'micah', avatarSeed: 'avatar-account-choice-1',
-  } });
+  const update = await call(db, '/auth/profile', {
+    method: 'PATCH', cookie, body: {
+      name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
+      githubUsername: 'student-gh', leetcodeUsername: 'leet-updated', showPublic: true,
+      avatarStyle: 'micah', avatarSeed: 'avatar-account-choice-1',
+    }
+  });
   assert.equal(update.response.status, 200);
   assert.equal(update.data.user.leetcodeUsername, 'leet-updated');
   assert.equal(update.data.user.studyYear, 'fourth-year');
@@ -329,17 +335,21 @@ test('authenticated profile and private-progress APIs validate and persist membe
   assert.equal(update.data.user.avatarSeed, 'avatar-account-choice-1');
   assert.equal(update.data.user.defaultSubmissionMethod, 'github');
 
-  const updateSubmissionMethod = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
-    name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
-    defaultSubmissionMethod: 'leetcode',
-  } });
+  const updateSubmissionMethod = await call(db, '/auth/profile', {
+    method: 'PATCH', cookie, body: {
+      name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
+      defaultSubmissionMethod: 'leetcode',
+    }
+  });
   assert.equal(updateSubmissionMethod.response.status, 200);
   assert.equal(updateSubmissionMethod.data.user.defaultSubmissionMethod, 'leetcode');
 
-  const invalidSubmissionMethod = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
-    name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
-    defaultSubmissionMethod: 'unknown-service',
-  } });
+  const invalidSubmissionMethod = await call(db, '/auth/profile', {
+    method: 'PATCH', cookie, body: {
+      name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
+      defaultSubmissionMethod: 'unknown-service',
+    }
+  });
   assert.equal(invalidSubmissionMethod.response.status, 400);
 
   const invalidAvatarStyle = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: { avatarStyle: 'not-a-style' } });
@@ -347,21 +357,27 @@ test('authenticated profile and private-progress APIs validate and persist membe
   const invalidAvatarSeed = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: { avatarSeed: 'invalid seed !' } });
   assert.equal(invalidAvatarSeed.response.status, 400);
 
-  const customAvatar = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
-    avatarStyle: 'custom', avatarUrl: 'https://example.com/custom-avatar.png',
-  } });
+  const customAvatar = await call(db, '/auth/profile', {
+    method: 'PATCH', cookie, body: {
+      avatarStyle: 'custom', avatarUrl: 'https://example.com/custom-avatar.png',
+    }
+  });
   assert.equal(customAvatar.response.status, 200);
   assert.equal(customAvatar.data.user.avatarStyle, 'custom');
   assert.equal(customAvatar.data.user.avatarUrl, 'https://example.com/custom-avatar.png');
 
-  const invalidCustomUrl = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
-    avatarStyle: 'custom', avatarUrl: 'not-a-valid-url',
-  } });
+  const invalidCustomUrl = await call(db, '/auth/profile', {
+    method: 'PATCH', cookie, body: {
+      avatarStyle: 'custom', avatarUrl: 'not-a-valid-url',
+    }
+  });
   assert.equal(invalidCustomUrl.response.status, 400);
-  const newGithub = await call(db, '/auth/profile', { method: 'PATCH', cookie, body: {
-    name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
-    githubUsername: 'student-new-gh', leetcodeUsername: 'leet-updated',
-  } });
+  const newGithub = await call(db, '/auth/profile', {
+    method: 'PATCH', cookie, body: {
+      name: 'A Student Updated', department: 'Information Technology', studyYear: 'fourth-year',
+      githubUsername: 'student-new-gh', leetcodeUsername: 'leet-updated',
+    }
+  });
   assert.equal(newGithub.response.status, 200);
   assert.equal(newGithub.data.user.githubVerified, false);
   assert.equal(db.collection('users').documents.find((item) => String(item._id) === String(user._id)).githubVerifiedAt, null);
@@ -473,10 +489,16 @@ test('LeetCode profile statistics are restricted to admins, fetched on demand an
   const regularViewer = await seedUser(db, { name: 'Regular Viewer', email: 'regular-viewer@abes.ac.in', username: 'regular-viewer' });
   const adminViewer = await seedAdmin(db);
   const member = await seedUser(db, { name: 'Stats Member', email: 'stats-member@abes.ac.in', username: 'stats-member', leetcodeUsername: 'stats-member-lc' });
-  leetcodePayload = { data: { matchedUser: { username: 'stats-member-lc', submitStats: {
-    acSubmissionNum: [{ difficulty: 'All', count: 24 }, { difficulty: 'Easy', count: 10 }, { difficulty: 'Medium', count: 11 }, { difficulty: 'Hard', count: 3 }],
-    totalSubmissionNum: [{ difficulty: 'All', count: 37 }, { difficulty: 'Easy', count: 14 }, { difficulty: 'Medium', count: 17 }, { difficulty: 'Hard', count: 6 }],
-  } } } };
+  leetcodePayload = {
+    data: {
+      matchedUser: {
+        username: 'stats-member-lc', submitStats: {
+          acSubmissionNum: [{ difficulty: 'All', count: 24 }, { difficulty: 'Easy', count: 10 }, { difficulty: 'Medium', count: 11 }, { difficulty: 'Hard', count: 3 }],
+          totalSubmissionNum: [{ difficulty: 'All', count: 37 }, { difficulty: 'Easy', count: 14 }, { difficulty: 'Medium', count: 17 }, { difficulty: 'Hard', count: 6 }],
+        }
+      }
+    }
+  };
   const path = `/members/${member.user._id}/leetcode-stats`;
 
   // Regular member cannot view other member's LeetCode stats
@@ -511,15 +533,27 @@ test('personal-repo commits score automatically, admin adjustments and assignmen
   assert.equal(secondAssignment.response.status, 409);
   const sha = 'a'.repeat(40);
   commits.set(sha, commitFixture({ sha, questionId: 217 }));
-  const submission = await call(db, '/submissions', { method: 'POST', cookie: student.cookie, body: {
-    assignmentId, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${sha}`,
-  } });
+  const submission = await call(db, '/submissions', {
+    method: 'POST', cookie: student.cookie, body: {
+      assignmentId, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${sha}`,
+    }
+  });
   assert.equal(submission.response.status, 201);
   assert.equal(submission.data.submission.status, 'accepted');
   assert.equal(submission.data.submission.points, 1);
-  const duplicate = await call(db, '/submissions', { method: 'POST', cookie: student.cookie, body: {
-    assignmentId, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${sha}`,
-  } });
+  const completedProgress = await call(db, '/progress', { cookie: student.cookie });
+  const completedQuestion = completedProgress.data.progress.find((item) => item.questionId === 217);
+  assert.equal(completedQuestion.isClub, true);
+  assert.equal(completedProgress.data.activity.some((item) => item.questionId === 217), true);
+  const unmarkCompleted = await call(db, '/progress/217', {
+    method: 'PUT', cookie: student.cookie, body: { solved: false },
+  });
+  assert.equal(unmarkCompleted.response.status, 403);
+  const duplicate = await call(db, '/submissions', {
+    method: 'POST', cookie: student.cookie, body: {
+      assignmentId, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${sha}`,
+    }
+  });
   assert.equal(duplicate.response.status, 409);
 
   const board = await call(db, '/club/leaderboard?page=1&pageSize=1');
@@ -548,9 +582,11 @@ test('personal-repo commits score automatically, admin adjustments and assignmen
 
   const nextSha = 'b'.repeat(40);
   commits.set(nextSha, commitFixture({ sha: nextSha, questionId: 242 }));
-  const resubmit = await call(db, '/submissions', { method: 'POST', cookie: student.cookie, body: {
-    assignmentId, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${nextSha}`,
-  } });
+  const resubmit = await call(db, '/submissions', {
+    method: 'POST', cookie: student.cookie, body: {
+      assignmentId, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${nextSha}`,
+    }
+  });
   assert.equal(resubmit.response.status, 201);
   assert.equal(resubmit.data.submission.points, 1);
   assert.equal(db.collection('submissions').documents.length, 1);
@@ -621,9 +657,11 @@ test('same-day renamed or edited solution.txt is accepted when it is non-empty',
   renamedCommit.files = [{ filename: '217/solution.txt', previous_filename: 'solutions/solution.txt', status: 'renamed', additions: 0, deletions: 0, changes: 0 }];
   commitTrees.set(sha, [{ path: '217/solution.txt', type: 'blob', size: 84 }]);
   commits.set(sha, renamedCommit);
-  const submission = await call(db, '/submissions', { method: 'POST', cookie: student.cookie, body: {
-    assignmentId: assigned.data.assignment.id, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${sha}`,
-  } });
+  const submission = await call(db, '/submissions', {
+    method: 'POST', cookie: student.cookie, body: {
+      assignmentId: assigned.data.assignment.id, commitUrl: `https://github.com/student-gh/dsa-solutions/commit/${sha}`,
+    }
+  });
   assert.equal(submission.response.status, 201);
   assert.equal(submission.data.submission.points, 1);
   assert.equal(db.collection('submissions').documents[0].solutionPath, '217/solution.txt');
@@ -635,9 +673,11 @@ test('same-day renamed or edited solution.txt is accepted when it is non-empty',
   modifiedCommit.files = [{ filename: '217/solution.txt', status: 'modified' }];
   commitTrees.set(modifiedSha, [{ path: '217/solution.txt', type: 'blob', size: 102 }]);
   commits.set(modifiedSha, modifiedCommit);
-  const editedSubmission = await call(db, '/submissions', { method: 'POST', cookie: anotherStudent.cookie, body: {
-    assignmentId: assigned.data.assignment.id, commitUrl: `https://github.com/another-gh/dsa-solutions/commit/${modifiedSha}`,
-  } });
+  const editedSubmission = await call(db, '/submissions', {
+    method: 'POST', cookie: anotherStudent.cookie, body: {
+      assignmentId: assigned.data.assignment.id, commitUrl: `https://github.com/another-gh/dsa-solutions/commit/${modifiedSha}`,
+    }
+  });
   assert.equal(editedSubmission.response.status, 201);
   assert.equal(editedSubmission.data.submission.points, 1);
 });
@@ -864,6 +904,9 @@ test('admins can review legacy pending submissions and pagination includes their
   const accepted = await call(db, `/admin/submissions/${firstSubmissionId}`, { method: 'PATCH', cookie: admin.cookie, body: { status: 'accepted', note: 'Verified' } });
   assert.equal(accepted.response.status, 200);
   assert.equal(db.collection('submissions').documents.find((item) => String(item._id) === String(firstSubmissionId)).points, 1);
+  const acceptedProgress = db.collection('personalProgress').documents.find((item) => String(item.userId) === String(first.user._id) && item.questionId === 217);
+  assert.equal(acceptedProgress.isClub, true);
+  assert.equal(String(acceptedProgress.assignmentId), String(assignmentId));
   const rejected = await call(db, `/admin/submissions/${secondSubmissionId}`, { method: 'PATCH', cookie: admin.cookie, body: { status: 'rejected', note: 'Invalid solution' } });
   assert.equal(rejected.response.status, 200);
   assert.ok(db.collection('adminActivity').documents.filter((item) => item.action === 'submission_reviewed').length >= 2);
@@ -1637,6 +1680,22 @@ test('LeetCode submission requires admin approval: member request, admin approva
   assert.equal(updatedMemberDoc.leetcodeApproval, 'none');
 });
 
+test('leaderboard reads accepted submissions once for point and aura calculations', async () => {
+  const db = new FakeDatabase();
+  const submissionsCollection = db.collection('submissions');
+  const originalFind = submissionsCollection.find.bind(submissionsCollection);
+  let acceptedReads = 0;
+  submissionsCollection.find = (filter = {}, options) => {
+    if (filter.status === 'accepted') acceptedReads += 1;
+    return originalFind(filter, options);
+  };
+
+  const result = await call(db, '/club/leaderboard?page=1&pageSize=10');
+
+  assert.equal(result.response.status, 200);
+  assert.equal(acceptedReads, 1);
+});
+
 test('leaderboard ranks by points then earlier score timestamp, with punctuality = attempted assigned / total assigned', async () => {
   const db = new FakeDatabase();
   const admin = await seedAdmin(db);
@@ -1998,10 +2057,16 @@ test('submissions heatmap provides full and second-year counts, and enforces adm
 test('admin view all stats rate limit allows more than 12 stats fetches without hitting rate limit', async () => {
   const db = new FakeDatabase();
   const admin = await seedAdmin(db);
-  leetcodePayload = { data: { matchedUser: { username: 'test-lc', submitStats: {
-    acSubmissionNum: [{ difficulty: 'All', count: 10 }, { difficulty: 'Easy', count: 10 }, { difficulty: 'Medium', count: 0 }, { difficulty: 'Hard', count: 0 }],
-    totalSubmissionNum: [{ difficulty: 'All', count: 15 }, { difficulty: 'Easy', count: 15 }, { difficulty: 'Medium', count: 0 }, { difficulty: 'Hard', count: 0 }],
-  } } } };
+  leetcodePayload = {
+    data: {
+      matchedUser: {
+        username: 'test-lc', submitStats: {
+          acSubmissionNum: [{ difficulty: 'All', count: 10 }, { difficulty: 'Easy', count: 10 }, { difficulty: 'Medium', count: 0 }, { difficulty: 'Hard', count: 0 }],
+          totalSubmissionNum: [{ difficulty: 'All', count: 15 }, { difficulty: 'Easy', count: 15 }, { difficulty: 'Medium', count: 0 }, { difficulty: 'Hard', count: 0 }],
+        }
+      }
+    }
+  };
 
   // Insert 15 approved members with leetcode usernames directly
   for (let i = 1; i <= 15; i++) {
